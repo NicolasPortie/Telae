@@ -19,8 +19,8 @@ fi
 git -C "$repo_dir" fetch origin --tags --prune
 git -C "$repo_dir" checkout --detach "$tag"
 
-dotnet restore "$repo_dir/Telae.slnx"
-dotnet test "$repo_dir/Telae.slnx" -c Release --no-restore --nologo
+dotnet restore "$repo_dir/tests/server/Telae.Server.Tests.csproj"
+dotnet test "$repo_dir/tests/server/Telae.Server.Tests.csproj" -c Release --no-restore --nologo
 dotnet publish "$repo_dir/apps/server/Telae.Server.csproj" -c Release --no-restore -o "$publish_dir"
 
 GITHUB_REF_NAME="$tag" GITHUB_RUN_ID="$(date +%s)" \
