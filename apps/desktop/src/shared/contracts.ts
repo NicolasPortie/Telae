@@ -42,6 +42,7 @@ export type TelaeDesktopApi = {
   addFriendCode(friendCode: string): Promise<LocalProfile>
   removeFriendCode(friendCode: string): Promise<LocalProfile>
   listCaptureSources(): Promise<CaptureSource[]>
+  selectCaptureSource(sourceId: string): Promise<void>
   listAudioProcesses(): Promise<AudioProcess[]>
   startAudioCapture(processId: number): Promise<void>
   stopAudioCapture(): Promise<void>

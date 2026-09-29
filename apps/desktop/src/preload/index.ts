@@ -8,6 +8,7 @@ const api: TelaeDesktopApi = {
   removeFriendCode: (friendCode: string) =>
     ipcRenderer.invoke('profile:remove-friend', friendCode) as Promise<LocalProfile>,
   listCaptureSources: () => ipcRenderer.invoke('capture:list-sources'),
+  selectCaptureSource: (sourceId: string) => ipcRenderer.invoke('capture:select-source', sourceId),
   listAudioProcesses: () => ipcRenderer.invoke('audio:list-processes'),
   startAudioCapture: (processId: number) => ipcRenderer.invoke('audio:start', processId),
   stopAudioCapture: () => ipcRenderer.invoke('audio:stop'),
