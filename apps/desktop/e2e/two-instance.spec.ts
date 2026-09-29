@@ -8,8 +8,15 @@ const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
 
 async function launchApp(): Promise<ElectronApplication> {
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-e2e-'))
+  const signalingUrl = process.env.TELAE_E2E_SIGNALING_URL?.trim()
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([, value]) => value !== undefined),
+  ) as Record<string, string>
   const app = await electron.launch({
     args: [APP_DIR, '--no-sandbox', `--user-data-dir=${userDataDir}`],
+    env: signalingUrl
+      ? { ...env, TELAE_SIGNALING_URL: signalingUrl }
+      : env,
   })
   app.on('window', (page) => {
     page.on('pageerror', (error) => {
