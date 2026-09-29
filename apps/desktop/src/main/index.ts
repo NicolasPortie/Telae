@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
-import { app, BrowserWindow, desktopCapturer, ipcMain } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, session } from 'electron'
 import type {
   AudioBridgeState,
   AudioProcess,
@@ -15,6 +15,7 @@ import type {
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
 let audioState: AudioBridgeState = { status: 'idle' }
+let selectedCaptureSourceId: string | null = null
 
 const profilePath = () => path.join(app.getPath('userData'), 'profile.json')
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
@@ -150,6 +151,19 @@ function registerIpc() {
     }))
   })
 
+  ipcMain.handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
+    if (!sourceId?.trim()) throw new Error('Escolha uma Capture Source antes de iniciar.')
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 0, height: 0 },
+      fetchWindowIcons: false,
+    })
+    if (!sources.some((source) => source.id === sourceId)) {
+      throw new Error('A Capture Source escolhida não está mais disponível.')
+    }
+    selectedCaptureSourceId = sourceId
+  })
+
   ipcMain.handle('audio:list-processes', (): AudioProcess[] => {
     const executable = findAudioBridge()
     const result = spawnSync(executable, ['list'], { encoding: 'utf8', windowsHide: true })
@@ -210,6 +224,32 @@ function registerIpc() {
   }))
 }
 
+function registerDisplayMediaHandler() {
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+    const sourceId = selectedCaptureSourceId
+    if (!sourceId) {
+      callback({})
+      return
+    }
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 0, height: 0 },
+      fetchWindowIcons: false,
+    })
+    const source = sources.find((candidate) => candidate.id === sourceId)
+    if (!source) {
+      callback({})
+      return
+    }
+
+    callback({
+      video: source,
+      audio: request.audioRequested && process.platform === 'win32' ? 'loopback' : undefined,
+    })
+  })
+}
+
 async function createWindow() {
   await mkdir(app.getPath('userData'), { recursive: true })
   mainWindow = new BrowserWindow({
@@ -252,6 +292,7 @@ if (!hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.telae.desktop')
     registerIpc()
+    registerDisplayMediaHandler()
     await createWindow()
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) await createWindow()

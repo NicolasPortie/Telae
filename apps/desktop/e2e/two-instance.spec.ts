@@ -73,12 +73,22 @@ test.describe('duas instâncias Telae', () => {
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
 
+      await sharer.evaluate(async () => {
+        const context = new AudioContext()
+        await context.resume()
+        const oscillator = context.createOscillator()
+        const gain = context.createGain()
+        oscillator.frequency.value = 440
+        gain.gain.value = 0.08
+        oscillator.connect(gain)
+        gain.connect(context.destination)
+        oscillator.start()
+      })
+
       await sharer.getByRole('button', { name: /Share screen/ }).click()
       const firstSource = sharer.getByRole('radio').first()
       await firstSource.click()
-      // O ambiente de teste pode não oferecer áudio do sistema na fonte;
-      // o fluxo de mídia aqui valida vídeo (áudio tem cobertura unitária + manual).
-      await sharer.getByLabel(/Incluir áudio do sistema/).uncheck()
+      await sharer.getByLabel(/Incluir áudio do sistema/).check()
       await sharer.getByRole('button', { name: /Compartilhar e gerar convite/ }).click()
       const invite = sharer.getByLabel(/Código de convite/)
       await expect(invite).toBeVisible({ timeout: 60_000 })
@@ -97,6 +107,39 @@ test.describe('duas instâncias Telae', () => {
         'video[aria-label="Transmissão do Sharer"]',
         { timeout: 60_000 },
       )
+      await expect.poll(async () => remoteVideo.evaluate((video) => {
+        const stream = (video as HTMLVideoElement).srcObject
+        return stream instanceof MediaStream ? stream.getAudioTracks().length : 0
+      }), { timeout: 60_000 }).toBeGreaterThan(0)
+      await expect.poll(async () => remoteVideo.evaluate((video) => {
+        const stream = (video as HTMLVideoElement).srcObject
+        const track = stream instanceof MediaStream ? stream.getAudioTracks()[0] : undefined
+        return track ? { readyState: track.readyState, muted: track.muted } : null
+      }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
+      await expect(await remoteVideo.evaluate(async (video) => {
+        const stream = (video as HTMLVideoElement).srcObject
+        if (!(stream instanceof MediaStream)) return false
+        const track = stream.getAudioTracks()[0]
+        if (!track) return false
+
+        const context = new AudioContext()
+        await context.resume()
+        const source = context.createMediaStreamSource(new MediaStream([track]))
+        const analyser = context.createAnalyser()
+        analyser.fftSize = 1024
+        source.connect(analyser)
+        const samples = new Float32Array(analyser.fftSize)
+
+        let hasSignal = false
+        for (let attempt = 0; attempt < 20 && !hasSignal; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          analyser.getFloatTimeDomainData(samples)
+          const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length)
+          hasSignal = rms > 0.001
+        }
+        await context.close()
+        return hasSignal
+      })).toBe(true)
 
       await viewer.keyboard.press('Escape')
       await expect(viewer.getByRole('heading', { name: /Mostre sua tela/ })).toBeVisible()
