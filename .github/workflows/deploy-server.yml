@@ -1,0 +1,39 @@
+name: Deploy server
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telae-production-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64, telae, production]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Telae.slnx
+
+      - name: Test server
+        run: dotnet test Telae.slnx -c Release --no-restore --nologo
+
+      - name: Publish server
+        run: dotnet publish apps/server/Telae.Server.csproj -c Release --no-restore -o "$RUNNER_TEMP/telae-server"
+
+      - name: Deploy and health check
+        run: bash ops/deploy-server.sh "$RUNNER_TEMP/telae-server"
+

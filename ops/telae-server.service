@@ -1,0 +1,28 @@
+[Unit]
+Description=Telae signaling server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nicolas
+Group=nicolas
+WorkingDirectory=/home/nicolas/apps/telae/server/current
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5015
+Environment=Profiles__Path=/home/nicolas/apps/telae/data/profiles.json
+EnvironmentFile=-/home/nicolas/apps/telae/telae-server.env
+ExecStart=/usr/bin/dotnet /home/nicolas/apps/telae/server/current/Telae.Server.dll
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+KillSignal=SIGINT
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/nicolas/apps/telae/data
+
+[Install]
+WantedBy=multi-user.target
+

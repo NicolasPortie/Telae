@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/audio-bridge/">
+    <Project Path="apps/audio-bridge/Telae.AudioBridge.csproj" />
+  </Folder>
+  <Folder Name="/apps/server/">
+    <Project Path="apps/server/Telae.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/" />
+  <Folder Name="/tests/server/">
+    <Project Path="tests/server/Telae.Server.Tests.csproj" />
+  </Folder>
+</Solution>
