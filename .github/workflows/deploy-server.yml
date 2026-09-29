@@ -30,11 +30,6 @@ jobs:
       - name: Publish server
         run: dotnet publish apps/server/Telae.Server.csproj -c Release --no-restore -o "$RUNNER_TEMP/telae-server"
 
-      - name: Archive server artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: telae-server-${{ github.ref_name }}
-          path: ${{ runner.temp }}/telae-server
-          if-no-files-found: error
-          retention-days: 14
+      - name: Verify published server
+        run: test -f "$RUNNER_TEMP/telae-server/Telae.Server.dll"
 
