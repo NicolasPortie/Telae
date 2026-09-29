@@ -1,0 +1,30 @@
+appId: com.telae.desktop
+productName: Telae
+copyright: Copyright © 2026 Telae
+artifactName: "${productName}-Setup-${version}.${ext}"
+
+directories:
+  output: dist
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: build/audio-bridge
+    to: audio-bridge
+    filter:
+      - "**/*"
+
+win:
+  icon: public/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+  # Assinatura (Ticket 10): definir CSC_LINK (certificado) e CSC_KEY_PASSWORD
+  # no ambiente de release. Sem eles o instalador sai unsigned, só para teste.
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Telae

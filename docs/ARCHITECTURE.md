@@ -1,0 +1,152 @@
+# Telae — Architecture
+
+## System shape
+
+```text
+┌────────────────────────── Sharer / Windows ──────────────────────────┐
+│ Electron                                                       │
+│  React UI                                                      │
+│     │                                                          │
+│  StreamController                                              │
+│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio│
+│     ├─ PeerTransport ─── WebRTC RTCPeerConnection              │
+│     ├─ QualityController                                       │
+│     └─ Diagnostics                                             │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │ encrypted media
+                     Direct P2P│        │TURN relay fallback
+                               ▼        ▼
+┌────────────────────────── Viewer / Windows ──────────────────────────┐
+│ Electron + React                                                   │
+│  PeerTransport ──> Playback surface ──> Diagnostics                │
+└─────────────────────────────────────────────────────────────────────┘
+
+                ▲                                   ▲
+                └──────── SignalR / WSS ────────────┘
+                          ASP.NET Core
+                    Share Session signaling
+```
+
+The ASP.NET Core service coordinates presence, short-lived invite tokens, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
+
+## Why this stack
+
+Electron is useful here for more than UI. Chromium already ships a production WebRTC stack with RTP/RTCP, DTLS-SRTP, ICE, congestion control, jitter handling, codec negotiation, hardware acceleration hooks, and media statistics. Rebuilding that media plane in C# would dramatically increase scope before the product has proved it needs a custom engine.
+
+C# remains a strong choice for the signaling backend because the backend does not need to process frames. ASP.NET Core + SignalR gives simple session groups, reconnect semantics, WebSocket transport, and a stack already familiar to the project's developer.
+
+## Deep modules
+
+### StreamController
+
+Owns the complete lifecycle of sharing. Its public interface should stay close to:
+
+- start a Share Session from a Capture Source and Quality Profile;
+- stop the Share Session;
+- observe a small state model and diagnostics snapshot.
+
+The renderer should not coordinate raw WebRTC steps itself.
+
+### CaptureAdapter
+
+Produces a media stream from an explicitly selected Capture Source. The first adapter uses Electron/Chromium screen capture and Windows loopback/system audio when supported.
+
+This seam exists because capture and hardware encoding are the most likely parts to need a future native implementation. A later adapter may use Windows Graphics Capture/WASAPI plus a native media bridge without changing the rest of the application.
+
+### PeerTransport
+
+Owns `RTCPeerConnection`, SDP negotiation, ICE candidates, track attachment, teardown, and ICE restart. The rest of the product should see connection states and media events rather than browser negotiation details.
+
+### SignalingClient
+
+Owns the SignalR connection and maps transport messages to Share Session events. It does not own media state.
+
+### QualityController
+
+Maps a user Quality Profile plus live network/encoder statistics into sender parameters. It can adjust bitrate and, when supported by the active browser path, degradation preference without forcing the UI to understand WebRTC internals.
+
+### Diagnostics
+
+Samples WebRTC statistics on a fixed cadence and emits a compact snapshot including bitrate, RTT, jitter, packet loss, frames, codec, selected candidate pair, and Transport Path.
+
+## Share Session state model
+
+```text
+idle
+  └─> preparing
+       └─> waiting-for-peer
+            └─> negotiating
+                 └─> live
+                      ├─> reconnecting ──> live
+                      └─> ended
+
+Any pre-live state ──> ended
+reconnecting ────────> ended when recovery budget expires
+```
+
+State changes should be driven by actual signaling and peer-connection events. The UI renders this model; it does not invent parallel connection state.
+
+## Media strategy
+
+### Video
+
+- Default to H.264 first because Windows machines commonly have efficient hardware paths and interoperability is strong.
+- Add AV1 later behind capability and benchmark gates. Better compression is useful only if encode/decode time and CPU/GPU cost stay acceptable.
+- Use a motion-oriented capture hint for films/games and a detail-oriented hint for text-heavy sharing when supported.
+- Use `RTCRtpSender.setParameters()` for bitrate ceilings and adaptation controls rather than repeatedly rebuilding the peer connection.
+- Never use a long playback buffer to hide poor network conditions. Reduce quality first.
+
+Suggested starting ceilings for lab tuning, not hard guarantees:
+
+| Profile | Starting ceiling |
+| --- | ---: |
+| 720p60 | 4–6 Mbps |
+| 1080p30 | 5–8 Mbps |
+| 1080p60 | 8–12 Mbps |
+| 1440p60 experimental | 12–20 Mbps |
+
+These values must be replaced by benchmark evidence as the controller matures.
+
+### Audio
+
+- Capture system audio/loopback together with the selected visual source where Electron/Windows supports it.
+- Use Opus through WebRTC.
+- Disable microphone-oriented processing such as echo cancellation/noise suppression for pure system audio where constraints allow it.
+- Treat A/V drift as a release metric and test it over long sessions.
+
+## Connectivity
+
+ICE gathering uses STUN to discover viable direct paths. If direct connectivity fails, TURN relays the already encrypted WebRTC traffic. TURN is therefore a required production dependency even though most ideal sessions should remain direct.
+
+The Viewer must never need inbound port forwarding.
+
+## Security baseline
+
+- `contextIsolation: true`.
+- `nodeIntegration: false` in renderer windows.
+- Electron sandbox enabled where compatible with required APIs.
+- Narrow, typed preload IPC surface.
+- Strict Content Security Policy.
+- TLS for signaling and TURN credentials with short lifetimes.
+- Share Session invite tokens are high-entropy and expire.
+- A Viewer joining a session becomes visible to the Sharer before media is considered live.
+- Capture stops when the Share Session ends or the app exits unexpectedly.
+
+## Backend responsibilities
+
+The ASP.NET Core service owns:
+
+- create/join/leave Share Session commands;
+- ephemeral invite validation;
+- SignalR grouping;
+- SDP and ICE candidate forwarding;
+- presence and reconnect window;
+- TURN credential issuance if ephemeral TURN credentials are used;
+- coarse operational metrics.
+
+It does not decode, transcode, record, or inspect normal media frames.
+
+## Future multi-viewer path
+
+Do not turn the one-to-one design into a peer mesh. Once multiple Viewers are a real requirement, introduce an SFU and send one upstream from the Sharer. Evaluate LiveKit, mediasoup, or another mature SFU at that milestone. The Share Session, CaptureAdapter, and UI concepts can remain while PeerTransport gains an SFU adapter.
+
