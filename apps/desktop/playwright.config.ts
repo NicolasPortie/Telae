@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
+const externalSignalingUrl = process.env.TELAE_E2E_SIGNALING_URL?.replace(/\/+$/, '')
+
 /**
  * E2E de duas instâncias (IMPLEMENTATION_PLAN 02/03 + PROJECT_SPEC testing).
  * Requer: Windows com display, `npm run build` já executado.
@@ -14,10 +16,12 @@ export default defineConfig({
   use: {
     trace: 'retain-on-failure',
   },
-  webServer: {
-    command: 'dotnet run --project ..\\server\\Telae.Server.csproj --no-launch-profile --urls http://localhost:5015',
-    url: 'http://localhost:5015/health',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: externalSignalingUrl
+    ? undefined
+    : {
+        command: 'dotnet run --project ..\\server\\Telae.Server.csproj --no-launch-profile --urls http://localhost:5015',
+        url: 'http://localhost:5015/health',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 })
