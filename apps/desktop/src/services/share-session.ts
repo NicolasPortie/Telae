@@ -214,6 +214,20 @@ export class ShareSessionController {
 
   async startSharing(sourceId: string, quality: QualityProfile): Promise<void> {
     const signaling = this.requireSignaling()
+
+    // Defesa contra navegação/duplo acionamento: uma transmissão local ativa
+    // troca de fonte em vez de tentar criar uma segunda sessão no servidor.
+    if (this.role === 'sharer' && this.session && this.localStream && !['idle', 'ended'].includes(this.state)) {
+      await this.switchSource(sourceId)
+      return
+    }
+
+    // Recupera versões anteriores da UI que podiam perder o estado local sem
+    // encerrar a sessão remota. Ao iniciar uma nova transmissão, limpa apenas
+    // uma sessão órfã deste mesmo dispositivo antes de criar a nova.
+    const staleShare = await signaling.getActiveShare()
+    if (staleShare) await signaling.stopShare()
+
     const generation = ++this.generation
     this.teardownPeer()
     this.capture.reset()
@@ -240,7 +254,18 @@ export class ShareSessionController {
       this.setState('waiting-for-peer')
     } catch (error) {
       if (generation !== this.generation) return
+      if (this.session) {
+        try {
+          await signaling.stopShare()
+        } catch {
+          // O servidor pode já ter encerrado a sessão; a limpeza local continua.
+        }
+      }
       this.teardownLocal()
+      this.session = null
+      this.inviteCode = null
+      this.inviteExpiresAt = null
+      this.role = null
       this.setState('idle', toUserMessage(error, 'Não foi possível iniciar o Share Session.'))
       throw new Error(this.error ?? 'Não foi possível iniciar o Share Session.')
     }
@@ -307,6 +332,7 @@ export class ShareSessionController {
   }
 
   resetToIdle() {
+    if (this.session && this.role && !['idle', 'ended'].includes(this.state)) return
     this.generation += 1
     this.teardownLocal()
     this.teardownPeer()

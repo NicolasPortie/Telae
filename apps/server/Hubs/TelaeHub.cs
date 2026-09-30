@@ -30,6 +30,12 @@ public sealed class TelaeHub(
         return new ShareAccessResult(session, GetIceServers(request.DeviceId));
     }
 
+    public Task<ShareSessionSnapshot?> GetActiveShare()
+    {
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        return Task.FromResult(registry.GetActiveSessionForSharer(deviceId));
+    }
+
     public async Task StopShare()
     {
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
