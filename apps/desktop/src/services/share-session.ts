@@ -71,6 +71,9 @@ const MAX_RESTART_ATTEMPTS = 3
 function toUserMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     const cleaned = error.message.replace(/^HubException:\s*/i, '').replace(/^Server returned an error:\s*/i, '').trim()
+    if (/failed to fetch|failed to complete negotiation|networkerror|websocket|typeerror|^error:|^http error/i.test(cleaned)) {
+      return fallback
+    }
     return cleaned || fallback
   }
   return fallback
@@ -198,7 +201,7 @@ export class ShareSessionController {
       this.emit()
       return device
     } catch (error) {
-      throw new Error(toUserMessage(error, 'Não foi possível conectar ao serviço de sinalização.'))
+      throw new Error(toUserMessage(error, 'Não foi possível conectar ao Telae. Verifique sua internet e tente novamente.'))
     }
   }
 

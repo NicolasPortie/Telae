@@ -5,7 +5,7 @@ artifactName: "${productName}-Setup-${version}.${ext}"
 
 publish:
   provider: generic
-  url: http://localhost:5015/updates/windows/
+  url: https://telae.nicolasportie.com/updates/windows/
 
 directories:
   output: dist
