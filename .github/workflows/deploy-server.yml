@@ -36,6 +36,8 @@ jobs:
   desktop:
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -74,13 +76,22 @@ jobs:
         working-directory: apps/desktop
         run: npm run dist
 
-      - name: Save Windows release files
-        uses: actions/upload-artifact@v4
-        with:
-          name: telae-windows-${{ github.ref_name }}
-          path: |
-            apps/desktop/dist/Telae-Setup-*.exe
-            apps/desktop/dist/Telae-Setup-*.exe.blockmap
-            apps/desktop/dist/latest.yml
-          if-no-files-found: error
+      - name: Publish private GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json).version
+          $installer = "apps/desktop/dist/Telae-Setup-$version.exe"
+          $files = @($installer, "$installer.blockmap", 'apps/desktop/dist/latest.yml')
+          foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Arquivo ausente: $file" }
+          }
+          gh release view $env:GITHUB_REF_NAME 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME @files --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "Telae v$version" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o GitHub Release.' }
 
