@@ -66,15 +66,23 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME não corresponde ao desktop v$version"
           }
 
-      - name: Validate desktop
+      - name: Lint desktop
         working-directory: apps/desktop
-        run: |
-          npm run lint
-          npm test
+        run: npm run lint
+
+      - name: Test desktop
+        working-directory: apps/desktop
+        run: npm test
 
       - name: Build Windows installer and update manifest
         working-directory: apps/desktop
         run: npm run dist
+
+      - name: Validate Electron flows before publishing
+        working-directory: apps/desktop
+        env:
+          Profiles__Path: ${{ runner.temp }}/telae-e2e-profiles.json
+        run: npm run test:e2e
 
       - name: Publish private GitHub release
         shell: pwsh

@@ -24,7 +24,7 @@ describe('captureDesktopSource', () => {
     await expect(captureDesktopSource('window:100:0', 'auto')).resolves.toBe(stream)
     expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false }))
     expect(resolveWindowAudioProcess).toHaveBeenCalledWith('window:100:0')
-    expect(createProcessAudioCapture).toHaveBeenCalledWith(1234)
+    expect(createProcessAudioCapture).toHaveBeenCalledWith(1234, undefined)
     expect(stream.getAudioTracks()).toEqual([audioTrack])
   })
 

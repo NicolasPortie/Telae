@@ -8,8 +8,8 @@ public sealed class TelaeRegistryTests
     public void Viewer_cannot_join_before_sharer_explicitly_starts_sharing()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
 
         var error = Assert.Throws<TelaeDomainException>(() =>
             registry.JoinShare("device-biel", "device-nicolas"));
@@ -21,13 +21,13 @@ public sealed class TelaeRegistryTests
     public void Share_session_accepts_multiple_viewers()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
-        registry.RegisterDevice("device-caio", "Caio", "connection-caio");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
+        registry.RegisterDevice("device-caio", "Caio", "connection-caio", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
-        registry.JoinShare("device-biel", "device-nicolas");
-        var session = registry.JoinShare("device-caio", "device-nicolas");
+        registry.JoinWithInvite("device-biel", registry.CreateInvite("device-nicolas").Code);
+        var session = registry.JoinWithInvite("device-caio", registry.CreateInvite("device-nicolas").Code);
         Assert.Contains("device-biel", session.ViewerDeviceIds);
         Assert.Contains("device-caio", session.ViewerDeviceIds);
         registry.ValidateSessionParticipant(session.SessionId, "device-caio", "device-nicolas");
@@ -40,10 +40,10 @@ public sealed class TelaeRegistryTests
     public void Finalized_disconnect_ends_the_active_session()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p30");
-        registry.JoinShare("device-biel", "device-nicolas");
+        registry.JoinWithInvite("device-biel", registry.CreateInvite("device-nicolas").Code);
 
         var pending = registry.BeginDisconnect("connection-nicolas");
         var result = registry.FinalizeDisconnect(pending.DeviceId!, pending.Generation);
@@ -57,13 +57,13 @@ public sealed class TelaeRegistryTests
     public void Reconnect_before_finalize_preserves_the_active_session()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p30");
-        registry.JoinShare("device-biel", "device-nicolas");
+        registry.JoinWithInvite("device-biel", registry.CreateInvite("device-nicolas").Code);
 
         var pending = registry.BeginDisconnect("connection-nicolas");
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas-reconnected");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas-reconnected", new string('a', 64));
         var result = registry.FinalizeDisconnect(pending.DeviceId!, pending.Generation);
 
         Assert.Null(result.EndedSession);
@@ -83,7 +83,7 @@ public sealed class TelaeRegistryTests
         try
         {
             var first = new TelaeRegistry(path);
-            var profile = first.RegisterDevice("stable-device-id", "Nicolas", "connection-1");
+            var profile = first.RegisterDevice("stable-device-id", "Nicolas", "connection-1", new string('a', 64));
 
             var second = new TelaeRegistry(path);
             var restored = second.FindByFriendCode(profile.FriendCode);
@@ -103,8 +103,8 @@ public sealed class TelaeRegistryTests
     public void Invite_allows_join_and_reports_specific_reasons_on_failure()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
         var invite = registry.CreateInvite("device-nicolas");
@@ -116,8 +116,8 @@ public sealed class TelaeRegistryTests
     public void Join_with_unknown_invite_fails_with_invite_invalid()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
         var error = Assert.Throws<TelaeDomainException>(() =>
@@ -129,8 +129,8 @@ public sealed class TelaeRegistryTests
     public void Expired_invite_fails_with_invite_expired()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
         var invite = registry.CreateInvite("device-nicolas", TimeSpan.FromSeconds(-1));
@@ -143,9 +143,9 @@ public sealed class TelaeRegistryTests
     public void Invite_can_be_reused_by_multiple_viewers()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
-        registry.RegisterDevice("device-caio", "Caio", "connection-caio");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
+        registry.RegisterDevice("device-caio", "Caio", "connection-caio", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
         var invite = registry.CreateInvite("device-nicolas");
@@ -160,8 +160,8 @@ public sealed class TelaeRegistryTests
     public void Stale_invite_cannot_rejoin_an_ended_session()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
-        registry.RegisterDevice("device-biel", "Biel", "connection-biel");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
         registry.StartShare("device-nicolas", "1080p60");
 
         var invite = registry.CreateInvite("device-nicolas");
@@ -176,7 +176,7 @@ public sealed class TelaeRegistryTests
     public void Invite_requires_an_active_share()
     {
         var registry = new TelaeRegistry();
-        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
 
         var error = Assert.Throws<TelaeDomainException>(() =>
             registry.CreateInvite("device-nicolas"));

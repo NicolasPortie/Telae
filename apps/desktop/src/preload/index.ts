@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AudioBridgeState, LocalProfile, TelaeDesktopApi, UpdateStatus } from '../shared/contracts.ts'
+import type { AudioBridgeState, AudioChunk, LocalProfile, TelaeDesktopApi, UpdateStatus } from '../shared/contracts.ts'
 
 const api: TelaeDesktopApi = {
   getLocalProfile: () => ipcRenderer.invoke('profile:get') as Promise<LocalProfile>,
@@ -11,8 +11,8 @@ const api: TelaeDesktopApi = {
   selectCaptureSource: (sourceId: string) => ipcRenderer.invoke('capture:select-source', sourceId),
   resolveWindowAudioProcess: (sourceId: string) => ipcRenderer.invoke('capture:resolve-window-audio', sourceId),
   listAudioProcesses: () => ipcRenderer.invoke('audio:list-processes'),
-  startAudioCapture: (processId: number) => ipcRenderer.invoke('audio:start', processId),
-  stopAudioCapture: (processId?: number) => ipcRenderer.invoke('audio:stop', processId),
+  startAudioCapture: (processId: number, captureId: string) => ipcRenderer.invoke('audio:start', processId, captureId),
+  stopAudioCapture: (captureId: string) => ipcRenderer.invoke('audio:stop', captureId),
   getEnvironment: () => ipcRenderer.invoke('environment:get'),
   setSignalingUrl: (signalingUrl: string) => ipcRenderer.invoke('environment:set-signaling-url', signalingUrl),
   getUpdateStatus: () => ipcRenderer.invoke('update:status'),
@@ -23,8 +23,8 @@ const api: TelaeDesktopApi = {
     ipcRenderer.on('update:status', handler)
     return () => ipcRenderer.removeListener('update:status', handler)
   },
-  onAudioChunk: (listener: (chunk: Uint8Array) => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, chunk: Uint8Array) => listener(chunk)
+  onAudioChunk: (listener: (chunk: AudioChunk) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, chunk: AudioChunk) => listener(chunk)
     ipcRenderer.on('audio:chunk', handler)
     return () => ipcRenderer.removeListener('audio:chunk', handler)
   },

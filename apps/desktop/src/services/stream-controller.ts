@@ -32,6 +32,8 @@ export class StreamController {
   private stream: MediaStream | null = null
   private readonly listeners = new Set<() => void>()
   private startToken = 0
+  private detachEnded: (() => void) | null = null
+  private readonly pendingCaptures = new Set<AbortController>()
 
   private readonly deps: ControllerDeps
 
@@ -67,16 +69,19 @@ export class StreamController {
   async start(sourceId: string, quality: QualityProfile): Promise<MediaStream> {
     if (!sourceId.trim()) throw new Error('Escolha uma tela ou janela antes de iniciar.')
     const token = ++this.startToken
+    this.cancelPendingCaptures()
     this.teardownStream()
     this.setState('preparing')
 
     try {
-      const stream = await this.deps.capture(sourceId, quality)
+      const stream = await this.captureSource(sourceId, quality)
       if (token !== this.startToken) {
         this.deps.release(stream)
         throw new Error('Captura substituída por uma nova seleção.')
       }
       this.stream = stream
+      this.observeEnded(stream)
+      if (token !== this.startToken) throw new Error('A fonte escolhida foi encerrada.')
       this.setState('live')
       return stream
     } catch (error) {
@@ -92,12 +97,13 @@ export class StreamController {
     if (!this.stream) throw new Error('Inicie a transmissão antes de trocar a fonte.')
     const token = this.startToken
     const previous = this.stream
-    const current = await this.deps.capture(sourceId, quality)
+    const current = await this.captureSource(sourceId, quality)
     if (token !== this.startToken || this.stream !== previous) {
       this.deps.release(current)
       throw new Error('A transmissão foi encerrada durante a troca de fonte.')
     }
     this.stream = current
+    this.observeEnded(current)
     this.emit()
     return { previous, current }
   }
@@ -108,19 +114,45 @@ export class StreamController {
 
   stop() {
     this.startToken += 1
+    this.cancelPendingCaptures()
     this.teardownStream()
     this.setState('ended')
   }
 
   reset() {
     this.startToken += 1
+    this.cancelPendingCaptures()
     this.teardownStream()
     this.setState('idle')
   }
 
   private teardownStream() {
+    this.detachEnded?.()
+    this.detachEnded = null
     const active = this.stream
     this.stream = null
     if (active) this.deps.release(active)
+  }
+
+  private observeEnded(stream: MediaStream) {
+    this.detachEnded?.()
+    const track = stream.getVideoTracks?.()[0]
+    if (!track?.addEventListener) return
+    const onEnded = () => { if (this.stream === stream) this.stop() }
+    track.addEventListener('ended', onEnded, { once: true })
+    this.detachEnded = () => track.removeEventListener('ended', onEnded)
+    if (track.readyState === 'ended') onEnded()
+  }
+
+  private async captureSource(sourceId: string, quality: QualityProfile) {
+    const request = new AbortController()
+    this.pendingCaptures.add(request)
+    try { return await this.deps.capture(sourceId, quality, request.signal) }
+    finally { this.pendingCaptures.delete(request) }
+  }
+
+  private cancelPendingCaptures() {
+    for (const request of this.pendingCaptures) request.abort()
+    this.pendingCaptures.clear()
   }
 }

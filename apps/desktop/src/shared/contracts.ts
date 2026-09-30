@@ -1,5 +1,6 @@
 export type LocalProfile = {
   deviceId: string
+  deviceSecret: string
   displayName: string
   friendCodes: string[]
 }
@@ -24,11 +25,14 @@ export type AudioStreamMetadata = {
   sampleFormat: 'f32le'
 }
 
-export type AudioBridgeState =
+export type AudioBridgeState = { captureId?: string } & (
   | { status: 'idle' }
   | { status: 'starting'; processId: number }
   | { status: 'capturing'; metadata: AudioStreamMetadata }
   | { status: 'error'; message: string }
+)
+
+export type AudioChunk = { captureId: string; data: Uint8Array }
 
 export type DesktopEnvironment = {
   platform: NodeJS.Platform
@@ -51,14 +55,14 @@ export type TelaeDesktopApi = {
   selectCaptureSource(sourceId: string): Promise<void>
   resolveWindowAudioProcess(sourceId: string): Promise<number>
   listAudioProcesses(): Promise<AudioProcess[]>
-  startAudioCapture(processId: number): Promise<void>
-  stopAudioCapture(processId?: number): Promise<void>
+  startAudioCapture(processId: number, captureId: string): Promise<void>
+  stopAudioCapture(captureId: string): Promise<void>
   getEnvironment(): Promise<DesktopEnvironment>
   setSignalingUrl(signalingUrl: string): Promise<DesktopEnvironment>
   getUpdateStatus(): Promise<UpdateStatus>
   checkForUpdates(): Promise<void>
   setSessionActive(active: boolean): Promise<void>
   onUpdateStatus(listener: (status: UpdateStatus) => void): () => void
-  onAudioChunk(listener: (chunk: Uint8Array) => void): () => void
+  onAudioChunk(listener: (chunk: AudioChunk) => void): () => void
   onAudioState(listener: (state: AudioBridgeState) => void): () => void
 }

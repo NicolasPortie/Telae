@@ -18,7 +18,7 @@ describe('StreamController', () => {
 
     const stream = await controller.start('screen:1', '1080p60')
     expect(stream).toBeDefined()
-    expect(capture).toHaveBeenCalledWith('screen:1', '1080p60')
+    expect(capture).toHaveBeenCalledWith('screen:1', '1080p60', expect.any(AbortSignal))
     expect(controller.getSnapshot().state).toBe('live')
   })
 

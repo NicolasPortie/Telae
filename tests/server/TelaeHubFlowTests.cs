@@ -61,13 +61,30 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
             .Build();
         _connections.Add(connection);
         await connection.StartAsync();
-        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest(deviceId, displayName));
+        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest(deviceId, displayName, new string('a', 64)));
         return connection;
     }
 
     private static Task<T> WaitForAsync<T>(TaskCompletionSource<T> source, string what, int timeoutMs = 10000)
     {
         return source.Task.WaitAsync(TimeSpan.FromMilliseconds(timeoutMs));
+    }
+
+    [Fact]
+    public async Task Direct_join_and_device_impersonation_are_rejected_by_the_real_hub()
+    {
+        var sharer = await ConnectAsync("device-sharer", "Sharer");
+        var attacker = await ConnectAsync("device-attacker", "Attacker");
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
+        var joinError = await Assert.ThrowsAsync<HubException>(() => attacker.InvokeAsync<ShareAccessResult>("JoinShare", "device-sharer"));
+        Assert.Contains("convite", joinError.Message);
+        var unregistered = new HubConnectionBuilder().WithUrl($"{_baseUrl}/hubs/telae").Build();
+        _connections.Add(unregistered);
+        await unregistered.StartAsync();
+        var takeoverError = await Assert.ThrowsAsync<HubException>(() => unregistered.InvokeAsync<DeviceSnapshot>("RegisterDevice",
+            new RegisterDeviceRequest("device-sharer", "Attacker", new string('b', 64))));
+        Assert.Contains("credencial", takeoverError.Message);
+        Assert.NotNull(await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"));
     }
 
     [Fact]
