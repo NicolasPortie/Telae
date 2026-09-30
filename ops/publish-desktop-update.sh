@@ -31,8 +31,7 @@ if [[ "$actual_hash" != "$expected_hash" ]]; then
   exit 2
 fi
 
-root_dir="${TELAE_ROOT:-/home/usuario/apps/telae}"
-target_dir="$root_dir/data/updates/windows"
+target_dir="${TELAE_UPDATES_DIR:-/var/lib/telae-updates/windows}"
 mkdir -p "$target_dir"
 install -m 0644 "$source_dir/$filename" "$target_dir/$filename.next"
 mv -f "$target_dir/$filename.next" "$target_dir/$filename"

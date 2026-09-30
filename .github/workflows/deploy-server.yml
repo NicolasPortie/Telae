@@ -95,3 +95,31 @@ jobs:
           }
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o GitHub Release.' }
 
+  deploy-desktop-update:
+    needs: [validate, desktop]
+    runs-on: [self-hosted, Linux, X64, telae-updates]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout release scripts
+        uses: actions/checkout@v4
+
+      - name: Publish Windows update to Telae server
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          release_dir="$(mktemp -d)"
+          trap 'rm -rf "$release_dir"' EXIT
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir "$release_dir" \
+            --pattern 'Telae-Setup-*.exe' \
+            --pattern 'Telae-Setup-*.exe.blockmap' \
+            --pattern 'latest.yml'
+          bash ops/publish-desktop-update.sh "$release_dir"
+          curl --fail --silent --show-error \
+            http://127.0.0.1:5015/updates/windows/latest.yml \
+            | grep -Fx "version: ${GITHUB_REF_NAME#v}"
+
