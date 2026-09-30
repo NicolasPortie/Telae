@@ -136,6 +136,27 @@ test.describe('duas instâncias Telae', () => {
         return track ? { readyState: track.readyState, muted: track.muted } : null
       }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
 
+      // A wide desktop must use the viewer's available area without cropping the stream.
+      for (const bounds of [{ width: 1600, height: 900 }, { width: 900, height: 1100 }]) {
+        await viewerApp.evaluate(({ BrowserWindow }, size) => {
+          BrowserWindow.getAllWindows()[0].setBounds(size)
+        }, bounds)
+        await expect.poll(() => remoteVideo.evaluate((video) => {
+          const rect = video.getBoundingClientRect()
+          const header = document.querySelector('header')!.getBoundingClientRect()
+          return {
+            fit: getComputedStyle(video).objectFit,
+            fullWidth: Math.abs(rect.width - (window.innerWidth - 26)) < 2,
+            fullHeight: Math.abs(rect.height - (window.innerHeight - header.height - 26)) < 2,
+            noOverflow: document.documentElement.scrollHeight <= window.innerHeight,
+          }
+        })).toEqual({ fit: 'contain', fullWidth: true, fullHeight: true, noOverflow: true })
+      }
+      await viewer.getByRole('button', { name: 'Preencher', exact: true }).click()
+      await expect.poll(() => remoteVideo.evaluate((video) => getComputedStyle(video).objectFit)).toBe('cover')
+      await viewer.getByRole('button', { name: 'Ajustar', exact: true }).click()
+      await expect.poll(() => remoteVideo.evaluate((video) => getComputedStyle(video).objectFit)).toBe('contain')
+
       const volume = viewer.getByRole('slider', { name: 'Volume da transmissão' })
       await volume.focus()
       await volume.press('Home')
@@ -151,8 +172,9 @@ test.describe('duas instâncias Telae', () => {
         height: Math.round(video.getBoundingClientRect().height),
         viewport: window.innerHeight,
         fit: getComputedStyle(video).objectFit,
-      }))).toEqual(expect.objectContaining({ fullscreen: true, fit: 'cover' }))
+      }))).toEqual(expect.objectContaining({ fullscreen: true, fit: 'contain' }))
       await expect.poll(() => remoteVideo.evaluate((video) => Math.round(video.getBoundingClientRect().height / window.innerHeight))).toBe(1)
+      await expect.poll(() => remoteVideo.evaluate((video) => Math.abs(video.getBoundingClientRect().width - window.innerWidth) < 2)).toBe(true)
       await viewer.keyboard.press('Escape')
       await expect(remoteVideo).toBeVisible()
 
