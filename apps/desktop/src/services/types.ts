@@ -13,6 +13,7 @@ export type ShareSessionSnapshot = {
   sharerDisplayName: string
   qualityProfile: QualityProfile
   viewerDeviceId: string | null
+  viewerDeviceIds: string[]
   startedAt: string
 }
 
@@ -50,6 +51,8 @@ export type ViewerJoinedEvent = {
   sessionId: string
   viewer: DeviceSnapshot
 }
+
+export type ViewerLeftEvent = { sessionId: string; viewerDeviceId: string }
 
 export type QualityProfile = 'auto' | '720p60' | '1080p30' | '1080p60'
 

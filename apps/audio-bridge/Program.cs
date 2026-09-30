@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -33,6 +34,14 @@ try
         case "capture":
             var processId = ParseProcessId(args);
             await CaptureProcessAsync(processId);
+            return 0;
+
+        case "resolve-window":
+            if (args.Length < 2 || !long.TryParse(args[1], out var handle) || handle <= 0)
+                throw new ArgumentException("Informe o identificador da janela.");
+            NativeMethods.GetWindowThreadProcessId(new IntPtr(handle), out var windowProcessId);
+            if (windowProcessId == 0) throw new InvalidOperationException("Não foi possível identificar o aplicativo desta janela.");
+            Console.WriteLine(windowProcessId);
             return 0;
 
         default:
@@ -170,3 +179,9 @@ static void PrintUsage()
 
 internal sealed record AudioProcessInfo(int ProcessId, string ProcessName, string WindowTitle);
 internal sealed record AudioStreamMetadata(int ProcessId, int SampleRate, int Channels, string SampleFormat);
+
+internal static class NativeMethods
+{
+    [DllImport("user32.dll")]
+    internal static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+}

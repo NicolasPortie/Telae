@@ -13,12 +13,13 @@ import type {
   ShareAccessResult,
   SignalingEnvelope,
   ViewerJoinedEvent,
+  ViewerLeftEvent,
 } from './types'
 
 type Events = {
   presenceChanged: (device: DeviceSnapshot) => void
   viewerJoined: (event: ViewerJoinedEvent) => void
-  viewerLeft: (sessionId: string) => void
+  viewerLeft: (event: ViewerLeftEvent) => void
   signalReceived: (envelope: SignalingEnvelope) => void
   sessionEnded: (sessionId: string) => void
   connectionChanged: (status: ConnectionStatus) => void
@@ -39,7 +40,7 @@ export class SignalingClient {
 
     this.connection.on('PresenceChanged', (device: DeviceSnapshot) => this.emit('presenceChanged', device))
     this.connection.on('ViewerJoined', (event: ViewerJoinedEvent) => this.emit('viewerJoined', event))
-    this.connection.on('ViewerLeft', (sessionId: string) => this.emit('viewerLeft', sessionId))
+    this.connection.on('ViewerLeft', (event: ViewerLeftEvent) => this.emit('viewerLeft', event))
     this.connection.on('SignalReceived', (envelope: SignalingEnvelope) => this.emit('signalReceived', envelope))
     this.connection.on('SessionEnded', (sessionId: string) => this.emit('sessionEnded', sessionId))
 

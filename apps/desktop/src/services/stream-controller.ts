@@ -88,6 +88,24 @@ export class StreamController {
     }
   }
 
+  async switchSource(sourceId: string, quality: QualityProfile): Promise<{ previous: MediaStream; current: MediaStream }> {
+    if (!this.stream) throw new Error('Inicie a transmissão antes de trocar a fonte.')
+    const token = this.startToken
+    const previous = this.stream
+    const current = await this.deps.capture(sourceId, quality)
+    if (token !== this.startToken || this.stream !== previous) {
+      this.deps.release(current)
+      throw new Error('A transmissão foi encerrada durante a troca de fonte.')
+    }
+    this.stream = current
+    this.emit()
+    return { previous, current }
+  }
+
+  release(stream: MediaStream) {
+    this.deps.release(stream)
+  }
+
   stop() {
     this.startToken += 1
     this.teardownStream()

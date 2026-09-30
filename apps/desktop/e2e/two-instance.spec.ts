@@ -42,6 +42,26 @@ async function enterWithName(page: Page, name: string) {
 }
 
 test.describe('duas instâncias Telae', () => {
+  test('janela captura apenas o áudio do aplicativo escolhido', async () => {
+    test.skip(!WITH_MEDIA, 'Exige captura real de janela no Windows')
+    const app = await launchApp(true)
+    try {
+      const page = await firstWindow(app)
+      await enterWithName(page, 'JanelaE2E')
+      await page.getByRole('button', { name: /Escolher tela/ }).click()
+      await expect(page.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
+      await expect(page.getByRole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeout: 15_000 })
+      const windowChoices = page.getByRole('radiogroup', { name: 'Janelas' }).getByRole('radio')
+      await windowChoices.first().click()
+      await page.getByRole('button', { name: 'Compartilhar e gerar convite' }).click()
+      await expect(page.getByLabel(/Código de convite/)).toBeVisible({ timeout: 60_000 })
+      await expect(page.getByText('O Windows não disponibilizou áudio desta fonte.')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Parar transmissão' }).click()
+    } finally {
+      await app.close()
+    }
+  })
+
   test('convite inválido falha com motivo específico', async () => {
     const sharerApp = await launchApp()
     const viewerApp = await launchApp(true)
@@ -54,6 +74,13 @@ test.describe('duas instâncias Telae', () => {
 
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(sharer.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
+      const windowSources = await sharer.evaluate(() => window.telae.listCaptureSources())
+      const firstWindowSource = windowSources.find((source: { kind: string; id: string }) => source.kind === 'window')
+      if (firstWindowSource) {
+        await sharer.evaluate((sourceId) => window.telae.selectCaptureSource(sourceId), firstWindowSource.id)
+        const processId = await sharer.evaluate((sourceId) => window.telae.resolveWindowAudioProcess(sourceId), firstWindowSource.id)
+        expect(processId).toBeGreaterThan(0)
+      }
 
       await viewer.getByLabel('Código de convite').fill('ZZZZZZZZ')
       await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
@@ -68,12 +95,15 @@ test.describe('duas instâncias Telae', () => {
     test.skip(!WITH_MEDIA, 'Exige display e captura real: rode com TELAE_E2E_MEDIA=1')
     const sharerApp = await launchApp()
     const viewerApp = await launchApp(true)
+    const secondViewerApp = await launchApp(true)
     try {
       const sharer = await firstWindow(sharerApp)
       const viewer = await firstWindow(viewerApp)
+      const secondViewer = await firstWindow(secondViewerApp)
 
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
+      await enterWithName(secondViewer, 'Viewer2E2E')
 
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       const firstSource = sharer.getByRole('radio').first()
@@ -115,14 +145,39 @@ test.describe('duas instâncias Telae', () => {
       await viewer.getByRole('button', { name: 'Silenciar' }).click()
       await expect.poll(() => remoteVideo.evaluate((video) => (video as HTMLVideoElement).muted)).toBe(true)
       await expect(viewer.getByRole('button', { name: 'Tela cheia' })).toBeVisible()
-
+      await viewer.getByRole('button', { name: 'Tela cheia' }).click()
+      await expect.poll(() => remoteVideo.evaluate((video) => ({
+        fullscreen: document.fullscreenElement !== null,
+        height: Math.round(video.getBoundingClientRect().height),
+        viewport: window.innerHeight,
+        fit: getComputedStyle(video).objectFit,
+      }))).toEqual(expect.objectContaining({ fullscreen: true, fit: 'cover' }))
+      await expect.poll(() => remoteVideo.evaluate((video) => Math.round(video.getBoundingClientRect().height / window.innerHeight))).toBe(1)
       await viewer.keyboard.press('Escape')
+      await expect(remoteVideo).toBeVisible()
+
+      await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
+      await expect(sharer.getByText('A transmissão e o código continuam ativos durante a troca.')).toBeVisible()
+      await sharer.getByRole('button', { name: 'Trocar fonte agora' }).click()
+      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
+      await expect(remoteVideo).toBeVisible()
+
+      await secondViewer.getByLabel('Código de convite').fill(code)
+      await secondViewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      const secondVideo = secondViewer.getByLabel('Transmissão do seu amigo')
+      await expect(secondVideo).toBeVisible({ timeout: 60_000 })
+      await expect(sharer.getByText('2 pessoas conectadas')).toBeVisible()
+
+      await viewer.getByRole('button', { name: 'Sair' }).click()
       await expect(viewer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+      await expect(secondVideo).toBeVisible()
       await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
       await expect(sharer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+      await expect(secondViewer.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
     } finally {
       await sharerApp.close()
       await viewerApp.close()
+      await secondViewerApp.close()
     }
   })
 })

@@ -35,11 +35,11 @@ public sealed class TelaeHub(
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
         var session = registry.StopShare(deviceId);
 
-        if (session.ViewerDeviceId is not null)
+        foreach (var viewerDeviceId in session.ViewerDeviceIds)
         {
             try
             {
-                await Clients.Client(registry.GetConnectionId(session.ViewerDeviceId))
+                await Clients.Client(registry.GetConnectionId(viewerDeviceId))
                     .SendAsync("SessionEnded", session.SessionId);
             }
             catch (TelaeDomainException) { }
@@ -84,8 +84,8 @@ public sealed class TelaeHub(
     {
         var viewerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
         var result = registry.LeaveShare(viewerDeviceId);
-        if (result.Session is not null && result.SharerConnectionId is not null)
-            await Clients.Client(result.SharerConnectionId).SendAsync("ViewerLeft", result.Session.SessionId);
+        if (result.Session is not null && result.SharerConnectionId is not null && result.ViewerDeviceId is not null)
+            await Clients.Client(result.SharerConnectionId).SendAsync("ViewerLeft", new ViewerLeftEvent(result.Session.SessionId, result.ViewerDeviceId));
     }
 
     public async Task SendSignal(string targetDeviceId, SignalingEnvelope envelope)

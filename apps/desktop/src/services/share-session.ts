@@ -13,6 +13,7 @@ import type {
   SignalingEnvelope,
   TransportPath,
   ViewerJoinedEvent,
+  ViewerLeftEvent,
 } from './types'
 
 export type SessionRole = 'sharer' | 'viewer'
@@ -41,6 +42,7 @@ export type SessionSnapshot = {
   inviteExpiresAt: string | null
   viewerPresence: ViewerPresence
   viewerName: string | null
+  viewerCount: number
   quality: QualityProfile
   includeAudio: boolean
   diagnostics: DiagnosticsSnapshot
@@ -91,6 +93,10 @@ export class ShareSessionController {
   private readonly qualityController = new QualityController()
   private signaling: SignalingClient | null = null
   private peer: WebRtcPeer | null = null
+  private readonly sharerPeers = new Map<string, WebRtcPeer>()
+  private readonly connectedViewers = new Set<string>()
+  private readonly pendingSignals: SignalingEnvelope[] = []
+  private iceServers: IceServerDto[] = []
   private readonly listeners = new Set<() => void>()
 
   private state: SessionState = 'idle'
@@ -148,6 +154,7 @@ export class ShareSessionController {
       inviteExpiresAt: this.inviteExpiresAt,
       viewerPresence: this.viewerPresence,
       viewerName: this.viewerName,
+      viewerCount: this.sharerPeers.size,
       quality: this.quality,
       includeAudio: this.includeAudio,
       diagnostics: this.diagnostics,
@@ -190,7 +197,7 @@ export class ShareSessionController {
     this.signaling = client
     this.unsubscribers = [
       client.on('viewerJoined', (event) => void this.handleViewerJoined(event)),
-      client.on('viewerLeft', (sessionId) => this.handleViewerLeft(sessionId)),
+      client.on('viewerLeft', (event) => this.handleViewerLeft(event)),
       client.on('signalReceived', (envelope) => void this.handleSignal(envelope)),
       client.on('sessionEnded', (sessionId) => this.handleSessionEnded(sessionId)),
       client.on('connectionChanged', (status) => this.handleSignalingChanged(status)),
@@ -225,7 +232,7 @@ export class ShareSessionController {
       const access = await signaling.startShare(quality)
       if (generation !== this.generation) return
       this.session = access.session
-      this.createPeer(access.iceServers, this.localStream)
+      this.iceServers = access.iceServers
       const invite = await signaling.createInvite()
       if (generation !== this.generation) return
       this.inviteCode = invite.code
@@ -256,10 +263,27 @@ export class ShareSessionController {
       this.quality = (access.session.qualityProfile as QualityProfile) ?? 'auto'
       this.createPeer(access.iceServers, null)
       this.setState('negotiating')
+      for (const pending of this.pendingSignals.splice(0)) {
+        if (pending.sessionId === this.session.sessionId) await this.handleSignal(pending)
+      }
     } catch (error) {
       if (generation !== this.generation) return
       this.setState('idle', toUserMessage(error, 'Não foi possível entrar na transmissão.'))
       throw new Error(this.error ?? 'Não foi possível entrar na transmissão.')
+    }
+  }
+
+  async switchSource(sourceId: string): Promise<void> {
+    if (this.role !== 'sharer' || !this.session || !this.localStream)
+      throw new Error('Inicie a transmissão antes de trocar a fonte.')
+    const { previous, current } = await this.capture.switchSource(sourceId, this.quality)
+    this.localStream = current
+    this.includeAudio = current.getAudioTracks().length > 0
+    this.emit()
+    try {
+      await Promise.all([...this.sharerPeers.values()].map((peer) => peer.replaceLocalStream(current)))
+    } finally {
+      this.capture.release(previous)
     }
   }
 
@@ -338,43 +362,55 @@ export class ShareSessionController {
 
   private async handleViewerJoined(event: ViewerJoinedEvent) {
     if (this.role !== 'sharer' || this.session?.sessionId !== event.sessionId) return
-    this.peerDeviceId = event.viewer.deviceId
+    const viewerId = event.viewer.deviceId
+    this.sharerPeers.get(viewerId)?.close()
+    this.connectedViewers.delete(viewerId)
+    const signaling = this.signaling
+    const sessionId = this.session.sessionId
+    const peer = new WebRtcPeer({
+      iceServers: this.iceServers,
+      qualityProfile: this.quality,
+      ...(this.localStream ? { localStream: this.localStream } : {}),
+      sendSignal: async (payload) => {
+        await signaling?.sendSignal(viewerId, { sessionId, fromDeviceId: this.deviceId, payload })
+      },
+      onRemoteStream: () => undefined,
+      onStatus: (status) => this.handlePeerStatus(status, viewerId),
+    })
+    this.sharerPeers.set(viewerId, peer)
+    this.startDiagnosticsLoop()
     this.viewerName = event.viewer.displayName
     this.viewerPresence = 'joining'
     this.setState('negotiating')
     try {
-      await this.peer?.createOffer()
+      await peer.createOffer()
     } catch (error) {
-      this.setState('waiting-for-peer', toUserMessage(error, 'Não foi possível negociar com o Viewer.'))
+      peer.close()
+      this.sharerPeers.delete(viewerId)
+      this.setState(this.sharerPeers.size ? 'live' : 'waiting-for-peer', toUserMessage(error, 'Não foi possível negociar com o Viewer.'))
     }
   }
 
-  private handleViewerLeft(sessionId: string) {
-    if (this.role !== 'sharer' || this.session?.sessionId !== sessionId) return
-    this.peerDeviceId = null
-    this.viewerPresence = 'gone'
-    this.teardownPeer()
-    if (this.session) this.createPeerSilent()
-    this.setState('waiting-for-peer')
-  }
-
-  /** Recria o peer do Sharer sem refazer a captura (Viewer saiu; sessão continua). */
-  private createPeerSilent() {
-    if (!this.localStream || !this.session) return
-    void this.signaling
-      ?.getTurnCredentials()
-      .then((iceServers) => {
-        if (this.role === 'sharer' && this.session) this.createPeer(iceServers, this.localStream)
-      })
-      .catch(() => undefined)
+  private handleViewerLeft(event: ViewerLeftEvent) {
+    if (this.role !== 'sharer' || this.session?.sessionId !== event.sessionId) return
+    this.sharerPeers.get(event.viewerDeviceId)?.close()
+    this.sharerPeers.delete(event.viewerDeviceId)
+    this.connectedViewers.delete(event.viewerDeviceId)
+    this.viewerPresence = this.sharerPeers.size ? 'live' : 'gone'
+    this.setState(this.sharerPeers.size ? 'live' : 'waiting-for-peer')
   }
 
   private async handleSignal(envelope: SignalingEnvelope) {
-    if (this.session?.sessionId !== envelope.sessionId || !this.peer) return
-    if (!this.peerDeviceId) this.peerDeviceId = envelope.fromDeviceId
+    if (this.role === 'viewer' && !this.peer && this.state === 'joining') {
+      this.pendingSignals.push(envelope)
+      return
+    }
+    if (this.session?.sessionId !== envelope.sessionId) return
+    const peer = this.role === 'sharer' ? this.sharerPeers.get(envelope.fromDeviceId) : this.peer
+    if (!peer) return
     try {
       const wasOffer = envelope.payload.kind === 'offer'
-      await this.peer.handleSignal(envelope.payload)
+      await peer.handleSignal(envelope.payload)
       if (wasOffer && this.role === 'viewer' && this.state !== 'live') {
         this.setState('negotiating')
       }
@@ -403,7 +439,20 @@ export class ShareSessionController {
     this.emit()
   }
 
-  private handlePeerStatus(status: PeerStatus) {
+  private handlePeerStatus(status: PeerStatus, viewerId?: string) {
+    if (viewerId) {
+      if (status === 'connected') {
+        this.connectedViewers.add(viewerId)
+        this.viewerPresence = 'live'
+        this.liveSinceMs ??= Date.now()
+        this.setState('live')
+      } else if (status === 'disconnected' || status === 'failed') {
+        this.connectedViewers.delete(viewerId)
+        if (this.connectedViewers.size === 0) this.setState('reconnecting', 'Reconectando espectadores…')
+        void this.sharerPeers.get(viewerId)?.restartIce().catch(() => undefined)
+      }
+      return
+    }
     if (status === 'connected') {
       this.restartAttempts = 0
       this.clearReconnectTimer()
@@ -464,15 +513,16 @@ export class ShareSessionController {
     this.clearDiagnosticsTimer()
     this.diagnosticsTimer = window.setInterval(() => {
       void (async () => {
-        if (!this.peer) return
+        const peer = this.role === 'sharer' ? this.sharerPeers.values().next().value : this.peer
+        if (!peer) return
         try {
-          const stats = await this.peer.getDiagnostics()
+          const stats = await peer.getDiagnostics()
           // Amostra vazia antes do primeiro par selecionado: não polui a UI.
           if (stats.bitrateKbps === 0 && stats.roundTripMs === null && stats.transportPath === null) return
           this.diagnostics = stats
           if (this.role === 'sharer' && this.state === 'live') {
             const decision = this.qualityController.decide(this.quality, stats)
-            await this.peer.applyQuality(decision.maxBitrateBps, decision.degradationPreference)
+            await Promise.all([...this.sharerPeers.values()].map((item) => item.applyQuality(decision.maxBitrateBps, decision.degradationPreference)))
           }
           this.emit()
         } catch {
@@ -498,6 +548,10 @@ export class ShareSessionController {
     this.clearTimers()
     this.peer?.close()
     this.peer = null
+    for (const peer of this.sharerPeers.values()) peer.close()
+    this.sharerPeers.clear()
+    this.connectedViewers.clear()
+    this.pendingSignals.length = 0
     this.remoteStream = null
     this.diagnostics = EMPTY_DIAGNOSTICS
     this.restartAttempts = 0
