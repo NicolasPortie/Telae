@@ -28,7 +28,7 @@ npm run dev
 
 ## Release e deploy
 
-As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, cria o instalador Windows e salva o instalador, o `.blockmap` e o `latest.yml` como artefato privado. O servidor atualiza pela tag:
+As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, cria o instalador Windows e publica o instalador, o `.blockmap` e o `latest.yml` em um GitHub Release privado. O servidor atualiza pela tag:
 
 Exemplo:
 
