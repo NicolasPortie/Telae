@@ -11,6 +11,7 @@ WorkingDirectory=/home/nicolas/apps/telae/server/current
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Environment=ASPNETCORE_URLS=http://0.0.0.0:5015
 Environment=Profiles__Path=/home/nicolas/apps/telae/data/profiles.json
+Environment=Updates__Path=/var/lib/telae-updates/windows
 EnvironmentFile=-/home/nicolas/apps/telae/telae-server.env
 ExecStart=/usr/bin/dotnet /home/nicolas/apps/telae/server/current/Telae.Server.dll
 Restart=always
