@@ -10,16 +10,17 @@ $version = [regex]::Match((Get-Content -Raw -LiteralPath $manifest), '(?m)^versi
 if (-not $version) { throw 'Versão inválida em latest.yml' }
 $installer = Join-Path $DistDir "Telae-Setup-$version.exe"
 $blockmap = "$installer.blockmap"
-foreach ($file in @($installer, $blockmap)) {
+$publisher = Join-Path $PSScriptRoot 'publish-desktop-update.sh'
+foreach ($file in @($installer, $blockmap, $publisher)) {
     if (-not (Test-Path -LiteralPath $file)) { throw "Arquivo ausente: $file" }
 }
 
 $remoteDir = "/home/nicolas/apps/telae/data/updates/staging-$version"
 & ssh $Server "mkdir -p '$remoteDir'"
 if ($LASTEXITCODE -ne 0) { throw 'Não foi possível preparar o servidor.' }
-& scp -p $installer $blockmap $manifest "${Server}:$remoteDir/"
+& scp -p $installer $blockmap $manifest $publisher "${Server}:$remoteDir/"
 if ($LASTEXITCODE -ne 0) { throw 'Não foi possível enviar os arquivos.' }
-& ssh $Server "bash /home/nicolas/apps/telae/repo/ops/publish-desktop-update.sh '$remoteDir'"
+& ssh $Server "bash '$remoteDir/publish-desktop-update.sh' '$remoteDir'"
 if ($LASTEXITCODE -ne 0) { throw 'A publicação falhou.' }
 
 Write-Host "Atualização $version publicada. Os aplicativos verificarão na próxima abertura."

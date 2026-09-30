@@ -34,9 +34,11 @@ fi
 root_dir="${TELAE_ROOT:-/home/nicolas/apps/telae}"
 target_dir="$root_dir/data/updates/windows"
 mkdir -p "$target_dir"
-install -m 0644 "$source_dir/$filename" "$target_dir/$filename"
+install -m 0644 "$source_dir/$filename" "$target_dir/$filename.next"
+mv -f "$target_dir/$filename.next" "$target_dir/$filename"
 if [[ -f "$source_dir/$filename.blockmap" ]]; then
-  install -m 0644 "$source_dir/$filename.blockmap" "$target_dir/$filename.blockmap"
+  install -m 0644 "$source_dir/$filename.blockmap" "$target_dir/$filename.blockmap.next"
+  mv -f "$target_dir/$filename.blockmap.next" "$target_dir/$filename.blockmap"
 fi
 install -m 0644 "$manifest" "$target_dir/latest.yml.next"
 mv -f "$target_dir/latest.yml.next" "$target_dir/latest.yml"
