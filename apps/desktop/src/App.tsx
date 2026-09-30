@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { ShareSessionController } from './services/share-session'
 import type { QualityProfile } from './services/types'
-import type { CaptureSource, LocalProfile } from './shared/contracts'
+import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
 type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'settings'
 
@@ -69,6 +69,7 @@ export default function App() {
   const [muted, setMuted] = useState(false)
   const [fitCover, setFitCover] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
@@ -78,6 +79,19 @@ export default function App() {
   const desktopApiAvailable = typeof window !== 'undefined' && typeof window.telae !== 'undefined'
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
+
+  useEffect(() => {
+    if (!desktopApiAvailable) return
+    const unsubscribe = window.telae.onUpdateStatus(setUpdateStatus)
+    void window.telae.getUpdateStatus().then(setUpdateStatus)
+    return unsubscribe
+  }, [desktopApiAvailable])
+
+  useEffect(() => {
+    if (!desktopApiAvailable) return
+    const active = snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
+    void window.telae.setSessionActive(active)
+  }, [desktopApiAvailable, snapshot.role, snapshot.state])
 
   // Ticket 09: término inesperado do renderer interrompe captura e sinalização.
   // O servidor encerra o Share Session ao detectar a queda do socket.
@@ -360,6 +374,23 @@ export default function App() {
             {snapshot.signaling !== 'online' && snapshot.signaling !== 'offline' ? ` · sinalização ${snapshot.signaling}` : ''}
           </p>
         </div>
+        {updateStatus && ['checking', 'downloading', 'ready', 'error'].includes(updateStatus.phase) && (
+          <div className="border-t border-[#313029] bg-[#282721]">
+            <div role="status" className="mx-auto flex max-w-[1120px] items-center gap-3 px-5 py-2 text-xs text-[#F1EFE8]">
+              <span>
+                {updateStatus.phase === 'checking' && 'Verificando atualizações…'}
+                {updateStatus.phase === 'downloading' && `Baixando Telae ${updateStatus.version}: ${updateStatus.percent}%`}
+                {updateStatus.phase === 'ready' && `Telae ${updateStatus.version} pronto. A instalação começa ao encerrar a transmissão.`}
+                {updateStatus.phase === 'error' && `Não foi possível verificar a atualização: ${updateStatus.message}`}
+              </span>
+              {updateStatus.phase === 'error' && (
+                <button type="button" className="ml-auto underline" onClick={() => void window.telae.checkForUpdates()}>
+                  Tentar novamente
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         {connectError && (
           <div className="border-t border-[#313029]">
             <p role="alert" className="mx-auto max-w-[1120px] px-5 py-2 text-xs text-[#FF5D5D]">

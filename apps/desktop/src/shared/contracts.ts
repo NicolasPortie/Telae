@@ -36,6 +36,12 @@ export type DesktopEnvironment = {
   signalingUrl: string
 }
 
+export type UpdateStatus =
+  | { phase: 'idle' | 'checking' | 'current'; version: string }
+  | { phase: 'downloading'; version: string; percent: number }
+  | { phase: 'ready'; version: string }
+  | { phase: 'error'; version: string; message: string }
+
 export type TelaeDesktopApi = {
   getLocalProfile(): Promise<LocalProfile>
   setDisplayName(displayName: string): Promise<LocalProfile>
@@ -48,6 +54,10 @@ export type TelaeDesktopApi = {
   stopAudioCapture(): Promise<void>
   getEnvironment(): Promise<DesktopEnvironment>
   setSignalingUrl(signalingUrl: string): Promise<DesktopEnvironment>
+  getUpdateStatus(): Promise<UpdateStatus>
+  checkForUpdates(): Promise<void>
+  setSessionActive(active: boolean): Promise<void>
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void
   onAudioChunk(listener: (chunk: Uint8Array) => void): () => void
   onAudioState(listener: (state: AudioBridgeState) => void): () => void
 }

@@ -11,11 +11,15 @@ import type {
   CaptureSource,
   LocalProfile,
 } from '../shared/contracts.ts'
+import { DesktopUpdates } from './updates.ts'
 
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
 let audioState: AudioBridgeState = { status: 'idle' }
 let selectedCaptureSourceId: string | null = null
+const updates = new DesktopUpdates((status) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', status)
+})
 
 const profilePath = () => path.join(app.getPath('userData'), 'profile.json')
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
@@ -217,11 +221,14 @@ function registerIpc() {
     isPackaged: app.isPackaged,
     signalingUrl: readSignalingUrl(),
   }))
-  ipcMain.handle('environment:set-signaling-url', (_event, signalingUrl: string) => ({
-    platform: process.platform,
-    isPackaged: app.isPackaged,
-    signalingUrl: persistSignalingUrl(signalingUrl),
-  }))
+  ipcMain.handle('environment:set-signaling-url', (_event, signalingUrl: string) => {
+    const saved = persistSignalingUrl(signalingUrl)
+    void updates.check(saved)
+    return { platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
+  })
+  ipcMain.handle('update:status', () => updates.getStatus())
+  ipcMain.handle('update:check', () => updates.check(readSignalingUrl()))
+  ipcMain.handle('update:session-active', (_event, active: boolean) => updates.setSessionActive(active === true))
 }
 
 function registerDisplayMediaHandler() {
@@ -294,6 +301,7 @@ if (!hasSingleInstanceLock) {
     registerIpc()
     registerDisplayMediaHandler()
     await createWindow()
+    void updates.check(readSignalingUrl())
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) await createWindow()
     })
