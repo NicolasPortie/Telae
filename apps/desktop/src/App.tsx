@@ -78,7 +78,7 @@ export default function App() {
   const samplesRef = useRef<string[]>([])
 
   const desktopApiAvailable = typeof window !== 'undefined' && typeof window.telae !== 'undefined'
-  const sessionActive = snapshot.session !== null && snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
+  const sessionActive = snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
   const sourcePickerForActiveShare = screen === 'picker' && switchingSource && snapshot.role === 'sharer'
   const visibleScreen: Screen = sessionActive && screen !== 'session' && !sourcePickerForActiveShare ? 'session' : screen
 
@@ -680,7 +680,7 @@ export default function App() {
           </section>
         )}
 
-        {visibleScreen === 'session' && snapshot.role === 'sharer' && (
+        {visibleScreen === 'session' && snapshot.role === 'sharer' && snapshot.state !== 'ended' && (
           <SharerSession
             snapshot={snapshot}
             elapsed={elapsed}
@@ -795,24 +795,26 @@ export default function App() {
               </div>
             )}
 
-            {snapshot.state === 'ended' && (
-              <div className="mx-auto max-w-[520px] py-16 text-center">
-                <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
-                {snapshot.error && <p className="mt-2 text-sm text-[#9D9A90]">{snapshot.error}</p>}
-                <button
-                  type="button"
-                  onClick={() => {
-                    controller.resetToIdle()
-                    setScreen('home')
-                  }}
-                  className="telae-press mt-6 min-h-[44px] rounded-md bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412]"
-                >
-                  Voltar ao início
-                </button>
-              </div>
-            )}
+
           </div>
         )}
+        {visibleScreen === 'session' && snapshot.state === 'ended' && (
+          <div className="mx-auto max-w-[520px] py-16 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
+            {snapshot.error && <p className="mt-2 text-sm text-[#9D9A90]">{snapshot.error}</p>}
+            <button
+              type="button"
+              onClick={() => {
+                controller.resetToIdle()
+                setScreen('home')
+              }}
+              className="telae-press mt-6 min-h-[44px] rounded-md bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412]"
+            >
+              Voltar ao início
+            </button>
+          </div>
+        )}
+
       </main>
     </div>
   )

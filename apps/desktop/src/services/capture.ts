@@ -13,7 +13,9 @@ const qualityConstraints: Record<QualityProfile, MediaTrackConstraints> = {
 export async function captureDesktopSource(
   sourceId: string,
   quality: QualityProfile,
+  signal?: AbortSignal,
 ): Promise<MediaStream> {
+  signal?.throwIfAborted()
   try {
     await window.telae.selectCaptureSource(sourceId)
   } catch {
@@ -21,6 +23,7 @@ export async function captureDesktopSource(
   }
 
   const isWindow = sourceId.startsWith('window:')
+  signal?.throwIfAborted()
   let stream: MediaStream
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
@@ -32,6 +35,7 @@ export async function captureDesktopSource(
       throw new Error('A captura foi cancelada. Escolha novamente a tela ou janela.')
     }
     // Algumas janelas não disponibilizam loopback de áudio. Mantém o vídeo ativo.
+    signal?.throwIfAborted()
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         audio: false,
@@ -42,27 +46,40 @@ export async function captureDesktopSource(
     }
   }
 
-  const track = stream.getVideoTracks()[0]
-  if (!track) {
-    stopMediaStream(stream)
-    throw new Error('A fonte escolhida não retornou vídeo.')
-  }
-  track.contentHint = 'motion'
-  for (const audioTrack of stream.getAudioTracks()) {
-    audioTrack.contentHint = 'music'
-  }
-  if (isWindow) {
-    try {
-      const processId = await window.telae.resolveWindowAudioProcess(sourceId)
-      const processCapture = await createProcessAudioCapture(processId)
-      stream.addTrack(processCapture.track)
-      processCaptures.set(stream, processCapture)
-    } catch (error) {
-      console.warn('Telae: áudio isolado desta janela indisponível', error)
-      // Janela sem áudio compatível: o vídeo continua, sem vazar som de outros apps.
+  const onAbort = () => stopMediaStream(stream)
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    signal?.throwIfAborted()
+    const track = stream.getVideoTracks()[0]
+    if (!track) {
+      stopMediaStream(stream)
+      throw new Error('A fonte escolhida não retornou vídeo.')
     }
+    track.contentHint = 'motion'
+    for (const audioTrack of stream.getAudioTracks()) {
+      audioTrack.contentHint = 'music'
+    }
+    if (isWindow) {
+      try {
+        const processId = await window.telae.resolveWindowAudioProcess(sourceId)
+        signal?.throwIfAborted()
+        const processCapture = await createProcessAudioCapture(processId, signal)
+        stream.addTrack(processCapture.track)
+        processCaptures.set(stream, processCapture)
+      } catch (error) {
+        signal?.throwIfAborted()
+        console.warn('Telae: áudio isolado desta janela indisponível', error)
+        // Janela sem áudio compatível: o vídeo continua, sem vazar som de outros apps.
+      }
+    }
+    signal?.throwIfAborted()
+    return stream
+  } catch (error) {
+    stopMediaStream(stream)
+    throw error
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
-  return stream
 }
 
 export function stopMediaStream(stream: MediaStream | null): void {
