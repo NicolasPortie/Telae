@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { app, BrowserWindow, desktopCapturer, ipcMain, session } from 'electron'
@@ -12,10 +11,11 @@ import type {
   LocalProfile,
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
+import { readLocalProfile, writeJsonAtomically } from './profile-store.ts'
 
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
-let audioBridgeProcessId: number | null = null
+let audioBridgeCaptureId: string | null = null
 let audioState: AudioBridgeState = { status: 'idle' }
 let selectedCaptureSourceId: string | null = null
 const updates = new DesktopUpdates((status) => {
@@ -75,25 +75,16 @@ function readSignalingUrl(): string {
 
 function persistSignalingUrl(value: string): string {
   const signalingUrl = normalizeSignalingUrl(value)
-  writeFileSync(settingsPath(), JSON.stringify({ signalingUrl }, null, 2), 'utf8')
+  writeJsonAtomically(settingsPath(), { signalingUrl })
   return signalingUrl
 }
 
 function readProfile(): LocalProfile {
-  try {
-    const parsed = JSON.parse(readFileSync(profilePath(), 'utf8')) as Partial<LocalProfile>
-    return {
-      deviceId: parsed.deviceId || randomUUID(),
-      displayName: parsed.displayName?.trim() || '',
-      friendCodes: Array.isArray(parsed.friendCodes) ? parsed.friendCodes.filter((code: string) => Boolean(code)) : [],
-    }
-  } catch {
-    return { deviceId: randomUUID(), displayName: '', friendCodes: [] }
-  }
+  return readLocalProfile(profilePath())
 }
 
 function persistProfile(profile: LocalProfile): LocalProfile {
-  writeFileSync(profilePath(), JSON.stringify(profile, null, 2), 'utf8')
+  writeJsonAtomically(profilePath(), profile)
   return profile
 }
 
@@ -120,12 +111,14 @@ function sendAudioState(state: AudioBridgeState) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('audio:state', state)
 }
 
-async function stopAudioBridge() {
+function stopAudioBridge(captureId?: string) {
+  if (captureId !== undefined && captureId !== audioBridgeCaptureId) return
   const active = audioBridge
+  const stoppedId = audioBridgeCaptureId ?? undefined
   audioBridge = null
-  audioBridgeProcessId = null
+  audioBridgeCaptureId = null
   if (active && !active.killed) active.kill()
-  sendAudioState({ status: 'idle' })
+  sendAudioState({ status: 'idle', captureId: stoppedId })
 }
 
 function registerIpc() {
@@ -196,49 +189,56 @@ function registerIpc() {
     return JSON.parse(result.stdout) as AudioProcess[]
   })
 
-  ipcMain.handle('audio:start', async (_event, processId: number) => {
+  ipcMain.handle('audio:start', (_event, processId: number, captureId: string) => {
     if (!Number.isInteger(processId) || processId <= 0) throw new Error('Processo de áudio inválido.')
-    await stopAudioBridge()
+    if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error('Captura de áudio inválida.')
+    stopAudioBridge()
     const executable = findAudioBridge()
-    sendAudioState({ status: 'starting', processId })
+    sendAudioState({ status: 'starting', processId, captureId })
 
     const child = spawn(executable, ['capture', '--pid', String(processId)], {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     audioBridge = child
-    audioBridgeProcessId = processId
+    audioBridgeCaptureId = captureId
     let stderrBuffer = ''
 
     child.stdout.on('data', (chunk: Buffer) => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('audio:chunk', new Uint8Array(chunk))
+      if (audioBridge === child && mainWindow && !mainWindow.isDestroyed())
+        mainWindow.webContents.send('audio:chunk', { captureId, data: new Uint8Array(chunk) })
     })
     child.stderr.on('data', (chunk: Buffer) => {
+      if (audioBridge !== child) return
       stderrBuffer += chunk.toString('utf8')
       const lines = stderrBuffer.split(/\r?\n/)
       stderrBuffer = lines.pop() ?? ''
       for (const line of lines) {
         if (line.startsWith('TELAE_FORMAT ')) {
           const metadata = JSON.parse(line.slice('TELAE_FORMAT '.length)) as AudioStreamMetadata
-          sendAudioState({ status: 'capturing', metadata })
+          sendAudioState({ status: 'capturing', metadata, captureId })
         } else if (line.startsWith('TELAE_ERROR ')) {
-          sendAudioState({ status: 'error', message: line.slice('TELAE_ERROR '.length) })
+          sendAudioState({ status: 'error', message: line.slice('TELAE_ERROR '.length), captureId })
         }
       }
     })
-    child.on('error', (error) => sendAudioState({ status: 'error', message: error.message }))
+    child.on('error', (error) => {
+      if (audioBridge === child) sendAudioState({ status: 'error', message: error.message, captureId })
+    })
     child.on('exit', (code) => {
-      if (audioBridge === child) { audioBridge = null; audioBridgeProcessId = null }
+      if (audioBridge !== child) return
+      audioBridge = null
+      audioBridgeCaptureId = null
       if (code && code !== 0 && audioState.status !== 'error') {
-        sendAudioState({ status: 'error', message: `O capturador de áudio encerrou com código ${code}.` })
+        sendAudioState({ status: 'error', message: `O capturador de áudio encerrou com código ${code}.`, captureId })
       } else if (audioState.status !== 'error') {
-        sendAudioState({ status: 'idle' })
+        sendAudioState({ status: 'idle', captureId })
       }
     })
   })
 
-  ipcMain.handle('audio:stop', (_event, processId?: number) => {
-    if (processId === undefined || processId === audioBridgeProcessId) return stopAudioBridge()
+  ipcMain.handle('audio:stop', (_event, captureId: string) => {
+    if (typeof captureId === 'string') stopAudioBridge(captureId)
   })
   ipcMain.handle('environment:get', () => ({
     platform: process.platform,

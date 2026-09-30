@@ -50,11 +50,18 @@ export class WebRtcPeer {
   private lastStatsAt = 0
   private closed = false
   private readonly localSenders = new Map<'video' | 'audio', RTCRtpSender>()
+  private readonly polite: boolean
+  private ignoreOffer = false
+  private negotiationQueue: Promise<void> = Promise.resolve()
+  private lastLossReportId: string | null = null
+  private lastPacketCount = 0
+  private lastPacketsLost = 0
 
   constructor(options: PeerOptions) {
     this.sendSignal = options.sendSignal
     this.onRemoteStream = options.onRemoteStream
     this.qualityProfile = options.qualityProfile
+    this.polite = !options.localStream
     this.peer = new RTCPeerConnection({ iceServers: toRtcIceServers(options.iceServers) })
 
     if (options.localStream) {
@@ -77,17 +84,18 @@ export class WebRtcPeer {
           sdpMLineIndex: event.candidate.sdpMLineIndex,
           usernameFragment: event.candidate.usernameFragment,
         },
-      })
+      }).catch(() => undefined)
     }
 
     this.peer.ontrack = (event) => {
-      if (event.streams[0]) {
-        this.remoteStream = event.streams[0]
-      } else {
-        this.remoteStream ??= new MediaStream()
-        if (!this.remoteStream.getTracks().some((track) => track.id === event.track.id)) {
-          this.remoteStream.addTrack(event.track)
-        }
+      // Áudio adicionado numa troca de fonte pode chegar com outro msid.
+      // A superfície de playback mantém vídeo e áudio no mesmo stream local.
+      this.remoteStream ??= new MediaStream()
+      for (const track of this.remoteStream.getTracks()) {
+        if (track.kind === event.track.kind && track.id !== event.track.id) this.remoteStream.removeTrack(track)
+      }
+      if (!this.remoteStream.getTracks().some((track) => track.id === event.track.id)) {
+        this.remoteStream.addTrack(event.track)
       }
       this.onRemoteStream(this.remoteStream)
     }
@@ -96,10 +104,13 @@ export class WebRtcPeer {
   }
 
   async createOffer() {
-    const offer = await this.peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false })
-    await this.peer.setLocalDescription(offer)
-    await this.applySenderQuality()
-    await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
+    return this.enqueueNegotiation(async () => {
+      if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
+      const offer = await this.peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false })
+      await this.peer.setLocalDescription(offer)
+      await this.applySenderQuality()
+      await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
+    })
   }
 
   async replaceLocalStream(stream: MediaStream) {
@@ -114,10 +125,22 @@ export class WebRtcPeer {
   }
 
   async restartIce() {
-    if (this.closed) return
-    const offer = await this.peer.createOffer({ iceRestart: true })
-    await this.peer.setLocalDescription(offer)
-    await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
+    return this.enqueueNegotiation(async () => {
+      if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
+      const offer = await this.peer.createOffer({ iceRestart: true })
+      await this.peer.setLocalDescription(offer)
+      await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
+    })
+  }
+
+  updateIceServers(servers: IceServerDto[]) {
+    if (!this.closed) this.peer.setConfiguration({ ...this.peer.getConfiguration(), iceServers: toRtcIceServers(servers) })
+  }
+
+  private enqueueNegotiation(operation: () => Promise<void>): Promise<void> {
+    const pending = this.negotiationQueue.then(async () => { if (!this.closed) await operation() })
+    this.negotiationQueue = pending.catch(() => undefined)
+    return pending
   }
 
   async applyQuality(maxBitrateBps: number, degradationPreference: RTCDegradationPreference) {
@@ -137,7 +160,12 @@ export class WebRtcPeer {
   }
 
   async handleSignal(payload: SignalingPayload) {
+    return this.enqueueNegotiation(() => this.handleSignalInternal(payload))
+  }
+
+  private async handleSignalInternal(payload: SignalingPayload) {
     if (payload.kind === 'candidate' && payload.candidate) {
+      if (this.ignoreOffer) return
       const candidate: RTCIceCandidateInit = {
         candidate: payload.candidate.candidate,
         sdpMid: payload.candidate.sdpMid ?? undefined,
@@ -150,6 +178,10 @@ export class WebRtcPeer {
     }
 
     if (payload.kind === 'offer' && payload.sdp) {
+      const collision = this.peer.signalingState !== 'stable'
+      this.ignoreOffer = collision && !this.polite
+      if (this.ignoreOffer) return
+      if (collision) await this.peer.setLocalDescription({ type: 'rollback' })
       await this.peer.setRemoteDescription({ type: 'offer', sdp: payload.sdp })
       await this.flushCandidates()
       const answer = await this.peer.createAnswer()
@@ -159,6 +191,8 @@ export class WebRtcPeer {
     }
 
     if (payload.kind === 'answer' && payload.sdp) {
+      if (this.peer.signalingState !== 'have-local-offer') return
+      this.ignoreOffer = false
       await this.peer.setRemoteDescription({ type: 'answer', sdp: payload.sdp })
       await this.flushCandidates()
     }
@@ -206,9 +240,24 @@ export class WebRtcPeer {
     this.lastVideoBytes = bytes
     this.lastStatsAt = now
 
-    const received = Number(item.packetsReceived ?? 0)
-    const lost = Number(item.packetsLost ?? 0)
-    const packetLossPercent = received + lost > 0 ? Math.max(0, (lost / (received + lost)) * 100) : null
+    let lossReport: StatItem | undefined = item.type === 'inbound-rtp' ? item : undefined
+    if (item.type === 'outbound-rtp') {
+      lossReport = typeof item.remoteId === 'string' ? reports.get(item.remoteId) as StatItem | undefined : undefined
+      lossReport ??= [...reports.values()].find((report) => report.type === 'remote-inbound-rtp' &&
+        (report as StatItem).localId === item.id) as StatItem | undefined
+    }
+    let packetLossPercent: number | null = null
+    if (lossReport && typeof lossReport.packetsLost === 'number') {
+      const lost = Math.max(0, lossReport.packetsLost)
+      const total = item.type === 'outbound-rtp' ? Number(item.packetsSent ?? 0) : Number(item.packetsReceived ?? 0) + lost
+      const sameReport = this.lastLossReportId === lossReport.id
+      const countDelta = sameReport ? total - this.lastPacketCount : total
+      const lostDelta = sameReport ? lost - this.lastPacketsLost : lost
+      if (countDelta > 0) packetLossPercent = Math.min(100, Math.max(0, lostDelta / countDelta * 100))
+      this.lastLossReportId = lossReport.id
+      this.lastPacketCount = total
+      this.lastPacketsLost = lost
+    }
 
     if (typeof item.codecId === 'string') {
       const codec = reports.get(item.codecId) as StatItem | undefined

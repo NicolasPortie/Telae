@@ -146,7 +146,19 @@ The ASP.NET Core service owns:
 
 It does not decode, transcode, record, or inspect normal media frames.
 
-## Future multi-viewer path
+## Multiple viewers
 
-Do not turn the one-to-one design into a peer mesh. Once multiple Viewers are a real requirement, introduce an SFU and send one upstream from the Sharer. Evaluate LiveKit, mediasoup, or another mature SFU at that milestone. The Share Session, CaptureAdapter, and UI concepts can remain while PeerTransport gains an SFU adapter.
+The current implementation supports up to 12 Viewers per Share Session. Each Viewer has an independent WebRTC connection, an Auto quality controller and a recovery budget of three ICE restarts, with a ten-second deadline per attempt. A failed Viewer does not end healthy Viewer connections. Diagnostics show total video upload and network quality from the worst sampled connection.
+
+The Sharer captures one source but sends media separately to each Viewer. Upload and encoding cost therefore grow with the Viewer count; 12 is an admission limit, not a measured guarantee of 1080p60 on every machine. An SFU remains a future transport option if one upstream is needed.
+
+## Device credentials and migration
+
+Each desktop stores a random 256-bit device credential locally. Registration requires it; the server persists only its SHA-256 hash and compares credentials in constant time. Device IDs and friend codes are public identifiers and do not authorize registration or joining.
+
+A new Viewer must present an active invite. Direct `JoinShare` is restricted to Viewers already authorized for that active session; leaving revokes that authorization. Signaling remains restricted to the Sharer/Viewer pair.
+
+Desktop profiles without credentials migrate to a new device ID and credential, preserving the display name and saved friend codes. Legacy server profiles cannot be claimed by supplying an arbitrary new credential. Coordinate the backend and desktop update; pre-0.1.12 clients must update before registering against the secured backend.
+
+Capture and peer connections are stopped locally before remote leave/stop notification. Pending capture initialization is cancellable, and the captured video track ending also ends the session. Audio bridge messages and cleanup are scoped by capture ID, including when two windows belong to the same process. Profiles are written to a temporary file, flushed and atomically replaced on both the server and desktop.
 

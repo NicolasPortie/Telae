@@ -12,7 +12,7 @@ public sealed class TelaeHub(
 {
     public async Task<DeviceSnapshot> RegisterDevice(RegisterDeviceRequest request)
     {
-        var device = registry.RegisterDevice(request.DeviceId, request.DisplayName, Context.ConnectionId);
+        var device = registry.RegisterDevice(request.DeviceId, request.DisplayName, Context.ConnectionId, request.DeviceSecret);
         await Clients.Others.SendAsync("PresenceChanged", device);
         return device;
     }

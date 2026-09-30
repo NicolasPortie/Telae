@@ -1,6 +1,6 @@
 namespace Telae.Server.Core;
 
-public sealed record RegisterDeviceRequest(string DeviceId, string DisplayName);
+public sealed record RegisterDeviceRequest(string DeviceId, string DisplayName, string DeviceSecret);
 public sealed record StartShareRequest(string DeviceId, string QualityProfile);
 
 public sealed record DeviceSnapshot(
