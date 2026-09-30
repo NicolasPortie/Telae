@@ -61,4 +61,18 @@ describe('DesktopUpdates', () => {
     vi.advanceTimersByTime(500)
     expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(false, true)
   })
+
+  it('cancels a scheduled restart if a session starts during the delay', async () => {
+    const updates = new DesktopUpdates(vi.fn())
+    await updates.check('http://localhost:5015')
+    const updater = updaterInstances[0]
+    updater.emit('update-downloaded', { version: '0.1.12' })
+    vi.advanceTimersByTime(250)
+    updates.setSessionActive(true)
+    vi.advanceTimersByTime(1000)
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+    updates.setSessionActive(false)
+    vi.advanceTimersByTime(500)
+    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(false, true)
+  })
 })

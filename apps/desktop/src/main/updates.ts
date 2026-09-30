@@ -12,6 +12,7 @@ export class DesktopUpdates {
   private checking = false
   private sessionActive = false
   private installing = false
+  private installTimer: ReturnType<typeof setTimeout> | null = null
   private status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
   private readonly onStatus: StatusListener
 
@@ -25,6 +26,11 @@ export class DesktopUpdates {
 
   setSessionActive(active: boolean): void {
     this.sessionActive = active
+    if (active && this.installTimer !== null) {
+      clearTimeout(this.installTimer)
+      this.installTimer = null
+      this.installing = false
+    }
     if (!active && this.status.phase === 'ready') this.install()
   }
 
@@ -81,7 +87,14 @@ export class DesktopUpdates {
     if (this.installing || this.sessionActive || this.status.phase !== 'ready') return
     this.installing = true
     // Deixa o aviso de reinício chegar à janela antes de encerrá-la.
-    setTimeout(() => this.updater?.quitAndInstall(false, true), 500)
+    this.installTimer = setTimeout(() => {
+      this.installTimer = null
+      if (this.sessionActive || this.status.phase !== 'ready') {
+        this.installing = false
+        return
+      }
+      this.updater?.quitAndInstall(false, true)
+    }, 500)
   }
 
   private publish(status: UpdateStatus): void {
