@@ -14,7 +14,7 @@ public sealed class TelaeRegistry
     private readonly Dictionary<string, ShareSessionRecord> _sessionsBySharer = new(StringComparer.Ordinal);
     private readonly Dictionary<string, InviteRecord> _invitesByCode = new(StringComparer.OrdinalIgnoreCase);
 
-    public static readonly TimeSpan InviteLifetime = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan InviteLifetime = TimeSpan.FromHours(24);
 
     public TelaeRegistry(string? profilePath = null)
     {
@@ -97,7 +97,6 @@ public sealed class TelaeRegistry
                 Guid.NewGuid().ToString("N"),
                 deviceId,
                 NormalizeQualityProfile(qualityProfile),
-                null,
                 DateTimeOffset.UtcNow);
 
             _sessionsBySharer.Add(deviceId, session);
@@ -150,16 +149,12 @@ public sealed class TelaeRegistry
             var normalized = NormalizeFriendCode(inviteCode);
             if (!_invitesByCode.TryGetValue(normalized, out var invite))
                 throw new TelaeDomainException("invite_invalid", "Este convite não existe. Confira o código e tente de novo.");
-            if (invite.ConsumedAt is not null)
-                throw new TelaeDomainException("invite_consumed", "Este convite já foi usado. Peça um novo convite ao Sharer.");
             if (invite.ExpiresAt <= DateTimeOffset.UtcNow)
                 throw new TelaeDomainException("invite_expired", "Este convite expirou. Peça um novo convite ao Sharer.");
             if (!_sessionsBySharer.TryGetValue(invite.SharerDeviceId, out var session) || session.SessionId != invite.SessionId)
                 throw new TelaeDomainException("share_not_active", "Esta transmissão já terminou.");
 
-            var snapshot = AttachViewerLocked(viewerDeviceId, session);
-            invite.ConsumedAt = DateTimeOffset.UtcNow;
-            return snapshot;
+            return AttachViewerLocked(viewerDeviceId, session);
         }
     }
 
@@ -167,10 +162,11 @@ public sealed class TelaeRegistry
     {
         if (viewerDeviceId == session.SharerDeviceId)
             throw new TelaeDomainException("cannot_view_own_share", "O dispositivo não pode assistir à própria transmissão.");
-        if (session.ViewerDeviceId is not null && session.ViewerDeviceId != viewerDeviceId)
-            throw new TelaeDomainException("share_already_has_viewer", "Esta transmissão já possui um espectador.");
-
-        session.ViewerDeviceId = viewerDeviceId;
+        if (_sessionsBySharer.Values.Any(s => s != session && s.ViewerDeviceIds.Contains(viewerDeviceId)))
+            throw new TelaeDomainException("viewer_already_joined", "Saia da transmissão atual antes de entrar em outra.");
+        if (session.ViewerDeviceIds.Count >= 12 && !session.ViewerDeviceIds.Contains(viewerDeviceId))
+            throw new TelaeDomainException("share_full", "Esta transmissão atingiu o limite de 12 espectadores.");
+        session.ViewerDeviceIds.Add(viewerDeviceId);
         return ToSessionSnapshot(session);
     }
 
@@ -191,12 +187,12 @@ public sealed class TelaeRegistry
     {
         lock (_gate)
         {
-            var session = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceId == viewerDeviceId);
-            if (session is null) return new LeaveViewerResult(null, null);
+            var session = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(viewerDeviceId));
+            if (session is null) return new LeaveViewerResult(null, null, null);
 
-            session.ViewerDeviceId = null;
+            session.ViewerDeviceIds.Remove(viewerDeviceId);
             _connectionByDevice.TryGetValue(session.SharerDeviceId, out var connectionId);
-            return new LeaveViewerResult(ToSessionSnapshot(session), connectionId);
+            return new LeaveViewerResult(ToSessionSnapshot(session), connectionId, viewerDeviceId);
         }
     }
 
@@ -224,30 +220,33 @@ public sealed class TelaeRegistry
                 currentGeneration != generation ||
                 _connectionByDevice.ContainsKey(deviceId))
             {
-                return new DisconnectResult(null, null, null);
+                return new DisconnectResult(null, null, null, null);
             }
 
             _disconnectGenerationByDevice.Remove(deviceId);
             ShareSessionSnapshot? ended = null;
             ShareSessionSnapshot? viewerLeft = null;
+            string? viewerLeftDeviceId = null;
             if (_sessionsBySharer.Remove(deviceId, out var sharerSession))
             {
                 ended = ToSessionSnapshot(sharerSession);
             }
             else
             {
-                var viewerSession = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceId == deviceId);
+                var viewerSession = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(deviceId));
                 if (viewerSession is not null)
                 {
-                    viewerSession.ViewerDeviceId = null;
+                    viewerSession.ViewerDeviceIds.Remove(deviceId);
                     viewerLeft = ToSessionSnapshot(viewerSession);
+                    viewerLeftDeviceId = deviceId;
                 }
             }
 
             return new DisconnectResult(
                 _profiles.TryGetValue(deviceId, out var profile) ? ToDeviceSnapshot(profile) : null,
                 ended,
-                viewerLeft);
+                viewerLeft,
+                viewerLeftDeviceId);
         }
     }
 
@@ -281,9 +280,9 @@ public sealed class TelaeRegistry
             var session = _sessionsBySharer.Values.FirstOrDefault(s => s.SessionId == sessionId)
                 ?? throw new TelaeDomainException("share_not_active", "A transmissão não está mais ativa.");
 
-            var validSender = session.SharerDeviceId == deviceId || session.ViewerDeviceId == deviceId;
-            var validTarget = session.SharerDeviceId == targetDeviceId || session.ViewerDeviceId == targetDeviceId;
-            if (!validSender || !validTarget || deviceId == targetDeviceId)
+            var validPair = (session.SharerDeviceId == deviceId && session.ViewerDeviceIds.Contains(targetDeviceId)) ||
+                (session.SharerDeviceId == targetDeviceId && session.ViewerDeviceIds.Contains(deviceId));
+            if (!validPair)
                 throw new TelaeDomainException("not_session_participant", "Somente participantes da transmissão podem trocar sinalização.");
         }
     }
@@ -310,7 +309,7 @@ public sealed class TelaeRegistry
             session.SharerDeviceId,
             name,
             session.QualityProfile,
-            session.ViewerDeviceId,
+            session.ViewerDeviceIds.Order(StringComparer.Ordinal).ToArray(),
             session.StartedAt);
     }
 
@@ -425,13 +424,12 @@ public sealed class TelaeRegistry
         string sessionId,
         string sharerDeviceId,
         string qualityProfile,
-        string? viewerDeviceId,
         DateTimeOffset startedAt)
     {
         public string SessionId { get; } = sessionId;
         public string SharerDeviceId { get; } = sharerDeviceId;
         public string QualityProfile { get; } = qualityProfile;
-        public string? ViewerDeviceId { get; set; } = viewerDeviceId;
+        public HashSet<string> ViewerDeviceIds { get; } = new(StringComparer.Ordinal);
         public DateTimeOffset StartedAt { get; } = startedAt;
     }
 
@@ -441,6 +439,5 @@ public sealed class TelaeRegistry
         public string SessionId { get; } = sessionId;
         public string SharerDeviceId { get; } = sharerDeviceId;
         public DateTimeOffset ExpiresAt { get; } = expiresAt;
-        public DateTimeOffset? ConsumedAt { get; set; }
     }
 }

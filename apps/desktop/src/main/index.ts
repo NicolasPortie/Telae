@@ -15,6 +15,7 @@ import { DesktopUpdates } from './updates.ts'
 
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
+let audioBridgeProcessId: number | null = null
 let audioState: AudioBridgeState = { status: 'idle' }
 let selectedCaptureSourceId: string | null = null
 const updates = new DesktopUpdates((status) => {
@@ -105,8 +106,8 @@ function findAudioBridge(): string {
   const candidates = app.isPackaged
     ? [path.join(process.resourcesPath, 'audio-bridge', executable)]
     : [
-        path.resolve(app.getAppPath(), '..', 'audio-bridge', 'bin', 'Debug', 'net10.0-windows10.0.19041.0', executable),
         path.resolve(app.getAppPath(), '..', 'audio-bridge', 'bin', 'Release', 'net10.0-windows10.0.19041.0', executable),
+        path.resolve(app.getAppPath(), '..', 'audio-bridge', 'bin', 'Debug', 'net10.0-windows10.0.19041.0', executable),
       ]
 
   const found = candidates.find(existsSync)
@@ -122,6 +123,7 @@ function sendAudioState(state: AudioBridgeState) {
 async function stopAudioBridge() {
   const active = audioBridge
   audioBridge = null
+  audioBridgeProcessId = null
   if (active && !active.killed) active.kill()
   sendAudioState({ status: 'idle' })
 }
@@ -175,6 +177,18 @@ function registerIpc() {
     selectedCaptureSourceId = sourceId
   })
 
+  ipcMain.handle('capture:resolve-window-audio', async (_event, sourceId: string): Promise<number> => {
+    if (sourceId !== selectedCaptureSourceId || !sourceId.startsWith('window:'))
+      throw new Error('Selecione uma janela válida para capturar seu áudio.')
+    const match = /^window:(\d+):/.exec(sourceId)
+    if (!match) throw new Error('Não foi possível identificar esta janela.')
+    const result = spawnSync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true })
+    const processId = Number(result.stdout.trim())
+    if (result.status !== 0 || !Number.isInteger(processId) || processId <= 0)
+      throw new Error('Não foi possível identificar o áudio deste aplicativo.')
+    return processId
+  })
+
   ipcMain.handle('audio:list-processes', (): AudioProcess[] => {
     const executable = findAudioBridge()
     const result = spawnSync(executable, ['list'], { encoding: 'utf8', windowsHide: true })
@@ -193,6 +207,7 @@ function registerIpc() {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     audioBridge = child
+    audioBridgeProcessId = processId
     let stderrBuffer = ''
 
     child.stdout.on('data', (chunk: Buffer) => {
@@ -213,7 +228,7 @@ function registerIpc() {
     })
     child.on('error', (error) => sendAudioState({ status: 'error', message: error.message }))
     child.on('exit', (code) => {
-      if (audioBridge === child) audioBridge = null
+      if (audioBridge === child) { audioBridge = null; audioBridgeProcessId = null }
       if (code && code !== 0 && audioState.status !== 'error') {
         sendAudioState({ status: 'error', message: `O capturador de áudio encerrou com código ${code}.` })
       } else if (audioState.status !== 'error') {
@@ -222,7 +237,9 @@ function registerIpc() {
     })
   })
 
-  ipcMain.handle('audio:stop', stopAudioBridge)
+  ipcMain.handle('audio:stop', (_event, processId?: number) => {
+    if (processId === undefined || processId === audioBridgeProcessId) return stopAudioBridge()
+  })
   ipcMain.handle('environment:get', () => ({
     platform: process.platform,
     isPackaged: app.isPackaged,
@@ -259,7 +276,7 @@ function registerDisplayMediaHandler() {
 
     callback({
       video: source,
-      audio: request.audioRequested && process.platform === 'win32' ? 'loopback' : undefined,
+      audio: request.audioRequested && process.platform === 'win32' && sourceId.startsWith('screen:') ? 'loopback' : undefined,
     })
   })
 }

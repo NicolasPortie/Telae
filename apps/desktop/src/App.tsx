@@ -56,6 +56,7 @@ export default function App() {
   const [sourcesLoading, setSourcesLoading] = useState(false)
   const [sourcesError, setSourcesError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
+  const [activeSourceId, setActiveSourceId] = useState<string>('')
   const [quality, setQuality] = useState<QualityProfile>('auto')
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -66,7 +67,8 @@ export default function App() {
   const [overlayVisible, setOverlayVisible] = useState(true)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
-  const [fitCover, setFitCover] = useState(false)
+  const [fitCover, setFitCover] = useState(true)
+  const [switchingSource, setSwitchingSource] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
 
@@ -202,12 +204,21 @@ export default function App() {
 
   const openPicker = useCallback(() => {
     controller.resetToIdle()
+    setSwitchingSource(false)
     setFormError(null)
     setSources([])
     setSourcesError(null)
     setScreen('picker')
     void loadSources()
   }, [controller, loadSources])
+
+  const openSourceSwitch = useCallback(() => {
+    setSwitchingSource(true)
+    setFormError(null)
+    setSources([])
+    setScreen('picker')
+    void loadSources()
+  }, [loadSources])
 
   const handleStartSharing = useCallback(async () => {
     if (!selectedId) {
@@ -217,15 +228,18 @@ export default function App() {
     setBusy(true)
     setFormError(null)
     try {
-      await controller.startSharing(selectedId, quality)
+      if (switchingSource) await controller.switchSource(selectedId)
+      else await controller.startSharing(selectedId, quality)
+      setActiveSourceId(selectedId)
       samplesRef.current = []
+      setSwitchingSource(false)
       setScreen('session')
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Não foi possível iniciar.')
     } finally {
       setBusy(false)
     }
-  }, [controller, selectedId, quality])
+  }, [controller, selectedId, quality, switchingSource])
 
   const handleJoin = useCallback(async () => {
     setBusy(true)
@@ -307,16 +321,6 @@ export default function App() {
     overlayTimer.current = window.setTimeout(() => setOverlayVisible(false), 3000)
   }, [])
 
-  // Escape encerra a sessão.
-  useEffect(() => {
-    if (screen !== 'session') return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') void handleLeave()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [screen, handleLeave])
-
   useEffect(() => {
     if (!videoRef.current) return
     videoRef.current.muted = snapshot.role === 'sharer' ? true : muted
@@ -339,7 +343,6 @@ export default function App() {
     ended: 'Transmissão terminada',
   }
 
-  const selectedSource = sources.find((item) => item.id === selectedId) ?? null
   const screens = sources.filter((item) => item.kind === 'screen')
   const windowsList = sources.filter((item) => item.kind === 'window')
 
@@ -524,7 +527,7 @@ export default function App() {
           <section aria-labelledby="picker-title" className="telae-panel-enter">
             <button
               type="button"
-              onClick={() => setScreen('home')}
+              onClick={() => setScreen(switchingSource ? 'session' : 'home')}
               className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-[#9D9A90] hover:text-[#F1EFE8]"
             >
               <ArrowLeft size={16} aria-hidden="true" /> Voltar
@@ -532,7 +535,7 @@ export default function App() {
             <h1 id="picker-title" className="mt-2 text-2xl font-semibold tracking-tight">
               O que você quer compartilhar?
             </h1>
-            <p className="mt-1 text-sm text-[#9D9A90]">A captura só começa depois da sua confirmação. Nada é transmitido em silêncio.</p>
+            <p className="mt-1 text-sm text-[#9D9A90]">{switchingSource ? 'A transmissão e o código continuam ativos durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
 
             {sourcesLoading && <p className="mt-6 text-sm text-[#9D9A90]">Listando telas e janelas…</p>}
 
@@ -556,7 +559,7 @@ export default function App() {
 
                 <div className="mt-6 rounded-[10px] border border-[#313029] bg-[#1C1C19] p-4">
                   <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                    <fieldset>
+                    {!switchingSource && <fieldset>
                       <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
                         Qualidade da imagem
                       </legend>
@@ -582,7 +585,7 @@ export default function App() {
                           )
                         })}
                       </div>
-                    </fieldset>
+                    </fieldset>}
 
                   </div>
 
@@ -599,7 +602,7 @@ export default function App() {
                       disabled={busy || !selectedId}
                       className="telae-press min-h-[44px] w-full rounded-md bg-[#D8A85C] px-5 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
                     >
-                      {busy ? 'Iniciando…' : 'Compartilhar e gerar convite'}
+                      {busy ? 'Preparando…' : switchingSource ? 'Trocar fonte agora' : 'Compartilhar e gerar convite'}
                     </button>
                   </div>
                 </div>
@@ -667,14 +670,12 @@ export default function App() {
           <SharerSession
             snapshot={snapshot}
             elapsed={elapsed}
-            sourceName={selectedSource?.name ?? null}
+            sourceName={sources.find((item) => item.id === activeSourceId)?.name ?? null}
             videoRef={videoRef}
             copied={copied}
             onCopyInvite={copyInvite}
             onStop={() => void handleLeave()}
-            onChangeSource={() => {
-              void handleLeave().then(openPicker)
-            }}
+            onChangeSource={openSourceSwitch}
             onExport={exportDiagnostics}
             formError={formError}
           />
@@ -685,7 +686,7 @@ export default function App() {
             ref={stageRef}
             onMouseMove={pokeOverlay}
             onTouchStart={pokeOverlay}
-            className="telae-panel-enter"
+            className="telae-panel-enter telae-viewer-stage"
           >
             {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
               <div className="mx-auto max-w-[520px] py-16 text-center">
@@ -710,13 +711,13 @@ export default function App() {
 
             {snapshot.state === 'live' && (
               <div className="relative">
-                <div className="telae-video-canvas overflow-hidden rounded-[10px] border border-[#313029]">
+                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-[#313029]">
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted={muted}
-                    className={`h-[calc(100vh-240px)] min-h-[320px] w-full ${fitCover ? 'object-cover' : 'object-contain'}`}
+                    className={`telae-viewer-video h-[calc(100vh-240px)] min-h-[320px] w-full ${fitCover ? 'object-cover' : 'object-contain'}`}
                     aria-label="Transmissão do seu amigo"
                   />
                 </div>
@@ -851,10 +852,10 @@ function SharerSession({
         </p>
       )}
 
-      {(snapshot.state === 'waiting-for-peer' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
+      {snapshot.inviteCode && snapshot.state !== 'ended' && (
         <div className="mt-4 rounded-[10px] border border-[#D8A85C]/50 bg-[#1C1C19] p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
-            Código de convite {snapshot.inviteExpiresAt && '(expira em ~10 min)'}
+            Código de convite · até 12 espectadores
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <p className="tnum text-3xl font-semibold tracking-[0.14em]" aria-label={`Código de convite ${snapshot.inviteCode ?? ''}`}>
@@ -871,9 +872,7 @@ function SharerSession({
             </button>
           </div>
           <p className="mt-2 text-[13px] text-[#9D9A90]">
-            {snapshot.viewerPresence === 'gone'
-              ? 'Seu amigo saiu. Encerre esta transmissão para gerar um novo código.'
-              : 'Envie este código para a pessoa que vai assistir.'}
+            Envie o mesmo código para todos. {snapshot.viewerCount} {snapshot.viewerCount === 1 ? 'pessoa conectada' : 'pessoas conectadas'}.
           </p>
           {snapshot.error && (
             <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
@@ -896,7 +895,7 @@ function SharerSession({
             />
           </div>
           <p className="mt-2 truncate text-[13px] text-[#9D9A90]">
-            Compartilhando: {sourceName ?? '—'} · Assistindo: {snapshot.viewerName ?? '—'}
+            Compartilhando: {sourceName ?? '—'} · {snapshot.viewerCount} {snapshot.viewerCount === 1 ? 'espectador' : 'espectadores'}
           </p>
         </>
       )}

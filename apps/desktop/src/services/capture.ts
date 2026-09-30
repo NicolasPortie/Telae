@@ -1,4 +1,7 @@
 import type { QualityProfile } from './types'
+import { createProcessAudioCapture, type ProcessAudioCapture } from './process-audio'
+
+const processCaptures = new WeakMap<MediaStream, ProcessAudioCapture>()
 
 const qualityConstraints: Record<QualityProfile, MediaTrackConstraints> = {
   auto: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } },
@@ -17,10 +20,11 @@ export async function captureDesktopSource(
     throw new Error('A tela ou janela escolhida não está mais disponível.')
   }
 
+  const isWindow = sourceId.startsWith('window:')
   let stream: MediaStream
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: true,
+      audio: !isWindow,
       video: qualityConstraints[quality],
     })
   } catch (error) {
@@ -47,11 +51,27 @@ export async function captureDesktopSource(
   for (const audioTrack of stream.getAudioTracks()) {
     audioTrack.contentHint = 'music'
   }
+  if (isWindow) {
+    try {
+      const processId = await window.telae.resolveWindowAudioProcess(sourceId)
+      const processCapture = await createProcessAudioCapture(processId)
+      stream.addTrack(processCapture.track)
+      processCaptures.set(stream, processCapture)
+    } catch (error) {
+      console.warn('Telae: áudio isolado desta janela indisponível', error)
+      // Janela sem áudio compatível: o vídeo continua, sem vazar som de outros apps.
+    }
+  }
   return stream
 }
 
 export function stopMediaStream(stream: MediaStream | null): void {
   if (!stream) return
+  const processCapture = processCaptures.get(stream)
+  if (processCapture) {
+    processCaptures.delete(stream)
+    void processCapture.stop().catch(() => undefined)
+  }
   for (const track of stream.getTracks()) {
     try {
       track.stop()

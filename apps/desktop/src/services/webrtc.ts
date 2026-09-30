@@ -49,6 +49,7 @@ export class WebRtcPeer {
   private lastVideoBytes = 0
   private lastStatsAt = 0
   private closed = false
+  private readonly localSenders = new Map<'video' | 'audio', RTCRtpSender>()
 
   constructor(options: PeerOptions) {
     this.sendSignal = options.sendSignal
@@ -59,6 +60,7 @@ export class WebRtcPeer {
     if (options.localStream) {
       for (const track of options.localStream.getTracks()) {
         const sender = this.peer.addTrack(track, options.localStream)
+        this.localSenders.set(track.kind as 'video' | 'audio', sender)
         const transceiver = this.peer.getTransceivers().find((item) => item.sender === sender)
         if (transceiver && track.kind === 'video') preferCodec(transceiver, 'video', 'video/H264')
         if (transceiver && track.kind === 'audio') preferCodec(transceiver, 'audio', 'audio/opus')
@@ -98,6 +100,17 @@ export class WebRtcPeer {
     await this.peer.setLocalDescription(offer)
     await this.applySenderQuality()
     await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
+  }
+
+  async replaceLocalStream(stream: MediaStream) {
+    if (this.closed) return
+    for (const kind of ['video', 'audio'] as const) {
+      const next = stream.getTracks().find((track) => track.kind === kind) ?? null
+      const sender = this.localSenders.get(kind)
+      if (sender) await sender.replaceTrack(next)
+      else if (next) this.localSenders.set(kind, this.peer.addTrack(next, stream))
+    }
+    await this.createOffer()
   }
 
   async restartIce() {
