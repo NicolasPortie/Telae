@@ -23,7 +23,9 @@ const updates = new DesktopUpdates((status) => {
 
 const profilePath = () => path.join(app.getPath('userData'), 'profile.json')
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
-const DEFAULT_SIGNALING_URL = 'http://localhost:5015'
+const LOCAL_SIGNALING_URL = 'http://localhost:5015'
+const PUBLIC_SIGNALING_URL = 'https://telae.nicolasportie.com'
+const DEFAULT_SIGNALING_URL = app.isPackaged ? PUBLIC_SIGNALING_URL : LOCAL_SIGNALING_URL
 
 function normalizeSignalingUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
@@ -49,7 +51,12 @@ function normalizeSignalingUrl(value: string): string {
 function readSignalingUrl(): string {
   try {
     const settings = JSON.parse(readFileSync(settingsPath(), 'utf8')) as { signalingUrl?: string }
-    if (settings.signalingUrl) return normalizeSignalingUrl(settings.signalingUrl)
+    if (settings.signalingUrl) {
+      const saved = normalizeSignalingUrl(settings.signalingUrl)
+      // Instaladores antigos apontavam para o localhost mesmo fora do servidor.
+      if (app.isPackaged && saved === LOCAL_SIGNALING_URL) return PUBLIC_SIGNALING_URL
+      return saved
+    }
   } catch {
     // Arquivo ausente/corrompido: usa configuração do ambiente ou padrão local.
   }
