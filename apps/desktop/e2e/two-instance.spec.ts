@@ -78,7 +78,6 @@ test.describe('duas instâncias Telae', () => {
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       const firstSource = sharer.getByRole('radio').first()
       await firstSource.click()
-      await sharer.getByLabel(/Incluir áudio do sistema/).check()
       await sharer.getByRole('button', { name: /Compartilhar e gerar convite/ }).click()
       const invite = sharer.getByLabel(/Código de convite/)
       await expect(invite).toBeVisible({ timeout: 60_000 })
@@ -107,8 +106,20 @@ test.describe('duas instâncias Telae', () => {
         return track ? { readyState: track.readyState, muted: track.muted } : null
       }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
 
+      const volume = viewer.getByRole('slider', { name: 'Volume da transmissão' })
+      await volume.focus()
+      await volume.press('Home')
+      await volume.press('ArrowRight')
+      await expect(volume).toHaveValue('1')
+      await expect.poll(() => remoteVideo.evaluate((video) => (video as HTMLVideoElement).volume)).toBe(0.01)
+      await viewer.getByRole('button', { name: 'Silenciar' }).click()
+      await expect.poll(() => remoteVideo.evaluate((video) => (video as HTMLVideoElement).muted)).toBe(true)
+      await expect(viewer.getByRole('button', { name: 'Tela cheia' })).toBeVisible()
+
       await viewer.keyboard.press('Escape')
       await expect(viewer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+      await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
+      await expect(sharer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
     } finally {
       await sharerApp.close()
       await viewerApp.close()
