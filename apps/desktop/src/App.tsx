@@ -67,7 +67,7 @@ export default function App() {
   const [overlayVisible, setOverlayVisible] = useState(true)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
-  const [fitCover, setFitCover] = useState(true)
+  const [fitCover, setFitCover] = useState(false)
   const [switchingSource, setSwitchingSource] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
@@ -81,6 +81,7 @@ export default function App() {
   const sessionActive = snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
   const sourcePickerForActiveShare = screen === 'picker' && switchingSource && snapshot.role === 'sharer'
   const visibleScreen: Screen = sessionActive && screen !== 'session' && !sourcePickerForActiveShare ? 'session' : screen
+  const viewerLive = visibleScreen === 'session' && snapshot.role === 'viewer' && snapshot.state === 'live'
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
 
@@ -361,8 +362,8 @@ export default function App() {
   const windowsList = sources.filter((item) => item.kind === 'window')
 
   return (
-    <div className="min-h-full bg-[#141412] text-[#F1EFE8]">
-      <header className="border-b border-[#313029] bg-[#1A1A17]">
+    <div className={`${viewerLive ? 'telae-viewer-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
+      <header className="shrink-0 border-b border-[#313029] bg-[#1A1A17]">
         <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-6">
           <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
             <MonitorUp size={17} strokeWidth={1.8} />
@@ -412,7 +413,7 @@ export default function App() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10">
+      <main className={viewerLive ? 'telae-viewer-main' : 'mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10'}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -724,14 +725,14 @@ export default function App() {
             )}
 
             {snapshot.state === 'live' && (
-              <div className="relative">
+              <div className="telae-viewer-playback relative">
                 <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-[#313029]">
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted={muted}
-                    className={`telae-viewer-video h-[calc(100vh-240px)] min-h-[320px] w-full ${fitCover ? 'object-cover' : 'object-contain'}`}
+                    className={`telae-viewer-video ${fitCover ? 'object-cover' : 'object-contain'}`}
                     aria-label="Transmissão do seu amigo"
                   />
                 </div>
