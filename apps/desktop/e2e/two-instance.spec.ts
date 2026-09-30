@@ -158,6 +158,12 @@ test.describe('duas instâncias Telae', () => {
 
       await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
       await expect(sharer.getByText('A transmissão e o código continuam ativos durante a troca.')).toBeVisible()
+      await expect(sharer.getByRole('button', { name: 'Abrir perfil' })).toBeDisabled()
+      await sharer.getByRole('button', { name: /Voltar/ }).click()
+      await expect(sharer.getByRole('button', { name: 'Parar transmissão' })).toBeVisible()
+      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
+
+      await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
       await sharer.getByRole('button', { name: 'Trocar fonte agora' }).click()
       await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
       await expect(remoteVideo).toBeVisible()
