@@ -78,6 +78,9 @@ export default function App() {
   const samplesRef = useRef<string[]>([])
 
   const desktopApiAvailable = typeof window !== 'undefined' && typeof window.telae !== 'undefined'
+  const sessionActive = snapshot.session !== null && snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
+  const sourcePickerForActiveShare = screen === 'picker' && switchingSource && snapshot.role === 'sharer'
+  const visibleScreen: Screen = sessionActive && screen !== 'session' && !sourcePickerForActiveShare ? 'session' : screen
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
 
@@ -90,9 +93,8 @@ export default function App() {
 
   useEffect(() => {
     if (!desktopApiAvailable) return
-    const active = snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
-    void window.telae.setSessionActive(active)
-  }, [desktopApiAvailable, snapshot.role, snapshot.state])
+    void window.telae.setSessionActive(sessionActive)
+  }, [desktopApiAvailable, sessionActive])
 
   // Ticket 09: término inesperado do renderer interrompe captura e sinalização.
   // O servidor encerra o Share Session ao detectar a queda do socket.
@@ -203,14 +205,26 @@ export default function App() {
   }, [desktopApiAvailable])
 
   const openPicker = useCallback(() => {
-    controller.resetToIdle()
+    if (sessionActive) {
+      if (snapshot.role === 'sharer') {
+        setSwitchingSource(true)
+        setFormError(null)
+        setSources([])
+        setSourcesError(null)
+        setScreen('picker')
+        void loadSources()
+      } else {
+        setScreen('session')
+      }
+      return
+    }
     setSwitchingSource(false)
     setFormError(null)
     setSources([])
     setSourcesError(null)
     setScreen('picker')
     void loadSources()
-  }, [controller, loadSources])
+  }, [loadSources, sessionActive, snapshot.role])
 
   const openSourceSwitch = useCallback(() => {
     setSwitchingSource(true)
@@ -290,17 +304,17 @@ export default function App() {
   const activeStream = snapshot.role === 'viewer' ? controller.getRemoteStream() : controller.getLocalStream()
   useEffect(() => {
     const video = videoRef.current
-    if (!video || screen !== 'session') return
+    if (!video || visibleScreen !== 'session') return
     video.srcObject = activeStream
     if (activeStream) void video.play().catch(() => undefined)
     return () => {
       video.srcObject = null
     }
-  }, [screen, activeStream, snapshot.hasLocalStream, snapshot.hasRemoteStream])
+  }, [visibleScreen, activeStream, snapshot.hasLocalStream, snapshot.hasRemoteStream])
 
   // Elapsed + amostragem de diagnóstico (1s, Ticket 10).
   useEffect(() => {
-    if (screen !== 'session' || snapshot.liveSinceMs === null) {
+    if (visibleScreen !== 'session' || snapshot.liveSinceMs === null) {
       return
     }
     const timer = window.setInterval(() => {
@@ -311,7 +325,7 @@ export default function App() {
       }
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [screen, snapshot.liveSinceMs, snapshot.state, snapshot.diagnostics])
+  }, [visibleScreen, snapshot.liveSinceMs, snapshot.state, snapshot.diagnostics])
 
   // Overlay do Viewer: visível ao entrar no live; esconde 3s após o último
   // movimento de ponteiro (pokeOverlay é chamado pelos handlers, não por effect).
@@ -325,7 +339,7 @@ export default function App() {
     if (!videoRef.current) return
     videoRef.current.muted = snapshot.role === 'sharer' ? true : muted
     videoRef.current.volume = volume
-  }, [muted, volume, snapshot.role, screen])
+  }, [muted, volume, snapshot.role, visibleScreen])
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen()
@@ -357,8 +371,8 @@ export default function App() {
           <button
             type="button"
             onClick={() => setScreen('profile')}
-            disabled={screen === 'session'}
-            title={screen === 'session' ? 'Encerre a transmissão para alterar seu nome.' : undefined}
+            disabled={sessionActive}
+            title={sessionActive ? 'Encerre a transmissão para alterar seu nome.' : undefined}
             className="telae-press ml-4 flex min-h-[40px] items-center gap-2 rounded-md px-3 text-[13px] text-[#B8B4AA] hover:bg-[#282721] hover:text-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Abrir perfil"
           >
@@ -404,9 +418,9 @@ export default function App() {
           {formError ?? snapshot.error ?? sourcesError ?? ''}
         </div>
 
-        {screen === 'boot' && <p className="mt-10 text-sm text-[#9D9A90]">Abrindo Telae…</p>}
+        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-[#9D9A90]">Abrindo Telae…</p>}
 
-        {screen === 'setup' && (
+        {visibleScreen === 'setup' && (
           <section aria-labelledby="setup-title" className="mx-auto mt-8 max-w-[480px] rounded-2xl border border-[#313029] bg-[#1C1C19] p-8 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
             <div aria-hidden="true" className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
               <UserRound size={23} strokeWidth={1.7} />
@@ -455,7 +469,7 @@ export default function App() {
           </section>
         )}
 
-        {screen === 'home' && (
+        {visibleScreen === 'home' && (
           <section aria-labelledby="home-title" className="telae-panel-enter">
             <p className="text-sm text-[#B8B4AA]">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
             <h1 id="home-title" className="mt-2 max-w-[20ch] text-[clamp(30px,4vw,42px)] font-semibold leading-[1.12] tracking-tight">
@@ -523,7 +537,7 @@ export default function App() {
           </section>
         )}
 
-        {screen === 'picker' && (
+        {visibleScreen === 'picker' && (
           <section aria-labelledby="picker-title" className="telae-panel-enter">
             <button
               type="button"
@@ -611,7 +625,7 @@ export default function App() {
           </section>
         )}
 
-        {screen === 'profile' && (
+        {visibleScreen === 'profile' && (
           <section aria-labelledby="profile-title" className="max-w-[520px]">
             <button
               type="button"
@@ -666,7 +680,7 @@ export default function App() {
           </section>
         )}
 
-        {screen === 'session' && snapshot.role === 'sharer' && (
+        {visibleScreen === 'session' && snapshot.role === 'sharer' && (
           <SharerSession
             snapshot={snapshot}
             elapsed={elapsed}
@@ -681,7 +695,7 @@ export default function App() {
           />
         )}
 
-        {screen === 'session' && snapshot.role === 'viewer' && (
+        {visibleScreen === 'session' && snapshot.role === 'viewer' && (
           <div
             ref={stageRef}
             onMouseMove={pokeOverlay}

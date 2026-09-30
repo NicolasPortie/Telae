@@ -121,6 +121,25 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sharer_can_query_its_own_active_share()
+    {
+        var sharer = await ConnectAsync("device-sharer", "Sharer");
+
+        Assert.Null(await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"));
+
+        var started = await sharer.InvokeAsync<ShareAccessResult>(
+            "StartShare",
+            new StartShareRequest("device-sharer", "auto"));
+
+        var active = await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
+        Assert.NotNull(active);
+        Assert.Equal(started.Session.SessionId, active.SessionId);
+
+        await sharer.InvokeAsync("StopShare");
+        Assert.Null(await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"));
+    }
+
+    [Fact]
     public async Task Viewer_leave_notifies_sharer_and_invite_remains_reusable()
     {
         var sharer = await ConnectAsync("device-sharer", "Sharer");
