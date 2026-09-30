@@ -64,14 +64,14 @@ export class StreamController {
     this.emit()
   }
 
-  async start(sourceId: string, quality: QualityProfile, includeSystemAudio: boolean): Promise<MediaStream> {
-    if (!sourceId.trim()) throw new Error('Escolha uma Capture Source antes de iniciar.')
+  async start(sourceId: string, quality: QualityProfile): Promise<MediaStream> {
+    if (!sourceId.trim()) throw new Error('Escolha uma tela ou janela antes de iniciar.')
     const token = ++this.startToken
     this.teardownStream()
     this.setState('preparing')
 
     try {
-      const stream = await this.deps.capture(sourceId, quality, includeSystemAudio)
+      const stream = await this.deps.capture(sourceId, quality)
       if (token !== this.startToken) {
         this.deps.release(stream)
         throw new Error('Captura substituída por uma nova seleção.')

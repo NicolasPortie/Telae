@@ -57,7 +57,6 @@ export default function App() {
   const [sourcesError, setSourcesError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
   const [quality, setQuality] = useState<QualityProfile>('auto')
-  const [includeAudio, setIncludeAudio] = useState(true)
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [inviteCode, setInviteCode] = useState('')
@@ -66,6 +65,7 @@ export default function App() {
   const [elapsed, setElapsed] = useState(0)
   const [overlayVisible, setOverlayVisible] = useState(true)
   const [muted, setMuted] = useState(false)
+  const [volume, setVolume] = useState(1)
   const [fitCover, setFitCover] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
@@ -217,7 +217,7 @@ export default function App() {
     setBusy(true)
     setFormError(null)
     try {
-      await controller.startSharing(selectedId, quality, includeAudio)
+      await controller.startSharing(selectedId, quality)
       samplesRef.current = []
       setScreen('session')
     } catch (error) {
@@ -225,7 +225,7 @@ export default function App() {
     } finally {
       setBusy(false)
     }
-  }, [controller, selectedId, quality, includeAudio])
+  }, [controller, selectedId, quality])
 
   const handleJoin = useCallback(async () => {
     setBusy(true)
@@ -318,8 +318,10 @@ export default function App() {
   }, [screen, handleLeave])
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = snapshot.role === 'sharer' ? true : muted
-  }, [muted, snapshot.role, screen])
+    if (!videoRef.current) return
+    videoRef.current.muted = snapshot.role === 'sharer' ? true : muted
+    videoRef.current.volume = volume
+  }, [muted, volume, snapshot.role, screen])
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement) void document.exitFullscreen()
@@ -582,18 +584,6 @@ export default function App() {
                       </div>
                     </fieldset>
 
-                    <label className="flex min-h-[40px] cursor-pointer items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={includeAudio}
-                        onChange={(event) => setIncludeAudio(event.target.checked)}
-                        className="h-4 w-4 accent-[#D8A85C]"
-                      />
-                      <span>
-                        Incluir áudio do sistema
-                        <span className="block text-xs text-[#9D9A90]">Quando suportado pela fonte</span>
-                      </span>
-                    </label>
                   </div>
 
                   {formError && (
@@ -737,12 +727,32 @@ export default function App() {
                 >
                   <button
                     type="button"
-                    onClick={() => setMuted((previous) => !previous)}
+                    onClick={() => {
+                      if (muted || volume === 0) {
+                        if (volume === 0) setVolume(0.5)
+                        setMuted(false)
+                      } else {
+                        setMuted(true)
+                      }
+                    }}
                     className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-[#F1EFE8]"
-                    aria-label={muted ? 'Ativar som' : 'Silenciar'}
+                    aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
                   >
-                    {muted ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
+                    {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
                   </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={Math.round(volume * 100)}
+                    onChange={(event) => {
+                      setVolume(Number(event.target.value) / 100)
+                      if (muted) setMuted(false)
+                    }}
+                    aria-label="Volume da transmissão"
+                    aria-valuetext={`${Math.round(volume * 100)}%`}
+                    className="w-24 accent-[#D8A85C] sm:w-32"
+                  />
                   <button
                     type="button"
                     onClick={() => setFitCover((previous) => !previous)}
@@ -834,6 +844,12 @@ function SharerSession({
             : 'Aguardando seu amigo…'}
         </p>
       </div>
+
+      {!snapshot.includeAudio && snapshot.state !== 'ended' && (
+        <p role="status" className="mt-4 rounded-lg border border-[#5B5140] bg-[#282721] px-4 py-3 text-sm text-[#E8C690]">
+          O Windows não disponibilizou áudio desta fonte. A tela está sendo compartilhada sem som. Você pode trocar a fonte.
+        </p>
+      )}
 
       {(snapshot.state === 'waiting-for-peer' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
         <div className="mt-4 rounded-[10px] border border-[#D8A85C]/50 bg-[#1C1C19] p-5">
