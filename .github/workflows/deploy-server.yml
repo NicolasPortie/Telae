@@ -33,3 +33,54 @@ jobs:
       - name: Verify published server
         run: test -f "$RUNNER_TEMP/telae-server/Telae.Server.dll"
 
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Verify tag matches desktop version
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json).version
+          if ('v' + $version -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME não corresponde ao desktop v$version"
+          }
+
+      - name: Validate desktop
+        working-directory: apps/desktop
+        run: |
+          npm run lint
+          npm test
+
+      - name: Build Windows installer and update manifest
+        working-directory: apps/desktop
+        run: npm run dist
+
+      - name: Save Windows release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: telae-windows-${{ github.ref_name }}
+          path: |
+            apps/desktop/dist/Telae-Setup-*.exe
+            apps/desktop/dist/Telae-Setup-*.exe.blockmap
+            apps/desktop/dist/latest.yml
+          if-no-files-found: error
+
