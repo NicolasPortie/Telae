@@ -121,25 +121,25 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Viewer_leave_notifies_sharer_and_consumed_invite_is_rejected()
+    public async Task Viewer_leave_notifies_sharer_and_invite_remains_reusable()
     {
         var sharer = await ConnectAsync("device-sharer", "Sharer");
         var viewer = await ConnectAsync("device-viewer", "Viewer");
         var intruder = await ConnectAsync("device-intruder", "Intruder");
 
-        var viewerLeft = new TaskCompletionSource<string>();
-        sharer.On<string>("ViewerLeft", sessionId => viewerLeft.TrySetResult(sessionId));
+        var viewerLeft = new TaskCompletionSource<ViewerLeftEvent>();
+        sharer.On<ViewerLeftEvent>("ViewerLeft", eventData => viewerLeft.TrySetResult(eventData));
 
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
         var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
         var join = await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
 
         await viewer.InvokeAsync("LeaveShare");
-        Assert.Equal(join.Session.SessionId, await WaitForAsync(viewerLeft, "ViewerLeft"));
-
-        var error = await Assert.ThrowsAsync<HubException>(() =>
-            intruder.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code));
-        Assert.Contains("já foi usado", error.Message);
+        var left = await WaitForAsync(viewerLeft, "ViewerLeft");
+        Assert.Equal(join.Session.SessionId, left.SessionId);
+        Assert.Equal("device-viewer", left.ViewerDeviceId);
+        var secondJoin = await intruder.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        Assert.Contains("device-intruder", secondJoin.Session.ViewerDeviceIds);
     }
 
     [Fact]

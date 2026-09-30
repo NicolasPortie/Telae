@@ -18,7 +18,7 @@ public sealed class TelaeRegistryTests
     }
 
     [Fact]
-    public void Share_session_accepts_only_one_viewer()
+    public void Share_session_accepts_multiple_viewers()
     {
         var registry = new TelaeRegistry();
         registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
@@ -27,10 +27,13 @@ public sealed class TelaeRegistryTests
         registry.StartShare("device-nicolas", "1080p60");
 
         registry.JoinShare("device-biel", "device-nicolas");
+        var session = registry.JoinShare("device-caio", "device-nicolas");
+        Assert.Contains("device-biel", session.ViewerDeviceIds);
+        Assert.Contains("device-caio", session.ViewerDeviceIds);
+        registry.ValidateSessionParticipant(session.SessionId, "device-caio", "device-nicolas");
         var error = Assert.Throws<TelaeDomainException>(() =>
-            registry.JoinShare("device-caio", "device-nicolas"));
-
-        Assert.Equal("share_already_has_viewer", error.Code);
+            registry.ValidateSessionParticipant(session.SessionId, "device-biel", "device-caio"));
+        Assert.Equal("not_session_participant", error.Code);
     }
 
     [Fact]
@@ -137,7 +140,7 @@ public sealed class TelaeRegistryTests
     }
 
     [Fact]
-    public void Consumed_invite_cannot_be_reused_by_another_viewer()
+    public void Invite_can_be_reused_by_multiple_viewers()
     {
         var registry = new TelaeRegistry();
         registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas");
@@ -147,10 +150,10 @@ public sealed class TelaeRegistryTests
 
         var invite = registry.CreateInvite("device-nicolas");
         registry.JoinWithInvite("device-biel", invite.Code);
-
-        var error = Assert.Throws<TelaeDomainException>(() =>
-            registry.JoinWithInvite("device-caio", invite.Code));
-        Assert.Equal("invite_consumed", error.Code);
+        var session = registry.JoinWithInvite("device-caio", invite.Code);
+        Assert.Equal(2, session.ViewerDeviceIds.Count);
+        registry.LeaveShare("device-biel");
+        Assert.Equal(["device-caio"], registry.GetActiveSessionForSharer("device-nicolas")!.ViewerDeviceIds);
     }
 
     [Fact]

@@ -31,22 +31,25 @@ public sealed class DisconnectCoordinator(
             if (result.ChangedDevice is not null)
                 await hubContext.Clients.All.SendAsync("PresenceChanged", result.ChangedDevice, applicationLifetime.ApplicationStopping);
 
-            if (result.EndedSession?.ViewerDeviceId is not null)
+            if (result.EndedSession is not null)
             {
-                try
+                foreach (var viewerDeviceId in result.EndedSession.ViewerDeviceIds)
                 {
-                    await hubContext.Clients.Client(registry.GetConnectionId(result.EndedSession.ViewerDeviceId))
-                        .SendAsync("SessionEnded", result.EndedSession.SessionId, applicationLifetime.ApplicationStopping);
+                    try
+                    {
+                        await hubContext.Clients.Client(registry.GetConnectionId(viewerDeviceId))
+                            .SendAsync("SessionEnded", result.EndedSession.SessionId, applicationLifetime.ApplicationStopping);
+                    }
+                    catch (TelaeDomainException) { }
                 }
-                catch (TelaeDomainException) { }
             }
 
-            if (result.ViewerLeftSession is not null)
+            if (result.ViewerLeftSession is not null && result.ViewerLeftDeviceId is not null)
             {
                 try
                 {
                     await hubContext.Clients.Client(registry.GetConnectionId(result.ViewerLeftSession.SharerDeviceId))
-                        .SendAsync("ViewerLeft", result.ViewerLeftSession.SessionId, applicationLifetime.ApplicationStopping);
+                        .SendAsync("ViewerLeft", new ViewerLeftEvent(result.ViewerLeftSession.SessionId, result.ViewerLeftDeviceId), applicationLifetime.ApplicationStopping);
                 }
                 catch (TelaeDomainException) { }
             }
