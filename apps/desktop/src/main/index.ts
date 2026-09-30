@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { app, BrowserWindow, desktopCapturer, ipcMain, session } from 'electron'
@@ -12,6 +12,7 @@ import type {
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
 import { readLocalProfile, writeJsonAtomically } from './profile-store.ts'
+import { resolveAudioBridgePath } from './audio-bridge-path.ts'
 
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
@@ -93,17 +94,7 @@ function normalizeFriendCode(value: string): string {
 }
 
 function findAudioBridge(): string {
-  const executable = 'Telae.AudioBridge.exe'
-  const candidates = app.isPackaged
-    ? [path.join(process.resourcesPath, 'audio-bridge', executable)]
-    : [
-        path.resolve(app.getAppPath(), '..', 'audio-bridge', 'bin', 'Release', 'net10.0-windows10.0.19041.0', executable),
-        path.resolve(app.getAppPath(), '..', 'audio-bridge', 'bin', 'Debug', 'net10.0-windows10.0.19041.0', executable),
-      ]
-
-  const found = candidates.find(existsSync)
-  if (!found) throw new Error('Audio bridge não encontrado. Compile apps/audio-bridge antes de iniciar o desktop.')
-  return found
+  return resolveAudioBridgePath({ packaged: app.isPackaged, resourcesPath: process.resourcesPath, appPath: app.getAppPath() })
 }
 
 function sendAudioState(state: AudioBridgeState) {

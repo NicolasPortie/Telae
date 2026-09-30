@@ -40,7 +40,7 @@ ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.1'
 
 O estado persistente do servidor fica fora da pasta de release e não é versionado.
 
-A versão 0.1.12 exige credencial por dispositivo e convite para novos espectadores. Consulte [as notas de implantação e migração](docs/RELEASE_0.1.12.md) antes de atualizar o backend: os clientes antigos precisam atualizar para registrar no servidor novo. O aplicativo aceita até 12 espectadores, com qualidade e recuperação independentes por conexão.
+A versão 0.1.13 exige credencial por dispositivo e convite para novos espectadores. Consulte [as notas de implantação e migração](docs/RELEASE_0.1.13.md) antes de atualizar o backend: os clientes antigos precisam atualizar para registrar no servidor novo. O aplicativo aceita até 12 espectadores, com qualidade e recuperação independentes por conexão.
 
 ### Atualização automática do desktop
 
