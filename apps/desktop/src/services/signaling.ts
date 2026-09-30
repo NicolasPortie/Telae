@@ -101,6 +101,10 @@ export class SignalingClient {
     })
   }
 
+  getActiveShare() {
+    return this.connection.invoke<ShareAccessResult['session'] | null>('GetActiveShare')
+  }
+
   stopShare() {
     return this.connection.invoke('StopShare')
   }
