@@ -205,21 +205,22 @@ export class ShareSessionController {
     }
   }
 
-  async startSharing(sourceId: string, quality: QualityProfile, includeAudio: boolean): Promise<void> {
+  async startSharing(sourceId: string, quality: QualityProfile): Promise<void> {
     const signaling = this.requireSignaling()
     const generation = ++this.generation
     this.teardownPeer()
     this.capture.reset()
     this.role = 'sharer'
     this.quality = quality
-    this.includeAudio = includeAudio
+    this.includeAudio = true
     this.qualityController.reset()
     this.viewerPresence = 'none'
     this.viewerName = null
     this.setState('preparing')
 
     try {
-      this.localStream = await this.capture.start(sourceId, quality, includeAudio)
+      this.localStream = await this.capture.start(sourceId, quality)
+      this.includeAudio = this.localStream.getAudioTracks().length > 0
       if (generation !== this.generation) return
       const access = await signaling.startShare(quality)
       if (generation !== this.generation) return

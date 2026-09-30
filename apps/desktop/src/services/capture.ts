@@ -10,21 +10,32 @@ const qualityConstraints: Record<QualityProfile, MediaTrackConstraints> = {
 export async function captureDesktopSource(
   sourceId: string,
   quality: QualityProfile,
-  includeSystemAudio = false,
 ): Promise<MediaStream> {
-  let stream: MediaStream
   try {
     await window.telae.selectCaptureSource(sourceId)
+  } catch {
+    throw new Error('A tela ou janela escolhida não está mais disponível.')
+  }
+
+  let stream: MediaStream
+  try {
     stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: includeSystemAudio,
+      audio: true,
       video: qualityConstraints[quality],
     })
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    const prefix = includeSystemAudio
-      ? 'Não foi possível iniciar a captura com áudio do sistema.'
-      : 'Não foi possível iniciar a captura.'
-    throw new Error(reason ? `${prefix} ${reason}` : prefix)
+    if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
+      throw new Error('A captura foi cancelada. Escolha novamente a tela ou janela.')
+    }
+    // Algumas janelas não disponibilizam loopback de áudio. Mantém o vídeo ativo.
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        audio: false,
+        video: qualityConstraints[quality],
+      })
+    } catch {
+      throw new Error('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.')
+    }
   }
 
   const track = stream.getVideoTracks()[0]
