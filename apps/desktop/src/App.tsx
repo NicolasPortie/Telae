@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  ArrowRight,
   Copy,
   Check,
   Download,
   LogIn,
   Maximize,
   MonitorUp,
-  Settings as SettingsIcon,
   Signal,
+  UserRound,
   Square,
   Volume2,
   VolumeX,
@@ -17,7 +18,7 @@ import { ShareSessionController } from './services/share-session'
 import type { QualityProfile } from './services/types'
 import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
-type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'settings'
+type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'profile'
 
 const QUALITY_OPTIONS: { value: QualityProfile; label: string; hint: string }[] = [
   { value: 'auto', label: 'Auto', hint: 'Adapta à rede' },
@@ -50,8 +51,6 @@ export default function App() {
   const [snapshot, setSnapshot] = useState(() => controller.getSnapshot())
   const [screen, setScreen] = useState<Screen>('boot')
   const [profile, setProfile] = useState<LocalProfile | null>(null)
-  const [signalingUrl, setSignalingUrl] = useState('')
-  const [signalingInput, setSignalingInput] = useState('')
 
   const [sources, setSources] = useState<CaptureSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(false)
@@ -113,13 +112,8 @@ export default function App() {
       }
       try {
         const local = await window.telae.getLocalProfile()
-        const environment = await window.telae.getEnvironment().catch(() => null)
         if (cancelled) return
         setProfile(local)
-        if (environment) {
-          setSignalingUrl(environment.signalingUrl)
-          setSignalingInput(environment.signalingUrl)
-        }
         setNameInput(local.displayName)
         setScreen(local.displayName ? 'home' : 'setup')
         if (local.displayName) {
@@ -142,13 +136,14 @@ export default function App() {
     async (name: string) => {
       setBusy(true)
       setFormError(null)
+      setConnectError(null)
       try {
         const device = await controller.connect(name)
         setProfile((previous) => (previous ? { ...previous, displayName: device.displayName } : previous))
         setConnectError(null)
         setScreen('home')
       } catch (error) {
-        setFormError(error instanceof Error ? error.message : 'Não foi possível entrar.')
+        setConnectError(error instanceof Error ? error.message : 'Não foi possível conectar ao Telae.')
       } finally {
         setBusy(false)
       }
@@ -156,9 +151,9 @@ export default function App() {
     [controller],
   )
 
-  const saveSettings = useCallback(async () => {
+  const saveName = useCallback(async () => {
     if (!desktopApiAvailable) {
-      setFormError('Abra o Telae pelo Electron para salvar as configurações.')
+      setFormError('Abra o aplicativo Telae para continuar.')
       return
     }
 
@@ -166,25 +161,22 @@ export default function App() {
     setFormError(null)
     try {
       const local = await window.telae.setDisplayName(nameInput)
-      const environment = await window.telae.setSignalingUrl(signalingInput)
       setProfile(local)
       setNameInput(local.displayName)
-      setSignalingUrl(environment.signalingUrl)
-      setSignalingInput(environment.signalingUrl)
-      setScreen('home')
 
       try {
         await controller.connect(local.displayName)
         setConnectError(null)
       } catch (error) {
-        setConnectError(error instanceof Error ? error.message : 'Configuração salva, mas o servidor está indisponível.')
+        setConnectError(error instanceof Error ? error.message : 'Seu nome foi salvo, mas não foi possível conectar.')
       }
+      setScreen('home')
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar as configurações.')
+      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar seu nome.')
     } finally {
       setBusy(false)
     }
-  }, [controller, desktopApiAvailable, nameInput, signalingInput])
+  }, [controller, desktopApiAvailable, nameInput])
 
   const loadSources = useCallback(async () => {
     if (!desktopApiAvailable) {
@@ -202,7 +194,7 @@ export default function App() {
       })
       if (list.length === 0) setSourcesError('Nenhuma tela ou janela encontrada para compartilhar.')
     } catch (error) {
-      setSourcesError(error instanceof Error ? error.message : 'Não foi possível listar as Capture Sources.')
+      setSourcesError(error instanceof Error ? error.message : 'Não foi possível listar suas telas e janelas.')
     } finally {
       setSourcesLoading(false)
     }
@@ -219,7 +211,7 @@ export default function App() {
 
   const handleStartSharing = useCallback(async () => {
     if (!selectedId) {
-      setFormError('Escolha uma Capture Source antes de iniciar.')
+      setFormError('Escolha uma tela ou janela antes de iniciar.')
       return
     }
     setBusy(true)
@@ -337,7 +329,7 @@ export default function App() {
   const stateLabel: Record<string, string> = {
     idle: 'Pronto',
     preparing: 'Preparando captura…',
-    'waiting-for-peer': 'Aguardando Viewer…',
+    'waiting-for-peer': 'Aguardando seu amigo…',
     joining: 'Localizando transmissão…',
     negotiating: 'Negociando conexão…',
     live: snapshot.role === 'viewer' ? 'Assistindo' : 'Ao vivo',
@@ -348,46 +340,44 @@ export default function App() {
   const selectedSource = sources.find((item) => item.id === selectedId) ?? null
   const screens = sources.filter((item) => item.kind === 'screen')
   const windowsList = sources.filter((item) => item.kind === 'window')
-  const transport = transportLabel(snapshot.transportPath)
 
   return (
     <div className="min-h-full bg-[#141412] text-[#F1EFE8]">
-      <header className="border-b border-[#313029]">
-        <div className="mx-auto flex h-14 max-w-[1120px] items-center gap-3 px-5">
-          <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-[#D8A85C]" />
-          <p className="text-[15px] font-semibold tracking-tight">Telae</p>
+      <header className="border-b border-[#313029] bg-[#1A1A17]">
+        <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-6">
+          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
+            <MonitorUp size={17} strokeWidth={1.8} />
+          </span>
+          <p className="text-[16px] font-semibold tracking-tight">Telae</p>
           <button
             type="button"
-            onClick={() => setScreen('settings')}
+            onClick={() => setScreen('profile')}
             disabled={screen === 'session'}
-            title={screen === 'session' ? 'Encerre a transmissão para alterar as configurações.' : undefined}
-            className="telae-press ml-2 flex min-h-[40px] items-center gap-1 rounded-md px-2 text-xs text-[#9D9A90] hover:text-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Abrir configurações"
+            title={screen === 'session' ? 'Encerre a transmissão para alterar seu nome.' : undefined}
+            className="telae-press ml-4 flex min-h-[40px] items-center gap-2 rounded-md px-3 text-[13px] text-[#B8B4AA] hover:bg-[#282721] hover:text-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Abrir perfil"
           >
-            <SettingsIcon size={15} aria-hidden="true" />
+            <UserRound size={16} aria-hidden="true" />
             {profile?.displayName && <span className="max-w-[140px] truncate">{profile.displayName}</span>}
           </button>
-          <p className="tnum ml-auto text-xs text-[#9D9A90]">
+          <p className="tnum ml-auto flex items-center gap-2 text-xs text-[#B8B4AA]">
+            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${snapshot.signaling === 'online' ? 'bg-[#7FB996]' : 'bg-[#D8A85C]'}`} />
             {snapshot.state === 'live' && snapshot.liveSinceMs !== null
-              ? `Live State · ${formatElapsed(elapsed)}`
-              : (stateLabel[snapshot.state] ?? snapshot.state)}
-            {snapshot.signaling !== 'online' && snapshot.signaling !== 'offline' ? ` · sinalização ${snapshot.signaling}` : ''}
+              ? `Ao vivo · ${formatElapsed(elapsed)}`
+              : snapshot.signaling === 'connecting' || snapshot.signaling === 'reconnecting'
+                ? 'Conectando…'
+                : snapshot.signaling === 'offline' && profile?.displayName
+                  ? 'Sem conexão'
+                  : (stateLabel[snapshot.state] ?? 'Pronto')}
           </p>
         </div>
-        {updateStatus && ['checking', 'downloading', 'ready', 'error'].includes(updateStatus.phase) && (
+        {updateStatus && ['downloading', 'ready'].includes(updateStatus.phase) && (
           <div className="border-t border-[#313029] bg-[#282721]">
             <div role="status" className="mx-auto flex max-w-[1120px] items-center gap-3 px-5 py-2 text-xs text-[#F1EFE8]">
               <span>
-                {updateStatus.phase === 'checking' && 'Verificando atualizações…'}
                 {updateStatus.phase === 'downloading' && `Baixando Telae ${updateStatus.version}: ${updateStatus.percent}%`}
                 {updateStatus.phase === 'ready' && `Telae ${updateStatus.version} pronto. A instalação começa ao encerrar a transmissão.`}
-                {updateStatus.phase === 'error' && `Não foi possível verificar a atualização: ${updateStatus.message}`}
               </span>
-              {updateStatus.phase === 'error' && (
-                <button type="button" className="ml-auto underline" onClick={() => void window.telae.checkForUpdates()}>
-                  Tentar novamente
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -403,7 +393,7 @@ export default function App() {
         )}
       </header>
 
-      <main className="mx-auto w-full max-w-[1120px] px-5 pb-16 pt-8">
+      <main className="mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10">
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -412,21 +402,24 @@ export default function App() {
         {screen === 'boot' && <p className="mt-10 text-sm text-[#9D9A90]">Abrindo Telae…</p>}
 
         {screen === 'setup' && (
-          <section aria-labelledby="setup-title" className="max-w-[480px]">
-            <h1 id="setup-title" className="text-2xl font-semibold tracking-tight">
-              Como devemos chamar você?
+          <section aria-labelledby="setup-title" className="mx-auto mt-8 max-w-[480px] rounded-2xl border border-[#313029] bg-[#1C1C19] p-8 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
+            <div aria-hidden="true" className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
+              <UserRound size={23} strokeWidth={1.7} />
+            </div>
+            <h1 id="setup-title" className="text-[28px] font-semibold leading-tight tracking-tight">
+              Como podemos chamar você?
             </h1>
-            <p className="mt-1 text-sm text-[#9D9A90]">Seu nome aparece para o outro participante do Share Session.</p>
+            <p className="mt-3 text-sm leading-relaxed text-[#B8B4AA]">Seu nome aparecerá para a pessoa com quem você compartilhar a tela.</p>
             {!desktopApiAvailable && (
               <p role="alert" className="mt-4 text-sm text-[#FF5D5D]">
-                Abra o Telae pelo Electron para continuar.
+                Abra o aplicativo Telae para continuar.
               </p>
             )}
             <form
-              className="mt-6"
+              className="mt-7"
               onSubmit={(event) => {
                 event.preventDefault()
-                void saveSettings()
+                void saveName()
               }}
             >
               <label htmlFor="display-name" className="mb-1 block text-xs text-[#9D9A90]">
@@ -438,7 +431,7 @@ export default function App() {
                 onChange={(event) => setNameInput(event.target.value)}
                 maxLength={32}
                 autoComplete="off"
-                className="h-11 w-full rounded-md border border-[#313029] bg-[#1C1C19] px-3 text-[15px] placeholder:text-[#9D9A90]/60"
+                className="h-12 w-full rounded-lg border border-[#4A473E] bg-[#141412] px-4 text-[15px] placeholder:text-[#9D9A90]/60"
                 placeholder="Ex.: Nicolas"
               />
               {formError && (
@@ -449,79 +442,77 @@ export default function App() {
               <button
                 type="submit"
                 disabled={busy || !desktopApiAvailable}
-                className="telae-press mt-4 min-h-[44px] w-full rounded-md bg-[#D8A85C] px-5 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
+                className="telae-press mt-5 min-h-[48px] w-full rounded-lg bg-[#D8A85C] px-5 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
               >
-                {busy ? 'Entrando…' : 'Entrar'}
+                {busy ? 'Salvando…' : 'Continuar'}
               </button>
             </form>
           </section>
         )}
 
         {screen === 'home' && (
-          <section aria-labelledby="home-title">
-            <h1 id="home-title" className="max-w-[32ch] text-3xl font-semibold tracking-tight">
-              Mostre sua tela. Seu amigo assiste.
+          <section aria-labelledby="home-title" className="telae-panel-enter">
+            <p className="text-sm text-[#B8B4AA]">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
+            <h1 id="home-title" className="mt-2 max-w-[20ch] text-[clamp(30px,4vw,42px)] font-semibold leading-[1.12] tracking-tight">
+              Compartilhar a tela ficou simples.
             </h1>
-            <p className="mt-2 max-w-[60ch] text-[15px] leading-relaxed text-[#9D9A90]">
-              Escolha uma Capture Source e compartilhe o convite como Sharer — ou entre com um código como Viewer. Sem salas, sem canais.
+            <p className="mt-4 max-w-[58ch] text-[15px] leading-relaxed text-[#B8B4AA]">
+              Mostre sua tela a um amigo ou entre com o código que ele enviou.
             </p>
 
-            <div className="mt-8 border-t border-[#313029]">
-              <button
-                type="button"
-                onClick={openPicker}
-                className="telae-press telae-hover flex min-h-[64px] w-full items-center gap-4 border-b border-[#313029] px-2 text-left hover:bg-[#1C1C19]"
-              >
-                <MonitorUp size={20} strokeWidth={1.75} className="shrink-0 text-[#D8A85C]" aria-hidden="true" />
-                <span>
-                  <span className="block text-[15px] font-semibold">Share screen</span>
-                  <span className="block text-[13px] text-[#9D9A90]">Escolher tela ou janela e gerar um convite</span>
+            <div className="mt-9 grid gap-5 md:grid-cols-[1.25fr_1fr]">
+              <section aria-labelledby="share-title" className="flex min-h-[280px] flex-col rounded-2xl border border-[#4A4031] bg-[#24221D] p-7">
+                <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D8A85C]/15 text-[#D8A85C]">
+                  <MonitorUp size={25} strokeWidth={1.7} />
                 </span>
-                <span aria-hidden="true" className="ml-auto text-lg text-[#9D9A90]">→</span>
-              </button>
+                <h2 id="share-title" className="mt-7 text-[22px] font-semibold tracking-tight">Mostrar minha tela</h2>
+                <p className="mt-2 max-w-[35ch] text-sm leading-relaxed text-[#B8B4AA]">
+                  Escolha uma tela ou janela e envie o código de convite para quem vai assistir.
+                </p>
+                <button
+                  type="button"
+                  onClick={openPicker}
+                  disabled={snapshot.signaling !== 'online'}
+                  className="telae-press mt-auto flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Escolher tela <ArrowRight size={17} aria-hidden="true" />
+                </button>
+              </section>
 
               <form
-                className="border-b border-[#313029] px-2 py-4"
+                className="flex min-h-[280px] flex-col rounded-2xl border border-[#313029] bg-[#1C1C19] p-7"
                 onSubmit={(event) => {
                   event.preventDefault()
                   void handleJoin()
                 }}
               >
-                <div className="flex items-center gap-4">
-                  <LogIn size={20} strokeWidth={1.75} className="shrink-0 text-[#9D9A90]" aria-hidden="true" />
-                  <div>
-                    <p className="text-[15px] font-semibold">Join</p>
-                    <p className="text-[13px] text-[#9D9A90]">Entrar como Viewer com o código de convite</p>
-                  </div>
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <div className="flex-1">
-                    <label htmlFor="invite-code" className="mb-1 block text-xs text-[#9D9A90]">
-                      Código de convite
-                    </label>
-                    <input
-                      id="invite-code"
-                      value={inviteCode}
-                      onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
-                      placeholder="Ex.: K7Q2XAP9"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="h-11 w-full rounded-md border border-[#313029] bg-[#1C1C19] px-3 text-[15px] tracking-[0.12em] placeholder:text-[#9D9A90]/60"
-                    />
-                  </div>
+                <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#3C3A33] text-[#B8B4AA]">
+                  <LogIn size={24} strokeWidth={1.7} />
+                </span>
+                <h2 className="mt-7 text-[22px] font-semibold tracking-tight">Assistir a um amigo</h2>
+                <p className="mt-2 text-sm leading-relaxed text-[#B8B4AA]">Digite o código recebido para entrar na transmissão.</p>
+                <label htmlFor="invite-code" className="mb-2 mt-5 block text-xs font-medium text-[#B8B4AA]">
+                  Código de convite
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="invite-code"
+                    value={inviteCode}
+                    onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+                    placeholder="Ex.: K7Q2XAP9"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="h-12 min-w-0 flex-1 rounded-lg border border-[#4A473E] bg-[#141412] px-3 text-sm tracking-[0.12em] placeholder:text-[#77746C]"
+                  />
                   <button
                     type="submit"
-                    disabled={busy || !inviteCode.trim()}
-                    className="telae-press mt-[22px] h-11 shrink-0 rounded-md bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] disabled:opacity-50"
+                    disabled={busy || snapshot.signaling !== 'online' || !inviteCode.trim()}
+                    className="telae-press h-12 shrink-0 rounded-lg border border-[#5B5140] px-5 text-sm font-semibold text-[#F1EFE8] hover:bg-[#282721] disabled:opacity-50"
                   >
-                    {busy ? 'Entrando…' : 'Join'}
+                    {busy ? 'Entrando…' : 'Entrar'}
                   </button>
                 </div>
-                {formError && (
-                  <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
-                    {formError}
-                  </p>
-                )}
+                {formError && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{formError}</p>}
               </form>
             </div>
           </section>
@@ -565,9 +556,9 @@ export default function App() {
                   <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
                     <fieldset>
                       <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
-                        Quality Profile
+                        Qualidade da imagem
                       </legend>
-                      <div role="radiogroup" aria-label="Quality Profile" className="flex flex-wrap gap-2">
+                      <div role="radiogroup" aria-label="Qualidade da imagem" className="flex flex-wrap gap-2">
                         {QUALITY_OPTIONS.map((option) => {
                           const active = quality === option.value
                           return (
@@ -627,8 +618,8 @@ export default function App() {
           </section>
         )}
 
-        {screen === 'settings' && (
-          <section aria-labelledby="settings-title" className="max-w-[520px]">
+        {screen === 'profile' && (
+          <section aria-labelledby="profile-title" className="max-w-[520px]">
             <button
               type="button"
               onClick={() => setScreen(profile?.displayName ? 'home' : 'setup')}
@@ -636,43 +627,28 @@ export default function App() {
             >
               <ArrowLeft size={16} aria-hidden="true" /> Voltar
             </button>
-            <h1 id="settings-title" className="mt-2 text-2xl font-semibold tracking-tight">
-              Configurações
+            <h1 id="profile-title" className="mt-3 text-[28px] font-semibold tracking-tight">
+              Seu perfil
             </h1>
+            <p className="mt-2 text-sm text-[#B8B4AA]">Esse é o nome que aparece para seus amigos.</p>
             <form
-              className="mt-6"
+              className="mt-7 rounded-2xl border border-[#313029] bg-[#1C1C19] p-6"
               onSubmit={(event) => {
                 event.preventDefault()
-                void connectWithName(nameInput)
+                void saveName()
               }}
             >
-              <label htmlFor="settings-name" className="mb-1 block text-xs text-[#9D9A90]">
+              <label htmlFor="profile-name" className="mb-2 block text-xs text-[#B8B4AA]">
                 Seu nome
               </label>
               <input
-                id="settings-name"
+                id="profile-name"
                 value={nameInput}
                 onChange={(event) => setNameInput(event.target.value)}
                 maxLength={32}
                 autoComplete="off"
-                className="h-11 w-full rounded-md border border-[#313029] bg-[#1C1C19] px-3 text-[15px]"
+                className="h-12 w-full rounded-lg border border-[#4A473E] bg-[#141412] px-4 text-[15px]"
               />
-              <label htmlFor="settings-signaling" className="mb-1 mt-4 block text-xs text-[#9D9A90]">
-                Servidor de sinalização
-              </label>
-              <input
-                id="settings-signaling"
-                value={signalingInput}
-                onChange={(event) => setSignalingInput(event.target.value)}
-                inputMode="url"
-                spellCheck={false}
-                autoComplete="off"
-                placeholder="https://telae.seudominio.com"
-                className="h-11 w-full rounded-md border border-[#313029] bg-[#1C1C19] px-3 text-[15px]"
-              />
-              <p className="mt-1 text-xs text-[#77746C]">
-                O endereço fica salvo neste computador. Depois de publicar o servidor, basta trocar aqui.
-              </p>
               {formError && (
                 <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
                   {formError}
@@ -681,21 +657,19 @@ export default function App() {
               <button
                 type="submit"
                 disabled={busy}
-                className="telae-press mt-4 min-h-[44px] rounded-md bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
+                className="telae-press mt-5 min-h-[44px] rounded-lg bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
               >
                 {busy ? 'Salvando…' : 'Salvar'}
               </button>
             </form>
-            <dl className="tnum mt-6 rounded-md border border-[#313029] bg-[#1C1C19] px-4 py-3 text-[13px]">
-              <div className="flex justify-between gap-4 py-1">
-                <dt className="text-[#9D9A90]">Servidor ativo</dt>
-                <dd className="truncate">{signalingUrl || '—'}</dd>
+            {updateStatus?.phase === 'error' && (
+              <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-[#4A4031] bg-[#24221D] px-5 py-4 text-sm">
+                <p>Não foi possível verificar atualizações agora.</p>
+                <button type="button" className="shrink-0 font-semibold text-[#D8A85C] underline" onClick={() => void window.telae.checkForUpdates()}>
+                  Tentar novamente
+                </button>
               </div>
-              <div className="flex justify-between gap-4 py-1">
-                <dt className="text-[#9D9A90]">Código de amigo</dt>
-                <dd>{profile?.friendCodes[0] ?? '—'}</dd>
-              </div>
-            </dl>
+            )}
           </section>
         )}
 
@@ -753,7 +727,7 @@ export default function App() {
                     playsInline
                     muted={muted}
                     className={`h-[calc(100vh-240px)] min-h-[320px] w-full ${fitCover ? 'object-cover' : 'object-contain'}`}
-                    aria-label="Transmissão do Sharer"
+                    aria-label="Transmissão do seu amigo"
                   />
                 </div>
                 <div
@@ -785,10 +759,6 @@ export default function App() {
                   >
                     <Maximize size={18} aria-hidden="true" />
                   </button>
-                  <p className="tnum ml-1 hidden text-xs text-[#9D9A90] sm:block">
-                    {transport ?? 'Conectando…'} · {snapshot.diagnostics.bitrateKbps} kbps
-                    {snapshot.diagnostics.roundTripMs !== null && ` · ${snapshot.diagnostics.roundTripMs} ms`}
-                  </p>
                   <button
                     type="button"
                     onClick={() => void handleLeave().then(() => setScreen('home'))}
@@ -846,7 +816,6 @@ function SharerSession({
   onExport: () => void
   formError: string | null
 }) {
-  const transport = transportLabel(snapshot.transportPath)
   return (
     <section aria-labelledby="sharer-title" className="telae-panel-enter">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
@@ -861,15 +830,15 @@ function SharerSession({
         <p className="ml-auto flex items-center gap-2 text-xs text-[#9D9A90]">
           <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-[#D8A85C]" />
           {snapshot.state === 'live'
-            ? `Live State · ${qualityLabel(snapshot.quality)}${transport ? ` · ${transport}` : ''}`
-            : 'Aguardando Viewer…'}
+            ? `Ao vivo · ${qualityLabel(snapshot.quality)}`
+            : 'Aguardando seu amigo…'}
         </p>
       </div>
 
       {(snapshot.state === 'waiting-for-peer' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
         <div className="mt-4 rounded-[10px] border border-[#D8A85C]/50 bg-[#1C1C19] p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
-            Convite do Share Session {snapshot.inviteExpiresAt && '(expira em ~10 min)'}
+            Código de convite {snapshot.inviteExpiresAt && '(expira em ~10 min)'}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <p className="tnum text-3xl font-semibold tracking-[0.14em]" aria-label={`Código de convite ${snapshot.inviteCode ?? ''}`}>
@@ -887,8 +856,8 @@ function SharerSession({
           </div>
           <p className="mt-2 text-[13px] text-[#9D9A90]">
             {snapshot.viewerPresence === 'gone'
-              ? 'O Viewer saiu. O código acima já foi usado — encerre e gere um novo convite.'
-              : 'Envie este código ao seu amigo. Ele entra como Viewer sem criar conta.'}
+              ? 'Seu amigo saiu. Encerre esta transmissão para gerar um novo código.'
+              : 'Envie este código para a pessoa que vai assistir.'}
           </p>
           {snapshot.error && (
             <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
@@ -907,11 +876,11 @@ function SharerSession({
               autoPlay
               playsInline
               className="aspect-video w-full object-contain"
-              aria-label={`Pré-visualização de ${sourceName ?? 'Capture Source'}`}
+              aria-label={`Pré-visualização de ${sourceName ?? 'sua tela'}`}
             />
           </div>
           <p className="mt-2 truncate text-[13px] text-[#9D9A90]">
-            Capture Source: {sourceName ?? '—'} · Viewer: {snapshot.viewerName ?? '—'}
+            Compartilhando: {sourceName ?? '—'} · Assistindo: {snapshot.viewerName ?? '—'}
           </p>
         </>
       )}
@@ -928,7 +897,7 @@ function SharerSession({
           onClick={onStop}
           className="telae-press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-md bg-[#FF5D5D] px-6 text-[15px] font-semibold text-[#141412]"
         >
-          <Square size={16} aria-hidden="true" /> Stop sharing
+          <Square size={16} aria-hidden="true" /> Parar transmissão
         </button>
         <button
           type="button"
@@ -940,7 +909,7 @@ function SharerSession({
       </div>
 
       <details className="mt-4 rounded-md border border-[#313029] bg-[#1C1C19]">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#9D9A90]">Diagnostics</summary>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#9D9A90]">Detalhes da conexão</summary>
         <DiagnosticsBody snapshot={snapshot} onExport={onExport} />
       </details>
     </section>
