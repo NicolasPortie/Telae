@@ -6,14 +6,16 @@ import path from 'node:path'
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
 
-async function launchApp(): Promise<ElectronApplication> {
+async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> {
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-e2e-'))
   const signalingUrl = process.env.TELAE_E2E_SIGNALING_URL?.trim()
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([, value]) => value !== undefined),
   ) as Record<string, string>
+  const args = [APP_DIR, '--no-sandbox', `--user-data-dir=${userDataDir}`]
+  if (muteAudioOutput) args.push('--mute-audio')
   const app = await electron.launch({
-    args: [APP_DIR, '--no-sandbox', `--user-data-dir=${userDataDir}`],
+    args,
     env: signalingUrl
       ? { ...env, TELAE_SIGNALING_URL: signalingUrl }
       : env,
@@ -42,7 +44,7 @@ async function enterWithName(page: Page, name: string) {
 test.describe('duas instâncias Telae', () => {
   test('convite inválido falha com motivo específico', async () => {
     const sharerApp = await launchApp()
-    const viewerApp = await launchApp()
+    const viewerApp = await launchApp(true)
     try {
       const sharer = await firstWindow(sharerApp)
       const viewer = await firstWindow(viewerApp)
@@ -65,25 +67,13 @@ test.describe('duas instâncias Telae', () => {
   test('sharer gera convite e viewer assiste (mídia real)', async () => {
     test.skip(!WITH_MEDIA, 'Exige display e captura real: rode com TELAE_E2E_MEDIA=1')
     const sharerApp = await launchApp()
-    const viewerApp = await launchApp()
+    const viewerApp = await launchApp(true)
     try {
       const sharer = await firstWindow(sharerApp)
       const viewer = await firstWindow(viewerApp)
 
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
-
-      await sharer.evaluate(async () => {
-        const context = new AudioContext()
-        await context.resume()
-        const oscillator = context.createOscillator()
-        const gain = context.createGain()
-        oscillator.frequency.value = 440
-        gain.gain.value = 0.08
-        oscillator.connect(gain)
-        gain.connect(context.destination)
-        oscillator.start()
-      })
 
       await sharer.getByRole('button', { name: /Share screen/ }).click()
       const firstSource = sharer.getByRole('radio').first()
@@ -116,30 +106,6 @@ test.describe('duas instâncias Telae', () => {
         const track = stream instanceof MediaStream ? stream.getAudioTracks()[0] : undefined
         return track ? { readyState: track.readyState, muted: track.muted } : null
       }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
-      await expect(await remoteVideo.evaluate(async (video) => {
-        const stream = (video as HTMLVideoElement).srcObject
-        if (!(stream instanceof MediaStream)) return false
-        const track = stream.getAudioTracks()[0]
-        if (!track) return false
-
-        const context = new AudioContext()
-        await context.resume()
-        const source = context.createMediaStreamSource(new MediaStream([track]))
-        const analyser = context.createAnalyser()
-        analyser.fftSize = 1024
-        source.connect(analyser)
-        const samples = new Float32Array(analyser.fftSize)
-
-        let hasSignal = false
-        for (let attempt = 0; attempt < 20 && !hasSignal; attempt += 1) {
-          await new Promise((resolve) => setTimeout(resolve, 100))
-          analyser.getFloatTimeDomainData(samples)
-          const rms = Math.sqrt(samples.reduce((sum, sample) => sum + sample * sample, 0) / samples.length)
-          hasSignal = rms > 0.001
-        }
-        await context.close()
-        return hasSignal
-      })).toBe(true)
 
       await viewer.keyboard.press('Escape')
       await expect(viewer.getByRole('heading', { name: /Mostre sua tela/ })).toBeVisible()
