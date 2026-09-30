@@ -3,6 +3,10 @@ productName: Telae
 copyright: Copyright © 2026 Telae
 artifactName: "${productName}-Setup-${version}.${ext}"
 
+publish:
+  provider: generic
+  url: http://localhost:5015/updates/windows/
+
 directories:
   output: dist
 
