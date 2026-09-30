@@ -30,6 +30,7 @@ export class SignalingClient {
   private readonly listeners = new Map<keyof Events, Set<(...args: never[]) => void>>()
   private deviceId = ''
   private displayName = ''
+  private deviceSecret = ''
 
   constructor(baseUrl: string) {
     this.connection = new HubConnectionBuilder()
@@ -48,7 +49,7 @@ export class SignalingClient {
     this.connection.onreconnected(async () => {
       try {
         if (this.deviceId && this.displayName) {
-          await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName })
+          await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName, deviceSecret: this.deviceSecret })
         }
         this.emit('connectionChanged', 'online')
       } catch {
@@ -71,12 +72,13 @@ export class SignalingClient {
     }
   }
 
-  async connect(deviceId: string, displayName: string): Promise<DeviceSnapshot> {
+  async connect(deviceId: string, displayName: string, deviceSecret: string): Promise<DeviceSnapshot> {
     this.deviceId = deviceId
     this.displayName = displayName
+    this.deviceSecret = deviceSecret
     this.emit('connectionChanged', 'connecting')
     if (this.connection.state === HubConnectionState.Disconnected) await this.connection.start()
-    const device = await this.connection.invoke<DeviceSnapshot>('RegisterDevice', { deviceId, displayName })
+    const device = await this.connection.invoke<DeviceSnapshot>('RegisterDevice', { deviceId, displayName, deviceSecret })
     this.emit('connectionChanged', 'online')
     return device
   }

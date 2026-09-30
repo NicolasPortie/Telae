@@ -22,22 +22,34 @@ public sealed class TelaeRegistry
         LoadProfiles();
     }
 
-    public DeviceSnapshot RegisterDevice(string deviceId, string displayName, string connectionId)
+    public DeviceSnapshot RegisterDevice(string deviceId, string displayName, string connectionId, string deviceSecret)
     {
-        if (string.IsNullOrWhiteSpace(deviceId))
+        if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128)
             throw new TelaeDomainException("device_id_required", "O dispositivo não possui um identificador válido.");
+
+        if (deviceSecret is null || deviceSecret.Length != 64 || !deviceSecret.All(Uri.IsHexDigit))
+            throw new TelaeDomainException("device_unauthorized", "Atualize o aplicativo para registrar este dispositivo com segurança.");
+        var secretHash = SHA256.HashData(Convert.FromHexString(deviceSecret));
 
         displayName = NormalizeDisplayName(displayName);
 
         lock (_gate)
         {
+            if (_deviceByConnection.TryGetValue(connectionId, out var registeredDevice) && registeredDevice != deviceId)
+                throw new TelaeDomainException("device_mismatch", "Esta conexão já pertence a outro dispositivo.");
             if (!_profiles.TryGetValue(deviceId, out var profile))
             {
-                profile = new ProfileRecord(deviceId, displayName, GenerateUniqueFriendCode());
+                profile = new ProfileRecord(deviceId, displayName, GenerateUniqueFriendCode())
+                {
+                    DeviceSecretHash = Convert.ToHexString(secretHash)
+                };
                 _profiles.Add(deviceId, profile);
             }
             else
             {
+                if (profile.DeviceSecretHash is null ||
+                    !CryptographicOperations.FixedTimeEquals(secretHash, Convert.FromHexString(profile.DeviceSecretHash)))
+                    throw new TelaeDomainException("device_unauthorized", "A credencial deste dispositivo é inválida. Atualize o aplicativo e tente novamente.");
                 profile.DisplayName = displayName;
             }
 
@@ -92,6 +104,8 @@ public sealed class TelaeRegistry
             RequireOnlineDevice(deviceId);
             if (_sessionsBySharer.ContainsKey(deviceId))
                 throw new TelaeDomainException("share_already_active", "Este dispositivo já está compartilhando a tela.");
+            if (_sessionsBySharer.Values.Any(session => session.ViewerDeviceIds.Contains(deviceId)))
+                throw new TelaeDomainException("viewer_already_joined", "Saia da transmissão atual antes de compartilhar sua tela.");
 
             var session = new ShareSessionRecord(
                 Guid.NewGuid().ToString("N"),
@@ -121,6 +135,8 @@ public sealed class TelaeRegistry
             RequireOnlineDevice(viewerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
                 throw new TelaeDomainException("share_not_active", "Esta pessoa não está compartilhando a tela agora.");
+            if (!session.ViewerDeviceIds.Contains(viewerDeviceId))
+                throw new TelaeDomainException("invite_required", "Use um código de convite para entrar nesta transmissão.");
             return AttachViewerLocked(viewerDeviceId, session);
         }
     }
@@ -160,8 +176,11 @@ public sealed class TelaeRegistry
 
     private ShareSessionSnapshot AttachViewerLocked(string viewerDeviceId, ShareSessionRecord session)
     {
+        RequireOnlineDevice(session.SharerDeviceId);
         if (viewerDeviceId == session.SharerDeviceId)
             throw new TelaeDomainException("cannot_view_own_share", "O dispositivo não pode assistir à própria transmissão.");
+        if (_sessionsBySharer.ContainsKey(viewerDeviceId))
+            throw new TelaeDomainException("share_already_active", "Encerre sua transmissão antes de assistir a outra.");
         if (_sessionsBySharer.Values.Any(s => s != session && s.ViewerDeviceIds.Contains(viewerDeviceId)))
             throw new TelaeDomainException("viewer_already_joined", "Saia da transmissão atual antes de entrar em outra.");
         if (session.ViewerDeviceIds.Count >= 12 && !session.ViewerDeviceIds.Contains(viewerDeviceId))
@@ -381,9 +400,22 @@ public sealed class TelaeRegistry
         if (string.IsNullOrWhiteSpace(_profilePath)) return;
         var folder = Path.GetDirectoryName(_profilePath);
         if (!string.IsNullOrWhiteSpace(folder)) Directory.CreateDirectory(folder);
-        File.WriteAllText(_profilePath, JsonSerializer.Serialize(
-            _profiles.Values.OrderBy(profile => profile.DeviceId),
-            new JsonSerializerOptions { WriteIndented = true }));
+        var temporaryPath = $"{_profilePath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var file = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                4096, FileOptions.WriteThrough))
+            {
+                JsonSerializer.Serialize(file, _profiles.Values.OrderBy(profile => profile.DeviceId),
+                    new JsonSerializerOptions { WriteIndented = true });
+                file.Flush(flushToDisk: true);
+            }
+            File.Move(temporaryPath, _profilePath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
     }
 
     private static string NormalizeDisplayName(string value)
@@ -418,6 +450,7 @@ public sealed class TelaeRegistry
         public string DeviceId { get; init; }
         public string DisplayName { get; set; }
         public string FriendCode { get; init; }
+        public string? DeviceSecretHash { get; init; }
     }
 
     private sealed class ShareSessionRecord(
