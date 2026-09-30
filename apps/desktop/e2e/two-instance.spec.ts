@@ -37,8 +37,8 @@ async function firstWindow(app: ElectronApplication): Promise<Page> {
 async function enterWithName(page: Page, name: string) {
   const nameInput = page.getByLabel('Seu nome')
   await nameInput.fill(name)
-  await page.getByRole('button', { name: 'Entrar' }).click()
-  await expect(page.getByRole('heading', { name: /Mostre sua tela/ })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: 'Continuar' }).click()
+  await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
 }
 
 test.describe('duas instâncias Telae', () => {
@@ -52,11 +52,11 @@ test.describe('duas instâncias Telae', () => {
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
 
-      await sharer.getByRole('button', { name: /Share screen/ }).click()
+      await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(sharer.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
 
       await viewer.getByLabel('Código de convite').fill('ZZZZZZZZ')
-      await viewer.getByRole('button', { name: 'Join', exact: true }).click()
+      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
       await expect(viewer.getByRole('alert')).toContainText(/não existe/, { timeout: 30_000 })
     } finally {
       await sharerApp.close()
@@ -75,7 +75,7 @@ test.describe('duas instâncias Telae', () => {
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
 
-      await sharer.getByRole('button', { name: /Share screen/ }).click()
+      await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       const firstSource = sharer.getByRole('radio').first()
       await firstSource.click()
       await sharer.getByLabel(/Incluir áudio do sistema/).check()
@@ -86,15 +86,15 @@ test.describe('duas instâncias Telae', () => {
       expect(code).toMatch(/^[A-Z2-9]{8}$/)
 
       await viewer.getByLabel('Código de convite').fill(code)
-      await viewer.getByRole('button', { name: 'Join', exact: true }).click()
-      const remoteVideo = viewer.getByLabel('Transmissão do Sharer')
+      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
       await expect(remoteVideo).toBeVisible({ timeout: 60_000 })
       await viewer.waitForFunction(
         (selector) => {
           const video = document.querySelector(selector)
           return video instanceof HTMLVideoElement && video.readyState >= 2 && !video.paused
         },
-        'video[aria-label="Transmissão do Sharer"]',
+        'video[aria-label="Transmissão do seu amigo"]',
         { timeout: 60_000 },
       )
       await expect.poll(async () => remoteVideo.evaluate((video) => {
@@ -108,7 +108,7 @@ test.describe('duas instâncias Telae', () => {
       }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
 
       await viewer.keyboard.press('Escape')
-      await expect(viewer.getByRole('heading', { name: /Mostre sua tela/ })).toBeVisible()
+      await expect(viewer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
     } finally {
       await sharerApp.close()
       await viewerApp.close()
