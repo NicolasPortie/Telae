@@ -31,7 +31,7 @@ jobs:
     env:
       TELAE_E2E_MEDIA: '1'
       TELAE_E2E_RELAY: '0'
-      Profiles__Path: ${{ runner.temp }}/telae-release-media-${{ github.run_id }}.json
+      Profiles__Path: ${{ github.workspace }}/.telae-release-media-${{ github.run_id }}.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
