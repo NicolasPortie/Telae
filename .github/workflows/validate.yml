@@ -20,7 +20,7 @@ jobs:
     env:
       TELAE_E2E_MEDIA: '0'
       TELAE_E2E_RELAY: '0'
-      Profiles__Path: ${{ runner.temp }}/telae-validation-profiles.json
+      Profiles__Path: ${{ github.workspace }}/.telae-validation-profiles.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
