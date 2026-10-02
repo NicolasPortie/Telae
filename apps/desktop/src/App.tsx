@@ -2,49 +2,25 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowRight,
-  Copy,
-  Check,
-  Download,
   LogIn,
   Maximize,
+  Minimize,
   MonitorUp,
   Signal,
   UserRound,
-  Square,
   Volume2,
   VolumeX,
 } from 'lucide-react'
+import { DiagnosticsHistory } from './services/diagnostics-history'
+import { DiagnosticsBody } from './components/DiagnosticsBody'
+import { SharerSession } from './components/SharerSession'
+import { SourceGroup } from './components/SourceGroup'
+import { QUALITY_OPTIONS, formatElapsed } from './ui/format'
 import { ShareSessionController } from './services/share-session'
 import type { QualityProfile } from './services/types'
 import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
 type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'profile'
-
-const QUALITY_OPTIONS: { value: QualityProfile; label: string; hint: string }[] = [
-  { value: 'auto', label: 'Auto', hint: 'Adapta à rede' },
-  { value: '720p60', label: '720p', hint: '720p60 leve' },
-  { value: '1080p30', label: '1080p', hint: '1080p30 filmes' },
-  { value: '1080p60', label: '1080p60', hint: 'Alta taxa de quadros' },
-]
-
-function formatElapsed(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  const mm = hours > 0 ? String(minutes).padStart(2, '0') : String(minutes)
-  const ss = String(seconds).padStart(2, '0')
-  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`
-}
-
-function qualityLabel(value: QualityProfile): string {
-  return QUALITY_OPTIONS.find((option) => option.value === value)?.label ?? value
-}
-
-function transportLabel(path: 'direct' | 'relay' | null): string | null {
-  if (path === 'direct') return 'Direct'
-  if (path === 'relay') return 'Relay'
-  return null
-}
 
 export default function App() {
   const [controller] = useState(() => new ShareSessionController())
@@ -64,7 +40,9 @@ export default function App() {
   const [nameInput, setNameInput] = useState('')
   const [copied, setCopied] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [hasDiagnostics, setHasDiagnostics] = useState(false)
   const [overlayVisible, setOverlayVisible] = useState(true)
+  const [fullscreen, setFullscreen] = useState(false)
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
   const [fitCover, setFitCover] = useState(false)
@@ -75,7 +53,9 @@ export default function App() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const overlayTimer = useRef<number | null>(null)
-  const samplesRef = useRef<string[]>([])
+  const historyRef = useRef(new DiagnosticsHistory())
+  const latestSnapshot = useRef(snapshot)
+  useEffect(() => { latestSnapshot.current = snapshot; historyRef.current.recordEvent(snapshot) }, [snapshot])
 
   const desktopApiAvailable = typeof window !== 'undefined' && typeof window.telae !== 'undefined'
   const sessionActive = snapshot.role !== null && !['idle', 'ended'].includes(snapshot.state)
@@ -246,7 +226,7 @@ export default function App() {
       if (switchingSource) await controller.switchSource(selectedId)
       else await controller.startSharing(selectedId, quality)
       setActiveSourceId(selectedId)
-      samplesRef.current = []
+      if (!switchingSource) { historyRef.current.reset(); setHasDiagnostics(false) }
       setSwitchingSource(false)
       setScreen('session')
     } catch (error) {
@@ -261,7 +241,8 @@ export default function App() {
     setFormError(null)
     try {
       await controller.joinWithInvite(inviteCode)
-      samplesRef.current = []
+      historyRef.current.reset()
+      setHasDiagnostics(false)
       setScreen('session')
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Não foi possível entrar.')
@@ -289,7 +270,7 @@ export default function App() {
 
   const exportDiagnostics = useCallback(() => {
     const payload = JSON.stringify(
-      { exportedAt: new Date().toISOString(), snapshot, samples: samplesRef.current },
+      historyRef.current.export(snapshot),
       null,
       2,
     )
@@ -298,7 +279,7 @@ export default function App() {
     anchor.href = url
     anchor.download = `telae-diagnostics-${Date.now()}.json`
     anchor.click()
-    URL.revokeObjectURL(url)
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }, [snapshot])
 
   // Anexa o MediaStream correto ao <video> conforme o papel.
@@ -311,30 +292,67 @@ export default function App() {
     return () => {
       video.srcObject = null
     }
-  }, [visibleScreen, activeStream, snapshot.hasLocalStream, snapshot.hasRemoteStream])
+  }, [visibleScreen, activeStream, snapshot.hasLocalStream, snapshot.hasRemoteStream, snapshot.state])
 
-  // Elapsed + amostragem de diagnóstico (1s, Ticket 10).
+  // Stable timer: diagnostic updates must not keep restarting the sampling clock.
   useEffect(() => {
-    if (visibleScreen !== 'session' || snapshot.liveSinceMs === null) {
-      return
-    }
+    if (!sessionActive) return
     const timer = window.setInterval(() => {
-      setElapsed(Math.floor((Date.now() - (snapshot.liveSinceMs ?? Date.now())) / 1000))
-      if (snapshot.state === 'live') {
-        samplesRef.current.push(JSON.stringify({ t: Date.now(), d: snapshot.diagnostics }))
-        if (samplesRef.current.length > 300) samplesRef.current.shift()
-      }
+      const current = latestSnapshot.current
+      if (current.liveSinceMs !== null) setElapsed(Math.floor((Date.now() - current.liveSinceMs) / 1000))
+      historyRef.current.record(current)
+      if (current.state === 'live') setHasDiagnostics(true)
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [visibleScreen, snapshot.liveSinceMs, snapshot.state, snapshot.diagnostics])
+  }, [sessionActive])
+
+  useEffect(() => {
+    if (snapshot.role !== 'viewer' || !activeStream || !videoRef.current) return
+    const video = videoRef.current
+    if (!['negotiating', 'reconnecting'].includes(snapshot.state)) return
+    let cancelled = false
+    const presented = () => { if (!cancelled && video.srcObject === activeStream) controller.confirmVideoPresented(activeStream) }
+    const frameCallback = video.requestVideoFrameCallback(presented)
+    return () => { cancelled = true; video.cancelVideoFrameCallback(frameCallback) }
+  }, [activeStream, snapshot.role, snapshot.state, controller])
+
+  const runSessionAction = useCallback(async (action: () => Promise<unknown>) => {
+    setBusy(true)
+    setFormError(null)
+    try { await action() }
+    catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível concluir a alteração.') }
+    finally { setBusy(false) }
+  }, [])
 
   // Overlay do Viewer: visível ao entrar no live; esconde 3s após o último
   // movimento de ponteiro (pokeOverlay é chamado pelos handlers, não por effect).
   const pokeOverlay = useCallback(() => {
     setOverlayVisible(true)
     if (overlayTimer.current !== null) window.clearTimeout(overlayTimer.current)
-    overlayTimer.current = window.setTimeout(() => setOverlayVisible(false), 3000)
+    overlayTimer.current = window.setTimeout(() => {
+      const interacting = stageRef.current?.querySelector('.telae-viewer-controls:hover, :focus-visible, details[open]')
+      if (!interacting) setOverlayVisible(false)
+    }, 3000)
   }, [])
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setFullscreen(document.fullscreenElement === stageRef.current && stageRef.current !== null)
+      pokeOverlay()
+    }
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
+  }, [pokeOverlay])
+
+  useEffect(() => {
+    if (!viewerLive) return
+    const frame = window.requestAnimationFrame(pokeOverlay)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (overlayTimer.current !== null) window.clearTimeout(overlayTimer.current)
+      overlayTimer.current = null
+    }
+  }, [viewerLive, pokeOverlay])
 
   useEffect(() => {
     if (!videoRef.current) return
@@ -343,8 +361,8 @@ export default function App() {
   }, [muted, volume, snapshot.role, visibleScreen])
 
   const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement) void document.exitFullscreen()
-    else void stageRef.current?.requestFullscreen().catch(() => undefined)
+    const change = document.fullscreenElement ? document.exitFullscreen() : stageRef.current?.requestFullscreen()
+    void change?.catch(() => setFormError('Não foi possível abrir a tela cheia. Tente novamente.'))
   }, [])
 
   const stateLabel: Record<string, string> = {
@@ -472,6 +490,7 @@ export default function App() {
 
         {visibleScreen === 'home' && (
           <section aria-labelledby="home-title" className="telae-panel-enter">
+            {hasDiagnostics && <button type="button" onClick={exportDiagnostics} className="telae-press mb-4 min-h-[40px] rounded-md border border-[#313029] px-4 text-sm">Exportar diagnóstico da última transmissão</button>}
             <p className="text-sm text-[#B8B4AA]">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
             <h1 id="home-title" className="mt-2 max-w-[20ch] text-[clamp(30px,4vw,42px)] font-semibold leading-[1.12] tracking-tight">
               Compartilhar a tela ficou simples.
@@ -693,6 +712,11 @@ export default function App() {
             onChangeSource={openSourceSwitch}
             onExport={exportDiagnostics}
             formError={formError}
+            busy={busy}
+            onQuality={(value, mode) => void runSessionAction(() => controller.setQuality(value, mode))}
+            onAudio={() => controller.setAudioMuted(!snapshot.audioMuted)}
+            onUpload={(value) => void runSessionAction(async () => controller.setUploadBudget(value))}
+            onRemove={(id) => void runSessionAction(() => controller.removeViewer(id))}
           />
         )}
 
@@ -701,7 +725,23 @@ export default function App() {
             ref={stageRef}
             onMouseMove={pokeOverlay}
             onTouchStart={pokeOverlay}
-            className="telae-panel-enter telae-viewer-stage"
+            onKeyDown={(event) => {
+              pokeOverlay()
+              if (event.key === 'Escape' && document.fullscreenElement) {
+                event.preventDefault()
+                void document.exitFullscreen().catch(() => undefined)
+                return
+              }
+              if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return
+              if ((event.target as HTMLElement).closest('input, select, textarea, button, summary')) return
+              if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen() }
+              if (event.key.toLowerCase() === 'm') { event.preventDefault(); setMuted(previous => !previous) }
+            }}
+            onFocusCapture={pokeOverlay}
+            onBlurCapture={pokeOverlay}
+            tabIndex={0}
+            aria-label="Player da transmissão. F para tela cheia, M para silenciar."
+            className={`telae-panel-enter telae-viewer-stage ${viewerLive && !overlayVisible ? 'telae-viewer-idle' : ''}`}
           >
             {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
               <div className="mx-auto max-w-[520px] py-16 text-center">
@@ -724,20 +764,29 @@ export default function App() {
               </div>
             )}
 
-            {snapshot.state === 'live' && (
+            {snapshot.hasRemoteStream && (
               <div className="telae-viewer-playback relative">
+                <details onToggle={pokeOverlay} className="telae-viewer-diagnostics absolute right-3 top-3 z-10 max-h-[calc(100%-100px)] max-w-[min(600px,calc(100%-24px))] overflow-auto rounded-md border border-[#313029] bg-[#1C1C19]/95 transition-opacity duration-200">
+                  <summary className="cursor-pointer px-4 py-3 text-sm">Detalhes da conexão</summary>
+                  <DiagnosticsBody snapshot={snapshot} onExport={exportDiagnostics} />
+                </details>
                 <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-[#313029]">
                   <video
                     ref={videoRef}
                     autoPlay
                     playsInline
                     muted={muted}
+                    onDoubleClick={toggleFullscreen}
                     className={`telae-viewer-video ${fitCover ? 'object-cover' : 'object-contain'}`}
                     aria-label="Transmissão do seu amigo"
                   />
                 </div>
                 <div
-                  className={`absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-[10px] bg-black/70 px-4 py-3 transition-opacity duration-200 ${
+                  aria-label="Controles da transmissão"
+                  role="group"
+                  onMouseEnter={pokeOverlay}
+                  onMouseLeave={pokeOverlay}
+                  className={`telae-viewer-controls absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-[10px] bg-black/70 px-4 py-3 transition-opacity duration-200 ${
                     overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
                   }`}
                 >
@@ -753,6 +802,7 @@ export default function App() {
                     }}
                     className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-[#F1EFE8]"
                     aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
+                    title={muted || volume === 0 ? 'Ativar som (M)' : 'Silenciar (M)'}
                   >
                     {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
                   </button>
@@ -781,9 +831,10 @@ export default function App() {
                     type="button"
                     onClick={toggleFullscreen}
                     className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-[#F1EFE8]"
-                    aria-label="Tela cheia"
+                    aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
+                    title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia (F)'}
                   >
-                    <Maximize size={18} aria-hidden="true" />
+                    {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
                   </button>
                   <button
                     type="button"
@@ -793,6 +844,7 @@ export default function App() {
                     Sair
                   </button>
                 </div>
+                {formError && <p role="alert" className="absolute left-3 top-3 rounded-md bg-[#1C1C19] px-4 py-3 text-sm text-[#FF5D5D]">{formError}</p>}
               </div>
             )}
 
@@ -803,6 +855,7 @@ export default function App() {
           <div className="mx-auto max-w-[520px] py-16 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
             {snapshot.error && <p className="mt-2 text-sm text-[#9D9A90]">{snapshot.error}</p>}
+            <button type="button" onClick={exportDiagnostics} className="telae-press mt-4 min-h-[44px] rounded-md border border-[#313029] px-5 text-sm">Exportar diagnóstico (JSON)</button>
             <button
               type="button"
               onClick={() => {
@@ -817,226 +870,6 @@ export default function App() {
         )}
 
       </main>
-    </div>
-  )
-}
-
-function SharerSession({
-  snapshot,
-  elapsed,
-  sourceName,
-  videoRef,
-  copied,
-  onCopyInvite,
-  onStop,
-  onChangeSource,
-  onExport,
-  formError,
-}: {
-  snapshot: ReturnType<ShareSessionController['getSnapshot']>
-  elapsed: number
-  sourceName: string | null
-  videoRef: React.RefObject<HTMLVideoElement | null>
-  copied: boolean
-  onCopyInvite: () => void
-  onStop: () => void
-  onChangeSource: () => void
-  onExport: () => void
-  formError: string | null
-}) {
-  return (
-    <section aria-labelledby="sharer-title" className="telae-panel-enter">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 id="sharer-title" className="text-2xl font-semibold tracking-tight">
-          {snapshot.state === 'live' ? 'Você está compartilhando' : 'Preparando transmissão'}
-        </h1>
-        {snapshot.liveSinceMs !== null && (
-          <p className="tnum text-sm text-[#9D9A90]" aria-label="Tempo decorrido">
-            {formatElapsed(elapsed)}
-          </p>
-        )}
-        <p className="ml-auto flex items-center gap-2 text-xs text-[#9D9A90]">
-          <span aria-hidden="true" className="inline-block h-2 w-2 rounded-full bg-[#D8A85C]" />
-          {snapshot.state === 'live'
-            ? `Ao vivo · ${qualityLabel(snapshot.quality)}`
-            : 'Aguardando seu amigo…'}
-        </p>
-      </div>
-
-      {!snapshot.includeAudio && snapshot.state !== 'ended' && (
-        <p role="status" className="mt-4 rounded-lg border border-[#5B5140] bg-[#282721] px-4 py-3 text-sm text-[#E8C690]">
-          O Windows não disponibilizou áudio desta fonte. A tela está sendo compartilhada sem som. Você pode trocar a fonte.
-        </p>
-      )}
-
-      {snapshot.inviteCode && snapshot.state !== 'ended' && (
-        <div className="mt-4 rounded-[10px] border border-[#D8A85C]/50 bg-[#1C1C19] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
-            Código de convite · até 12 espectadores
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="tnum text-3xl font-semibold tracking-[0.14em]" aria-label={`Código de convite ${snapshot.inviteCode ?? ''}`}>
-              {snapshot.inviteCode ?? '…'}
-            </p>
-            <button
-              type="button"
-              onClick={onCopyInvite}
-              disabled={!snapshot.inviteCode}
-              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md border border-[#313029] bg-[#282721] px-4 text-sm font-semibold disabled:opacity-50"
-            >
-              {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-              {copied ? 'Copiado' : 'Copiar'}
-            </button>
-          </div>
-          <p className="mt-2 text-[13px] text-[#9D9A90]">
-            Envie o mesmo código para todos. {snapshot.viewerCount} {snapshot.viewerCount === 1 ? 'pessoa conectada' : 'pessoas conectadas'}.
-          </p>
-          {snapshot.error && (
-            <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
-              {snapshot.error}
-            </p>
-          )}
-        </div>
-      )}
-
-      {snapshot.state === 'live' && (
-        <>
-          <div className="telae-video-canvas mt-4 overflow-hidden rounded-[10px] border border-[#313029]">
-            <video
-              ref={videoRef}
-              muted
-              autoPlay
-              playsInline
-              className="aspect-video w-full object-contain"
-              aria-label={`Pré-visualização de ${sourceName ?? 'sua tela'}`}
-            />
-          </div>
-          <p className="mt-2 truncate text-[13px] text-[#9D9A90]">
-            Compartilhando: {sourceName ?? '—'} · {snapshot.viewerCount} {snapshot.viewerCount === 1 ? 'espectador' : 'espectadores'}
-          </p>
-        </>
-      )}
-
-      {formError && (
-        <p role="alert" className="mt-4 text-sm text-[#FF5D5D]">
-          {formError}
-        </p>
-      )}
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={onStop}
-          className="telae-press flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-md bg-[#FF5D5D] px-6 text-[15px] font-semibold text-[#141412]"
-        >
-          <Square size={16} aria-hidden="true" /> Parar transmissão
-        </button>
-        <button
-          type="button"
-          onClick={onChangeSource}
-          className="telae-press min-h-[48px] rounded-md border border-[#313029] bg-[#1C1C19] px-6 text-sm font-semibold"
-        >
-          Trocar fonte
-        </button>
-      </div>
-
-      <details className="mt-4 rounded-md border border-[#313029] bg-[#1C1C19]">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-[#9D9A90]">Detalhes da conexão</summary>
-        <DiagnosticsBody snapshot={snapshot} onExport={onExport} />
-      </details>
-    </section>
-  )
-}
-
-function DiagnosticsBody({
-  snapshot,
-  onExport,
-}: {
-  snapshot: ReturnType<ShareSessionController['getSnapshot']>
-  onExport: () => void
-}) {
-  const d = snapshot.diagnostics
-  const rows: [string, string][] = [
-    ['State', snapshot.state],
-    ['Transport Path', transportLabel(snapshot.transportPath) ?? '—'],
-    ['Quality Profile', qualityLabel(snapshot.quality)],
-    ['Resolução', d.width && d.height ? `${d.width}×${d.height}` : '—'],
-    ['Quadros/s', d.framesPerSecond !== null ? String(Math.round(d.framesPerSecond)) : '—'],
-    ['Bitrate', `${d.bitrateKbps} kbps`],
-    ['RTT', d.roundTripMs !== null ? `${d.roundTripMs} ms` : '—'],
-    ['Perda', d.packetLossPercent !== null ? `${d.packetLossPercent.toFixed(1)}%` : '—'],
-    ['Jitter', d.jitterMs !== null ? `${d.jitterMs} ms` : '—'],
-    ['Codec', d.codec ?? '—'],
-    ['Candidato', d.candidateType ?? '—'],
-    ['Áudio', snapshot.includeAudio ? 'incluído' : 'desligado'],
-  ]
-  return (
-    <div className="border-t border-[#313029] px-4 py-3">
-      <dl className="tnum grid grid-cols-2 gap-x-6 gap-y-2 text-[13px] sm:grid-cols-4">
-        {rows.map(([term, value]) => (
-          <div key={term}>
-            <dt className="text-[#9D9A90]">{term}</dt>
-            <dd className="truncate">{value}</dd>
-          </div>
-        ))}
-      </dl>
-      <button
-        type="button"
-        onClick={onExport}
-        className="telae-press mt-3 flex min-h-[40px] items-center gap-2 rounded-md border border-[#313029] bg-[#282721] px-4 text-sm font-semibold"
-      >
-        <Download size={15} aria-hidden="true" /> Exportar diagnóstico (JSON)
-      </button>
-    </div>
-  )
-}
-
-function SourceGroup({
-  title,
-  sources,
-  selectedId,
-  onSelect,
-}: {
-  title: string
-  sources: CaptureSource[]
-  selectedId: string
-  onSelect: (id: string) => void
-}) {
-  if (sources.length === 0) return null
-  return (
-    <div className="mt-6">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">{title}</h2>
-      <ul role="radiogroup" aria-label={title} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {sources.map((source) => {
-          const active = source.id === selectedId
-          return (
-            <li key={source.id}>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => onSelect(source.id)}
-                className={`telae-press block w-full overflow-hidden rounded-[10px] border bg-[#000000] text-left ${
-                  active ? 'border-[#D8A85C]' : 'border-[#313029] hover:border-[#9D9A90]'
-                }`}
-              >
-                {source.thumbnailDataUrl ? (
-                  <img src={source.thumbnailDataUrl} alt="" aria-hidden="true" draggable={false} className="aspect-video w-full object-cover" />
-                ) : (
-                  <span aria-hidden="true" className="block aspect-video w-full bg-[#1C1C19]" />
-                )}
-                <span
-                  className={`block truncate border-t px-3 py-2 text-[13px] ${
-                    active ? 'border-[#D8A85C] bg-[#282721] font-semibold text-[#F1EFE8]' : 'border-[#313029] text-[#9D9A90]'
-                  }`}
-                >
-                  {source.name}
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
     </div>
   )
 }

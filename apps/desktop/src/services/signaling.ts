@@ -11,6 +11,7 @@ import type {
   InviteSnapshot,
   QualityProfile,
   ShareAccessResult,
+  ShareSessionSnapshot,
   SignalingEnvelope,
   ViewerJoinedEvent,
   ViewerLeftEvent,
@@ -22,6 +23,7 @@ type Events = {
   viewerLeft: (event: ViewerLeftEvent) => void
   signalReceived: (envelope: SignalingEnvelope) => void
   sessionEnded: (sessionId: string) => void
+  shareQualityChanged: (session: ShareSessionSnapshot) => void
   connectionChanged: (status: ConnectionStatus) => void
 }
 
@@ -31,6 +33,7 @@ export class SignalingClient {
   private deviceId = ''
   private displayName = ''
   private deviceSecret = ''
+  private friendCodes: string[] = []
 
   constructor(baseUrl: string) {
     this.connection = new HubConnectionBuilder()
@@ -43,6 +46,7 @@ export class SignalingClient {
     this.connection.on('ViewerJoined', (event: ViewerJoinedEvent) => this.emit('viewerJoined', event))
     this.connection.on('ViewerLeft', (event: ViewerLeftEvent) => this.emit('viewerLeft', event))
     this.connection.on('SignalReceived', (envelope: SignalingEnvelope) => this.emit('signalReceived', envelope))
+    this.connection.on('ShareQualityChanged', (session: ShareSessionSnapshot) => this.emit('shareQualityChanged', session))
     this.connection.on('SessionEnded', (sessionId: string) => this.emit('sessionEnded', sessionId))
 
     this.connection.onreconnecting(() => this.emit('connectionChanged', 'reconnecting'))
@@ -51,6 +55,7 @@ export class SignalingClient {
         if (this.deviceId && this.displayName) {
           await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName, deviceSecret: this.deviceSecret })
         }
+        await this.connection.invoke('GetFriends', this.friendCodes)
         this.emit('connectionChanged', 'online')
       } catch {
         this.emit('connectionChanged', 'offline')
@@ -92,7 +97,7 @@ export class SignalingClient {
   }
 
   getFriends(friendCodes: string[]) {
-    if (friendCodes.length === 0) return Promise.resolve([] as DeviceSnapshot[])
+    this.friendCodes = [...friendCodes]
     return this.connection.invoke<DeviceSnapshot[]>('GetFriends', friendCodes)
   }
 
@@ -101,6 +106,14 @@ export class SignalingClient {
       deviceId: this.deviceId,
       qualityProfile,
     })
+  }
+
+  updateShareQuality(qualityProfile: QualityProfile) {
+    return this.connection.invoke('UpdateShareQuality', qualityProfile)
+  }
+
+  removeViewer(viewerDeviceId: string) {
+    return this.connection.invoke('RemoveViewer', viewerDeviceId)
   }
 
   getActiveShare() {
