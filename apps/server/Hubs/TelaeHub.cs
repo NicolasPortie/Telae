@@ -7,26 +7,39 @@ namespace Telae.Server.Hubs;
 public sealed class TelaeHub(
     TelaeRegistry registry,
     DisconnectCoordinator disconnectCoordinator,
+    PresenceSubscriptions presence,
     IOptions<IceConfiguration> iceConfiguration,
     IOptions<TurnConfiguration> turnConfiguration) : Hub
 {
     public async Task<DeviceSnapshot> RegisterDevice(RegisterDeviceRequest request)
     {
-        var device = registry.RegisterDevice(request.DeviceId, request.DisplayName, Context.ConnectionId, request.DeviceSecret);
-        await Clients.Others.SendAsync("PresenceChanged", device);
-        return device;
+        if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados do dispositivo.");
+        return await presence.RegisterAsync(request, Context.ConnectionId);
     }
 
-    public Task<DeviceSnapshot?> LookupFriend(string friendCode) => Task.FromResult(registry.FindByFriendCode(friendCode));
+    public Task<DeviceSnapshot?> LookupFriend(string friendCode)
+    {
+        registry.GetDeviceIdForConnection(Context.ConnectionId);
+        return Task.FromResult(registry.FindByFriendCode(friendCode));
+    }
 
-    public Task<IReadOnlyList<DeviceSnapshot>> GetFriends(string[] friendCodes) =>
-        Task.FromResult(registry.GetDevicesByFriendCodes(friendCodes));
+    public async Task<IReadOnlyList<DeviceSnapshot>> GetFriends(string[] friendCodes)
+    {
+        registry.GetDeviceIdForConnection(Context.ConnectionId);
+        if (friendCodes is null || friendCodes.Length > 200)
+            throw new TelaeDomainException("invalid_friend_list", "Informe no máximo 200 códigos de amigos.");
+        var friends = registry.GetDevicesByFriendCodes(friendCodes);
+        await presence.ReplaceAsync(Context.ConnectionId, friends);
+        // Read again after subscribing so changes during group setup are reflected.
+        return registry.GetDevicesByFriendCodes(friendCodes);
+    }
 
     public async Task<ShareAccessResult> StartShare(StartShareRequest request)
     {
+        if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados da transmissão.");
         EnsureCallerMatches(request.DeviceId);
         var session = registry.StartShare(request.DeviceId, request.QualityProfile);
-        await Clients.Others.SendAsync("PresenceChanged", registry.GetDevice(request.DeviceId));
+        await presence.PublishAsync(registry.GetDevice(request.DeviceId)!);
         return new ShareAccessResult(session, GetIceServers(request.DeviceId));
     }
 
@@ -51,7 +64,36 @@ public sealed class TelaeHub(
             catch (TelaeDomainException) { }
         }
 
-        await Clients.Others.SendAsync("PresenceChanged", registry.GetDevice(deviceId));
+        await presence.PublishAsync(registry.GetDevice(deviceId)!);
+    }
+
+    public async Task<ShareSessionSnapshot> RemoveViewer(string viewerDeviceId)
+    {
+        var sharerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var session = registry.RemoveViewer(sharerDeviceId, viewerDeviceId);
+        try
+        {
+            await Clients.Client(registry.GetConnectionId(viewerDeviceId)).SendAsync("SessionEnded", session.SessionId);
+        }
+        catch (TelaeDomainException) { }
+        await Clients.Caller.SendAsync("ViewerLeft", new ViewerLeftEvent(session.SessionId, viewerDeviceId));
+        return session;
+    }
+
+    public async Task<ShareSessionSnapshot> UpdateShareQuality(string qualityProfile)
+    {
+        var sharerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var session = registry.UpdateShareQuality(sharerDeviceId, qualityProfile);
+        await presence.PublishAsync(registry.GetDevice(sharerDeviceId)!);
+        foreach (var viewer in session.ViewerDeviceIds)
+        {
+            try
+            {
+                await Clients.Client(registry.GetConnectionId(viewer)).SendAsync("ShareQualityChanged", session);
+            }
+            catch (TelaeDomainException) { }
+        }
+        return session;
     }
 
     public Task<InviteSnapshot> CreateInvite()
@@ -97,6 +139,14 @@ public sealed class TelaeHub(
     public async Task SendSignal(string targetDeviceId, SignalingEnvelope envelope)
     {
         var fromDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        if (string.IsNullOrWhiteSpace(targetDeviceId) || targetDeviceId.Length > 128 ||
+            envelope?.Payload is null || string.IsNullOrWhiteSpace(envelope.SessionId) || envelope.SessionId.Length > 128 ||
+            string.IsNullOrWhiteSpace(envelope.FromDeviceId) || envelope.FromDeviceId.Length > 128 ||
+            envelope.Payload.Kind is not ("offer" or "answer" or "candidate") ||
+            (envelope.Payload.Kind is "offer" or "answer" && string.IsNullOrWhiteSpace(envelope.Payload.Sdp)) ||
+            envelope.Payload.Sdp?.Length > 65_536 || envelope.Payload.Candidate?.Candidate?.Length > 4096 ||
+            envelope.Payload.Candidate?.SdpMid?.Length > 256 || envelope.Payload.Candidate?.UsernameFragment?.Length > 256)
+            throw new TelaeDomainException("invalid_signal", "Sinalização inválida.");
         if (!string.Equals(fromDeviceId, envelope.FromDeviceId, StringComparison.Ordinal))
             throw new TelaeDomainException("invalid_signal_sender", "O remetente não corresponde ao dispositivo conectado.");
 
@@ -106,6 +156,7 @@ public sealed class TelaeHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        await presence.RemoveAsync(Context.ConnectionId);
         disconnectCoordinator.Schedule(registry.BeginDisconnect(Context.ConnectionId));
         await base.OnDisconnectedAsync(exception);
     }

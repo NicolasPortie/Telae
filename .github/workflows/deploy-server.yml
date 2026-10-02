@@ -9,6 +9,71 @@ permissions:
   contents: read
 
 jobs:
+  media-readiness:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail promptly when physical media runner is unavailable
+        shell: pwsh
+        env:
+          TELAE_MEDIA_RUNNER_READY: ${{ vars.TELAE_MEDIA_RUNNER_READY }}
+          GH_TOKEN: ${{ secrets.MEDIA_RUNNER_STATUS_TOKEN }}
+        run: ./ops/check-media-runner.ps1
+
+  media:
+    needs: media-readiness
+    runs-on: [self-hosted, Windows, X64, telae-media]
+    timeout-minutes: 30
+    concurrency:
+      group: telae-physical-media
+      cancel-in-progress: false
+    env:
+      TELAE_E2E_MEDIA: '1'
+      TELAE_E2E_RELAY: '0'
+      Profiles__Path: ${{ runner.temp }}/telae-release-media-${{ github.run_id }}.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: npm ci
+        working-directory: apps/desktop
+      - run: npm run build
+        working-directory: apps/desktop
+      - run: npm run build:audio-bridge
+        working-directory: apps/desktop
+      - name: Configure optional test TURN
+        if: vars.TELAE_TEST_TURN_URL != ''
+        shell: pwsh
+        env:
+          TEST_TURN_SECRET: ${{ secrets.TELAE_TEST_TURN_SECRET }}
+          TEST_TURN_URL: ${{ vars.TELAE_TEST_TURN_URL }}
+        run: |
+          if (-not $env:TEST_TURN_SECRET) { throw 'TELAE_TEST_TURN_URL exige secret TELAE_TEST_TURN_SECRET.' }
+          "Turn__Secret=$env:TEST_TURN_SECRET" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "Turn__Urls__0=$env:TEST_TURN_URL" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Headed real capture, playback and live controls
+        run: npm run test:e2e
+        working-directory: apps/desktop
+      - name: Forced relay with real media
+        if: vars.TELAE_TEST_TURN_URL != ''
+        env:
+          TELAE_E2E_RELAY: '1'
+        run: npm run test:e2e -- --grep 'relay obrigatório'
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-real-media
+          path: |
+            apps/desktop/test-results
+            apps/desktop/playwright-report
+          if-no-files-found: ignore
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -34,6 +99,7 @@ jobs:
         run: test -f "$RUNNER_TEMP/telae-server/Telae.Server.dll"
 
   desktop:
+    needs: [validate, media]
     runs-on: windows-latest
     timeout-minutes: 30
     permissions:
@@ -74,8 +140,15 @@ jobs:
         working-directory: apps/desktop
         run: npm test
 
+      - name: Typecheck desktop
+        working-directory: apps/desktop
+        run: npm run typecheck
+
       - name: Build Windows installer and update manifest
         working-directory: apps/desktop
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run dist
 
       - name: Validate Electron flows before publishing

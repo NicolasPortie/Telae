@@ -90,6 +90,32 @@ h2 {
   display: block;
 }
 
+.telae-viewer-controls:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Only fullscreen playback hides the local pointer; keyboard controls remain available. */
+.telae-viewer-stage:fullscreen.telae-viewer-idle:not(:has(:focus-visible, details[open], .telae-viewer-controls:hover)),
+.telae-viewer-stage:fullscreen.telae-viewer-idle:not(:has(:focus-visible, details[open], .telae-viewer-controls:hover)) * {
+  cursor: none;
+}
+
+.telae-viewer-idle .telae-viewer-diagnostics:not([open]):not(:has(:focus-visible)) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.telae-viewer-controls button:hover {
+  background-color: var(--telae-active);
+}
+
+button:disabled,
+input:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
 .telae-viewer-stage:fullscreen {
   width: 100vw;
   height: 100dvh;

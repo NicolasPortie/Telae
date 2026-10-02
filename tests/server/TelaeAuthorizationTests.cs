@@ -5,6 +5,61 @@ namespace Telae.Server.Tests;
 
 public sealed class TelaeAuthorizationTests
 {
+    [Fact]
+    public void Unchanged_registration_does_not_rewrite_profiles_but_a_rename_is_persisted()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"telae-persistence-{Guid.NewGuid():N}");
+        var path = Path.Combine(folder, "profiles.json");
+        try
+        {
+            var registry = new TelaeRegistry(path);
+            registry.RegisterDevice("device", "Owner", "first", Secret);
+            File.SetLastWriteTimeUtc(path, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            var timestamp = File.GetLastWriteTimeUtc(path);
+            registry.RegisterDevice("device", " Owner ", "reconnected", Secret);
+            Assert.Equal(timestamp, File.GetLastWriteTimeUtc(path));
+            Assert.Equal("reconnected", registry.GetConnectionId("device"));
+            registry.RegisterDevice("device", "Renamed", "reconnected", Secret);
+            Assert.NotEqual(timestamp, File.GetLastWriteTimeUtc(path));
+            Assert.Equal("Renamed", new TelaeRegistry(path).GetDevice("device")!.DisplayName);
+        }
+        finally { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
+    public void Failed_persistence_rolls_back_identity_and_connection_changes()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"telae-persistence-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            // A directory cannot be replaced by the atomic file move.
+            var registry = new TelaeRegistry(folder);
+            var error = Record.Exception(() => registry.RegisterDevice("device", "Owner", "connection", Secret));
+            Assert.True(error is IOException or UnauthorizedAccessException);
+            Assert.Null(registry.GetDevice("device"));
+            Assert.False(registry.IsRegisteredConnection("connection"));
+            Assert.Empty(Directory.GetFiles(folder));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Concurrent_registrations_preserve_all_profiles_in_atomic_snapshot()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"telae-persistence-{Guid.NewGuid():N}");
+        var path = Path.Combine(folder, "profiles.json");
+        try
+        {
+            var registry = new TelaeRegistry(path);
+            await Task.WhenAll(Enumerable.Range(0, 20).Select(index => Task.Run(() =>
+                registry.RegisterDevice($"device-{index}", "Owner", $"connection-{index}", Secret))));
+            var restored = new TelaeRegistry(path);
+            for (var index = 0; index < 20; index++) Assert.NotNull(restored.GetDevice($"device-{index}"));
+            Assert.Single(Directory.GetFiles(folder));
+        }
+        finally { if (Directory.Exists(folder)) Directory.Delete(folder, recursive: true); }
+    }
     private static readonly string Secret = new('a', 64);
     private static readonly string WrongSecret = new('b', 64);
 

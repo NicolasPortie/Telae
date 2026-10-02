@@ -6,9 +6,11 @@ import type {
   SignalingPayload,
   TransportPath,
 } from './types'
+import { PROFILE_CEILINGS } from './quality-controller'
 
-type PeerOptions = {
+export type PeerOptions = {
   iceServers: IceServerDto[]
+  iceTransportPolicy?: RTCIceTransportPolicy
   localStream?: MediaStream
   qualityProfile: QualityProfile
   sendSignal(payload: SignalingPayload): Promise<void>
@@ -16,11 +18,11 @@ type PeerOptions = {
   onStatus(status: PeerStatus): void
 }
 
-const bitrateCeilings: Record<QualityProfile, number> = {
-  auto: 10_000_000,
-  '720p60': 6_000_000,
-  '1080p30': 8_000_000,
-  '1080p60': 12_000_000,
+type SenderQuality = {
+  maxBitrateBps: number
+  degradationPreference: RTCDegradationPreference
+  maxFramerate?: number
+  scaleResolutionDownBy?: number
 }
 
 function toRtcIceServers(servers: IceServerDto[]): RTCIceServer[] {
@@ -43,7 +45,7 @@ export class WebRtcPeer {
   private readonly peer: RTCPeerConnection
   private readonly sendSignal: PeerOptions['sendSignal']
   private readonly onRemoteStream: PeerOptions['onRemoteStream']
-  private readonly qualityProfile: QualityProfile
+  private qualityProfile: QualityProfile
   private pendingCandidates: RTCIceCandidateInit[] = []
   private remoteStream: MediaStream | null = null
   private lastVideoBytes = 0
@@ -53,16 +55,25 @@ export class WebRtcPeer {
   private readonly polite: boolean
   private ignoreOffer = false
   private negotiationQueue: Promise<void> = Promise.resolve()
+  private parameterQueue: Promise<void> = Promise.resolve()
+  private requestedQuality: SenderQuality | null = null
   private lastLossReportId: string | null = null
   private lastPacketCount = 0
   private lastPacketsLost = 0
+  private lastAudioReportId: string | null = null
+  private lastAudioBytes = 0
+  private lastEncodeReportId: string | null = null
+  private lastEncodedFrames = 0
+  private lastEncodeTime = 0
+  private qualityWarnings = 0
 
   constructor(options: PeerOptions) {
     this.sendSignal = options.sendSignal
     this.onRemoteStream = options.onRemoteStream
     this.qualityProfile = options.qualityProfile
     this.polite = !options.localStream
-    this.peer = new RTCPeerConnection({ iceServers: toRtcIceServers(options.iceServers) })
+    this.peer = new RTCPeerConnection({ iceServers: toRtcIceServers(options.iceServers),
+      iceTransportPolicy: options.iceTransportPolicy })
 
     if (options.localStream) {
       for (const track of options.localStream.getTracks()) {
@@ -88,6 +99,12 @@ export class WebRtcPeer {
     }
 
     this.peer.ontrack = (event) => {
+      // Use the same target for audio/video so synchronization does not add a larger buffer.
+      try {
+        if ('jitterBufferTarget' in event.receiver) event.receiver.jitterBufferTarget = 0
+      } catch {
+        // Older runtimes retain their default adaptive buffer.
+      }
       // Áudio adicionado numa troca de fonte pode chegar com outro msid.
       // A superfície de playback mantém vídeo e áudio no mesmo stream local.
       this.remoteStream ??= new MediaStream()
@@ -104,58 +121,119 @@ export class WebRtcPeer {
   }
 
   async createOffer() {
-    return this.enqueueNegotiation(async () => {
-      if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
-      const offer = await this.peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false })
-      await this.peer.setLocalDescription(offer)
-      await this.applySenderQuality()
-      await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
-    })
+    return this.enqueueNegotiation(() => this.createOfferInternal())
+  }
+
+  private async createOfferInternal(iceRestart = false) {
+    if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
+    const offer = await this.peer.createOffer(iceRestart ? { iceRestart: true } : { offerToReceiveAudio: false, offerToReceiveVideo: false })
+    await this.peer.setLocalDescription(offer)
+    await this.applySenderQuality()
+    if (this.closed) throw new Error('The peer was closed during negotiation.')
+    await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
   }
 
   async replaceLocalStream(stream: MediaStream) {
-    if (this.closed) return
-    for (const kind of ['video', 'audio'] as const) {
-      const next = stream.getTracks().find((track) => track.kind === kind) ?? null
-      const sender = this.localSenders.get(kind)
-      if (sender) await sender.replaceTrack(next)
-      else if (next) this.localSenders.set(kind, this.peer.addTrack(next, stream))
-    }
-    await this.createOffer()
+    if (this.closed) throw new Error('The peer was closed before source replacement.')
+    return this.enqueueNegotiation(async () => {
+      const changed: Array<{ kind: 'video' | 'audio'; sender: RTCRtpSender; previous: MediaStreamTrack | null; added: boolean }> = []
+      try {
+        for (const kind of ['video', 'audio'] as const) {
+          if (this.closed) throw new Error('The peer was closed during source replacement.')
+          const next = stream.getTracks().find((track) => track.kind === kind) ?? null
+          const sender = this.localSenders.get(kind)
+          if (sender) {
+            changed.push({ kind, sender, previous: sender.track, added: false })
+            await sender.replaceTrack(next)
+          } else if (next) {
+            const added = this.peer.addTrack(next, stream)
+            changed.push({ kind, sender: added, previous: null, added: true })
+            this.localSenders.set(kind, added)
+          }
+        }
+        await this.createOfferInternal()
+      } catch (error) {
+        try {
+          if (this.closed) throw error
+          if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
+          // Settle every restoration before the caller releases its staged capture.
+          const restored = await Promise.allSettled(changed.map(async ({ kind, sender, previous, added }) => {
+            await sender.replaceTrack(previous)
+            if (added) {
+              this.peer.removeTrack(sender)
+              this.localSenders.delete(kind)
+            }
+          }))
+          if (restored.some(result => result.status === 'rejected')) this.close()
+        } catch { this.close() }
+        throw error
+      }
+    }, true)
   }
 
   async restartIce() {
-    return this.enqueueNegotiation(async () => {
-      if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
-      const offer = await this.peer.createOffer({ iceRestart: true })
-      await this.peer.setLocalDescription(offer)
-      await this.sendSignal({ kind: 'offer', sdp: offer.sdp })
-    })
+    return this.enqueueNegotiation(() => this.createOfferInternal(true))
   }
 
   updateIceServers(servers: IceServerDto[]) {
     if (!this.closed) this.peer.setConfiguration({ ...this.peer.getConfiguration(), iceServers: toRtcIceServers(servers) })
   }
 
-  private enqueueNegotiation(operation: () => Promise<void>): Promise<void> {
-    const pending = this.negotiationQueue.then(async () => { if (!this.closed) await operation() })
+  private enqueueNegotiation(operation: () => Promise<void>, rejectIfClosed = false): Promise<void> {
+    const pending = this.negotiationQueue.then(async () => {
+      if (this.closed) {
+        if (rejectIfClosed) throw new Error('The peer was closed before source replacement.')
+        return
+      }
+      await operation()
+    })
     this.negotiationQueue = pending.catch(() => undefined)
     return pending
   }
 
-  async applyQuality(maxBitrateBps: number, degradationPreference: RTCDegradationPreference) {
+  async setQualityProfile(profile: QualityProfile) {
+    this.qualityProfile = profile
+    if (this.requestedQuality) this.requestedQuality = { ...this.requestedQuality,
+      maxBitrateBps: Math.min(this.requestedQuality.maxBitrateBps, PROFILE_CEILINGS[profile]) }
+    await this.applySenderQuality()
+  }
+
+  async applyQuality(maxBitrateBps: number, degradationPreference: RTCDegradationPreference,
+    options: { maxFramerate?: number; scaleResolutionDownBy?: number } = {}) {
+    if (this.closed) return
+    this.requestedQuality = { ...this.requestedQuality, ...options,
+      maxBitrateBps: Math.min(maxBitrateBps, PROFILE_CEILINGS[this.qualityProfile]), degradationPreference }
+    await this.queueSenderQuality(this.requestedQuality)
+  }
+
+  private queueSenderQuality(quality: SenderQuality): Promise<void> {
+    const pending = this.parameterQueue.then(() => this.writeSenderQuality(quality))
+    this.parameterQueue = pending.catch(() => undefined)
+    return pending
+  }
+
+  private async writeSenderQuality(requested: SenderQuality) {
     if (this.closed) return
     const sender = this.peer.getSenders().find((item) => item.track?.kind === 'video')
     if (!sender) return
     try {
+      const { degradationPreference, maxFramerate, scaleResolutionDownBy } = requested
+      const maxBitrateBps = Math.min(requested.maxBitrateBps, PROFILE_CEILINGS[this.qualityProfile])
       const parameters = sender.getParameters()
       if (!parameters.encodings?.length) parameters.encodings = [{}]
-      parameters.encodings[0].maxBitrate = maxBitrateBps
-      ;(parameters as RTCRtpSendParameters & { degradationPreference?: RTCDegradationPreference }).degradationPreference =
-        degradationPreference
+      const encoding = parameters.encodings[0]
+      const quality = parameters as RTCRtpSendParameters & { degradationPreference?: RTCDegradationPreference }
+      if (encoding.maxBitrate === maxBitrateBps && quality.degradationPreference === degradationPreference &&
+        (maxFramerate === undefined || encoding.maxFramerate === maxFramerate) &&
+        (scaleResolutionDownBy === undefined || encoding.scaleResolutionDownBy === scaleResolutionDownBy)) return
+      encoding.maxBitrate = maxBitrateBps
+      if (maxFramerate !== undefined) encoding.maxFramerate = maxFramerate
+      if (scaleResolutionDownBy !== undefined) encoding.scaleResolutionDownBy = scaleResolutionDownBy
+      quality.degradationPreference = degradationPreference
       await sender.setParameters(parameters)
-    } catch {
-      // Sender ainda sem encodings negociados — a próxima amostra tenta de novo.
+    } catch (error) {
+      // Retry on the next sample; cap warnings per peer so a failure cannot flood logs.
+      if (this.qualityWarnings++ < 3) console.warn('Telae: failed to apply sender quality', error)
     }
   }
 
@@ -211,6 +289,11 @@ export class WebRtcPeer {
       availableOutgoingKbps: null,
       transportPath: null,
       candidateType: null,
+      qualityLimitationReason: null,
+      encodeMs: null,
+      audioLevel: null,
+      audioReceiving: null,
+      framesDecoded: null,
     }
     if (this.closed) return empty
 
@@ -219,15 +302,36 @@ export class WebRtcPeer {
     let videoReport: StatItem | null = null
     let pair: StatItem | null = null
     let codecName: string | null = null
+    let audioReport: StatItem | null = null
 
     for (const report of reports.values()) {
       const item = report as StatItem
       if ((item.type === 'inbound-rtp' || item.type === 'outbound-rtp') && item.kind === 'video') videoReport = item
+      if (item.type === 'inbound-rtp' && item.kind === 'audio') audioReport = item
       if (item.type === 'candidate-pair' && item.state === 'succeeded' && (item.nominated === true || item.selected === true)) {
         pair = item
       }
     }
 
+    if (audioReport) {
+      const bytes = typeof audioReport.bytesReceived === 'number' ? audioReport.bytesReceived : null
+      empty.audioReceiving = bytes === null || this.lastAudioReportId !== audioReport.id ? null : bytes > this.lastAudioBytes
+      empty.audioLevel = typeof audioReport.audioLevel === 'number' ? audioReport.audioLevel : null
+      this.lastAudioReportId = audioReport.id
+      this.lastAudioBytes = bytes ?? 0
+    } else {
+      this.lastAudioReportId = null
+      this.lastAudioBytes = 0
+    }
+
+    // Prefer the transport used by this RTP stream, then any selected transport.
+    const transport = typeof videoReport?.transportId === 'string' ? reports.get(videoReport.transportId) as StatItem | undefined : undefined
+    const transports = transport ? [transport] : [...reports.values()].filter(report => report.type === 'transport') as StatItem[]
+    for (const transport of transports) {
+      if (typeof transport.selectedCandidatePairId !== 'string') continue
+      const selected = reports.get(transport.selectedCandidatePairId) as StatItem | undefined
+      if (selected?.type === 'candidate-pair') { pair = selected; break }
+    }
     if (!videoReport) return empty
     const item: StatItem = videoReport
 
@@ -239,6 +343,16 @@ export class WebRtcPeer {
     }
     this.lastVideoBytes = bytes
     this.lastStatsAt = now
+    let encodeMs: number | null = null
+    if (typeof item.totalEncodeTime === 'number' && typeof item.framesEncoded === 'number') {
+      const same = this.lastEncodeReportId === item.id
+      const frames = same ? item.framesEncoded - this.lastEncodedFrames : 0
+      const seconds = same ? item.totalEncodeTime - this.lastEncodeTime : 0
+      if (frames > 0 && seconds >= 0) encodeMs = seconds * 1000 / frames
+      this.lastEncodeReportId = item.id
+      this.lastEncodedFrames = item.framesEncoded
+      this.lastEncodeTime = item.totalEncodeTime
+    } else this.lastEncodeReportId = null
 
     let lossReport: StatItem | undefined = item.type === 'inbound-rtp' ? item : undefined
     if (item.type === 'outbound-rtp') {
@@ -284,6 +398,7 @@ export class WebRtcPeer {
     }
 
     return {
+      ...empty,
       bitrateKbps,
       roundTripMs,
       packetLossPercent,
@@ -295,6 +410,9 @@ export class WebRtcPeer {
       availableOutgoingKbps,
       transportPath,
       candidateType,
+      qualityLimitationReason: typeof item.qualityLimitationReason === 'string' ? item.qualityLimitationReason : null,
+      encodeMs,
+      framesDecoded: typeof item.framesDecoded === 'number' ? item.framesDecoded : null,
     }
   }
 
@@ -315,6 +433,7 @@ export class WebRtcPeer {
   }
 
   private async applySenderQuality() {
-    await this.applyQuality(bitrateCeilings[this.qualityProfile], 'maintain-resolution')
+    this.requestedQuality ??= { maxBitrateBps: PROFILE_CEILINGS[this.qualityProfile], degradationPreference: 'maintain-resolution' }
+    await this.queueSenderQuality(this.requestedQuality)
   }
 }

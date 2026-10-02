@@ -3,19 +3,20 @@ import type { DiagnosticsSnapshot, ShareAccessResult, SignalingEnvelope } from '
 
 const mocks = vi.hoisted(() => ({
   capture: vi.fn(), release: vi.fn(), peers: [] as Array<{
-    options: { onStatus(status: string): void }, close: ReturnType<typeof vi.fn>,
+    options: { onStatus(status: string): void; onRemoteStream?(stream: MediaStream): void }, close: ReturnType<typeof vi.fn>,
     restartIce: ReturnType<typeof vi.fn>, handleSignal: ReturnType<typeof vi.fn>,
     getDiagnostics: ReturnType<typeof vi.fn<() => Promise<DiagnosticsSnapshot>>>, applyQuality: ReturnType<typeof vi.fn>,
+    setQualityProfile: ReturnType<typeof vi.fn>, replaceLocalStream: ReturnType<typeof vi.fn>,
   }>,
   handlers: new Map<string, (...args: unknown[]) => void>(),
   signaling: {
     connect: vi.fn(), disconnect: vi.fn(), getActiveShare: vi.fn(), startShare: vi.fn(),
     createInvite: vi.fn(), stopShare: vi.fn(), joinWithInvite: vi.fn(), leaveShare: vi.fn(),
-    getTurnCredentials: vi.fn(), sendSignal: vi.fn(),
+    getTurnCredentials: vi.fn(), sendSignal: vi.fn(), updateShareQuality: vi.fn(), removeViewer: vi.fn(),
   },
 }))
 
-vi.mock('./capture', () => ({ captureDesktopSource: mocks.capture, stopMediaStream: mocks.release }))
+vi.mock('./capture', () => ({ captureDesktopSource: mocks.capture, stopMediaStream: mocks.release, getProcessAudioDiagnostics: () => null }))
 vi.mock('./signaling', () => ({ SignalingClient: class {
   constructor() { Object.assign(this, mocks.signaling) }
   on(event: string, callback: (...args: unknown[]) => void) {
@@ -24,20 +25,21 @@ vi.mock('./signaling', () => ({ SignalingClient: class {
   }
 } }))
 vi.mock('./webrtc', () => ({ WebRtcPeer: class {
-  options: { onStatus(status: string): void }
+  options: { onStatus(status: string): void; onRemoteStream?(stream: MediaStream): void }
   close = vi.fn()
   restartIce = vi.fn(async () => undefined)
   createOffer = vi.fn(async () => undefined)
   handleSignal = vi.fn(async () => undefined)
   replaceLocalStream = vi.fn(async () => undefined)
   updateIceServers = vi.fn()
+  setQualityProfile = vi.fn(async () => undefined)
   applyQuality = vi.fn(async () => undefined)
   getDiagnostics = vi.fn(async (): Promise<DiagnosticsSnapshot> => ({
     bitrateKbps: 6000, roundTripMs: 30, packetLossPercent: 0, framesPerSecond: 60,
     codec: 'H264', jitterMs: null, width: 1920, height: 1080,
     availableOutgoingKbps: 20000, transportPath: 'direct', candidateType: 'host',
   }))
-  constructor(options: { onStatus(status: string): void }) { this.options = options; mocks.peers.push(this) }
+  constructor(options: { onStatus(status: string): void; onRemoteStream?(stream: MediaStream): void }) { this.options = options; mocks.peers.push(this) }
 } }))
 
 import { ShareSessionController } from './share-session'
@@ -62,7 +64,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   mocks.peers.length = 0
   mocks.handlers.clear()
-  track = Object.assign(new EventTarget(), { stop: vi.fn(), readyState: 'live' })
+  track = Object.assign(new EventTarget(), { stop: vi.fn(), readyState: 'live', getConstraints: () => ({}), applyConstraints: vi.fn(async () => undefined), contentHint: '' })
   stream = { getVideoTracks: () => [track], getAudioTracks: () => [], getTracks: () => [track] } as unknown as MediaStream
   mocks.capture.mockResolvedValue(stream)
   mocks.release.mockImplementation((value: MediaStream) => value.getTracks().forEach(item => item.stop()))
@@ -150,6 +152,9 @@ it('bounds viewer recovery even when offers succeed without restoring media', as
 it('clears a viewer recovery deadline when connected', async () => {
   await controller.joinWithInvite('ABCDEFGH')
   mocks.peers[0].options.onStatus('connected')
+  expect(controller.getSnapshot().state).toBe('negotiating')
+  mocks.peers[0].options.onRemoteStream!(stream)
+  controller.confirmVideoPresented(stream)
   await vi.advanceTimersByTimeAsync(40_000)
   expect(mocks.peers[0].restartIce).not.toHaveBeenCalled()
   expect(controller.getSnapshot().state).toBe('live')
@@ -180,8 +185,9 @@ it('adapts Auto independently for a congested and a healthy viewer', async () =>
   const stats = await mocks.peers[1].getDiagnostics()
   mocks.peers[1].getDiagnostics.mockResolvedValue({ ...stats, packetLossPercent: 8 })
   await vi.advanceTimersByTimeAsync(1000)
-  expect(mocks.peers[0].applyQuality).toHaveBeenLastCalledWith(10_000_000, 'maintain-resolution')
-  expect(mocks.peers[1].applyQuality).toHaveBeenLastCalledWith(8_000_000, 'maintain-resolution')
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(mocks.peers[0].applyQuality).toHaveBeenLastCalledWith(16_000_000, 'maintain-resolution', expect.any(Object))
+  expect(mocks.peers[1].applyQuality).toHaveBeenLastCalledWith(12_000_000, 'maintain-resolution', expect.any(Object))
   expect(controller.getSnapshot().diagnostics.bitrateKbps).toBe(12000)
 })
 
@@ -190,4 +196,100 @@ it('ends the session when the captured window ends its video track', async () =>
   track.dispatchEvent(new Event('ended'))
   expect(controller.getSnapshot()).toMatchObject({ state: 'ended', hasLocalStream: false, session: null })
   expect(mocks.signaling.stopShare).toHaveBeenCalledOnce()
+})
+
+
+it('waits for a displayed frame and rejects stale stream confirmations', async () => {
+  await controller.joinWithInvite('ABCDEFGH')
+  mocks.peers[0].options.onRemoteStream!(stream)
+  expect(controller.getSnapshot().state).toBe('negotiating')
+  controller.confirmVideoPresented({} as MediaStream)
+  expect(controller.getSnapshot().state).toBe('negotiating')
+  controller.confirmVideoPresented(stream)
+  expect(controller.getSnapshot().state).toBe('live')
+  await controller.leave()
+  controller.confirmVideoPresented(stream)
+  expect(controller.getSnapshot().state).toBe('ended')
+})
+
+it('removes an authorized viewer only after the server accepts removal', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  mocks.peers[0].options.onStatus('connected')
+  mocks.signaling.removeViewer.mockRejectedValueOnce(new Error('server error'))
+  await expect(controller.removeViewer('viewer')).rejects.toThrow()
+  expect(mocks.peers[0].close).not.toHaveBeenCalled()
+  mocks.signaling.removeViewer.mockResolvedValue(undefined)
+  await controller.removeViewer('viewer')
+  expect(mocks.peers[0].close).toHaveBeenCalledOnce()
+  expect(controller.getSnapshot().viewers).toEqual([])
+})
+
+it('changes profile without closing peers and rolls capture constraints back on server rejection', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  mocks.signaling.updateShareQuality.mockResolvedValue(undefined)
+  await controller.setQuality('720p60', 'motion')
+  expect(controller.getSnapshot()).toMatchObject({ quality: '720p60', contentMode: 'motion' })
+  expect(mocks.peers[0].close).not.toHaveBeenCalled()
+  expect(mocks.peers[0].setQualityProfile).toHaveBeenCalledWith('720p60')
+  mocks.signaling.updateShareQuality.mockRejectedValueOnce(new Error('server error'))
+  await expect(controller.setQuality('1080p60')).rejects.toThrow()
+  expect(controller.getSnapshot().quality).toBe('720p60')
+})
+
+it('bounds recovery when transport connects but no frame is displayed', async () => {
+  await controller.joinWithInvite('ABCDEFGH')
+  mocks.peers[0].options.onStatus('connected')
+  await vi.advanceTimersByTimeAsync(40_000)
+  expect(mocks.peers[0].restartIce).toHaveBeenCalledTimes(3)
+  expect(controller.getSnapshot().state).toBe('ended')
+})
+
+it('never renews viewer recovery merely because ICE connects again without video', async () => {
+  await controller.joinWithInvite('ABCDEFGH')
+  for (let index = 0; index < 4; index++) {
+    mocks.peers[0].options.onStatus('connected')
+    await vi.advanceTimersByTimeAsync(10_000)
+  }
+  expect(mocks.peers[0].restartIce).toHaveBeenCalledTimes(3)
+  expect(controller.getSnapshot().state).toBe('ended')
+})
+
+it('keeps the prior capture alive when one peer refuses a source swap', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  const nextTrack = Object.assign(new EventTarget(), { stop: vi.fn(), readyState: 'live' })
+  const next = { getVideoTracks: () => [nextTrack], getAudioTracks: () => [], getTracks: () => [nextTrack] } as unknown as MediaStream
+  mocks.capture.mockResolvedValueOnce(next)
+  mocks.peers[0].replaceLocalStream.mockRejectedValueOnce(new Error('sender refused'))
+  await expect(controller.switchSource('screen:2')).rejects.toThrow('sender refused')
+  expect(track.stop).not.toHaveBeenCalled()
+  expect(nextTrack.stop).toHaveBeenCalledOnce()
+  expect(controller.getLocalStream()).toBe(stream)
+  expect(mocks.peers[0].replaceLocalStream).toHaveBeenLastCalledWith(stream)
+})
+
+it('transitions viewers arriving during the source swap before releasing the old capture', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'first', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  const pending = deferred<void>()
+  mocks.peers[0].replaceLocalStream.mockReturnValueOnce(pending.promise)
+  const nextTrack = Object.assign(new EventTarget(), { stop: vi.fn(), readyState: 'live' })
+  const next = { getVideoTracks: () => [nextTrack], getAudioTracks: () => [], getTracks: () => [nextTrack] } as unknown as MediaStream
+  mocks.capture.mockResolvedValueOnce(next)
+  const swapping = controller.switchSource('screen:2')
+  await vi.advanceTimersByTimeAsync(0)
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'second', displayName: 'Bia' } })
+  await vi.advanceTimersByTimeAsync(0)
+  expect(track.stop).not.toHaveBeenCalled()
+  pending.resolve()
+  await swapping
+  expect(mocks.peers[1].replaceLocalStream).toHaveBeenCalledWith(next)
+  expect(controller.getLocalStream()).toBe(next)
+  expect(track.stop).toHaveBeenCalledOnce()
 })

@@ -38,6 +38,7 @@ export type DesktopEnvironment = {
   platform: NodeJS.Platform
   isPackaged: boolean
   signalingUrl: string
+  forceRelay?: boolean
 }
 
 export type UpdateStatus =

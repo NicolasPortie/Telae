@@ -34,6 +34,7 @@ export class StreamController {
   private startToken = 0
   private detachEnded: (() => void) | null = null
   private readonly pendingCaptures = new Set<AbortController>()
+  private readonly preparedStreams = new Set<MediaStream>()
 
   private readonly deps: ControllerDeps
 
@@ -93,7 +94,7 @@ export class StreamController {
     }
   }
 
-  async switchSource(sourceId: string, quality: QualityProfile): Promise<{ previous: MediaStream; current: MediaStream }> {
+  async prepareSwitch(sourceId: string, quality: QualityProfile) {
     if (!this.stream) throw new Error('Inicie a transmissão antes de trocar a fonte.')
     const token = this.startToken
     const previous = this.stream
@@ -102,10 +103,24 @@ export class StreamController {
       this.deps.release(current)
       throw new Error('A transmissão foi encerrada durante a troca de fonte.')
     }
-    this.stream = current
-    this.observeEnded(current)
-    this.emit()
-    return { previous, current }
+    this.preparedStreams.add(current)
+    const rollback = () => {
+      if (this.preparedStreams.delete(current)) this.deps.release(current)
+    }
+    return {
+      previous, current, rollback,
+      commit: () => {
+        if (token !== this.startToken || this.stream !== previous || !this.preparedStreams.has(current) || current.getVideoTracks?.()[0]?.readyState === 'ended') {
+          rollback()
+          throw new Error('A fonte ou a transmissão foi encerrada durante a troca.')
+        }
+        this.preparedStreams.delete(current)
+        this.stream = current
+        this.observeEnded(current)
+        this.deps.release(previous)
+        this.emit()
+      },
+    }
   }
 
   release(stream: MediaStream) {
@@ -127,6 +142,8 @@ export class StreamController {
   }
 
   private teardownStream() {
+    for (const stream of this.preparedStreams) this.deps.release(stream)
+    this.preparedStreams.clear()
     this.detachEnded?.()
     this.detachEnded = null
     const active = this.stream

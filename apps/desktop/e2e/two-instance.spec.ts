@@ -5,6 +5,18 @@ import path from 'node:path'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
+const WITH_RELAY = process.env.TELAE_E2E_RELAY === '1'
+
+async function expectRenderedFrames(page: Page) {
+  const video = page.getByLabel('Transmissão do seu amigo')
+  await expect(video).toBeVisible({ timeout: 60_000 })
+  await expect.poll(() => video.evaluate((element) => {
+    const media = element as HTMLVideoElement
+    return media.getVideoPlaybackQuality().totalVideoFrames
+  }), { timeout: 60_000 }).toBeGreaterThan(0)
+  await expect.poll(() => video.evaluate((element) => (element as HTMLVideoElement).videoWidth)).toBeGreaterThan(0)
+  return video
+}
 
 async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> {
   const userDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-e2e-'))
@@ -52,6 +64,13 @@ test.describe('duas instâncias Telae', () => {
       await expect(page.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
       await expect(page.getByRole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeout: 15_000 })
       const windowChoices = page.getByRole('radiogroup', { name: 'Janelas' }).getByRole('radio')
+      await windowChoices.first().focus()
+      await windowChoices.first().press('End')
+      await expect(windowChoices.last()).toBeFocused()
+      await expect(windowChoices.last()).toHaveAttribute('aria-checked', 'true')
+      await windowChoices.last().press('ArrowRight')
+      await expect(windowChoices.first()).toBeFocused()
+      await expect(windowChoices.first()).toHaveAttribute('aria-checked', 'true')
       await windowChoices.first().click()
       await page.getByRole('button', { name: 'Compartilhar e gerar convite' }).click()
       await expect(page.getByLabel(/Código de convite/)).toBeVisible({ timeout: 60_000 })
@@ -76,7 +95,7 @@ test.describe('duas instâncias Telae', () => {
       await expect(sharer.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
       const windowSources = await sharer.evaluate(() => window.telae.listCaptureSources())
       const firstWindowSource = windowSources.find((source: { kind: string; id: string }) => source.kind === 'window')
-      if (firstWindowSource) {
+      if (WITH_MEDIA && firstWindowSource) {
         await sharer.evaluate((sourceId) => window.telae.selectCaptureSource(sourceId), firstWindowSource.id)
         const processId = await sharer.evaluate((sourceId) => window.telae.resolveWindowAudioProcess(sourceId), firstWindowSource.id)
         expect(processId).toBeGreaterThan(0)
@@ -118,6 +137,8 @@ test.describe('duas instâncias Telae', () => {
       await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
       const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
       await expect(remoteVideo).toBeVisible({ timeout: 60_000 })
+      await expectRenderedFrames(viewer)
+      await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo/)).toBeVisible()
       await viewer.waitForFunction(
         (selector) => {
           const video = document.querySelector(selector)
@@ -135,6 +156,15 @@ test.describe('duas instâncias Telae', () => {
         const track = stream instanceof MediaStream ? stream.getAudioTracks()[0] : undefined
         return track ? { readyState: track.readyState, muted: track.muted } : null
       }), { timeout: 30_000 }).toEqual({ readyState: 'live', muted: false })
+
+      const controls = viewer.getByRole('group', { name: 'Controles da transmissão' })
+      await viewer.mouse.move(0, 0)
+      await expect(controls).toHaveCSS('opacity', '0', { timeout: 6000 })
+      await remoteVideo.hover()
+      await expect(controls).toHaveCSS('opacity', '1')
+      await expect(controls).toHaveCSS('opacity', '0', { timeout: 6000 })
+      await remoteVideo.hover({ position: { x: 50, y: 50 } })
+      await expect(controls).toHaveCSS('opacity', '1')
 
       // A wide desktop must use the viewer's available area without cropping the stream.
       for (const bounds of [{ width: 1600, height: 900 }, { width: 900, height: 1100 }]) {
@@ -175,8 +205,25 @@ test.describe('duas instâncias Telae', () => {
       }))).toEqual(expect.objectContaining({ fullscreen: true, fit: 'contain' }))
       await expect.poll(() => remoteVideo.evaluate((video) => Math.round(video.getBoundingClientRect().height / window.innerHeight))).toBe(1)
       await expect.poll(() => remoteVideo.evaluate((video) => Math.abs(video.getBoundingClientRect().width - window.innerWidth) < 2)).toBe(true)
+      await expect(viewer.getByRole('button', { name: 'Sair da tela cheia' })).toBeVisible()
+      await remoteVideo.hover({ position: { x: 50, y: 50 } })
+      await expect(controls).toHaveCSS('opacity', '0', { timeout: 6000 })
+      await expect(remoteVideo).toHaveCSS('cursor', 'none')
+      await remoteVideo.hover({ position: { x: 80, y: 80 } })
+      await expect(controls).toHaveCSS('opacity', '1')
+      await expect(remoteVideo).not.toHaveCSS('cursor', 'none')
+      await volume.focus()
+      await volume.press('ArrowRight')
+      await viewer.waitForTimeout(3300)
+      await expect(controls).toHaveCSS('opacity', '1')
+      await expect(remoteVideo).not.toHaveCSS('cursor', 'none')
       await viewer.keyboard.press('Escape')
       await expect(remoteVideo).toBeVisible()
+      await expect.poll(() => viewer.evaluate(() => document.fullscreenElement === null)).toBe(true)
+      await viewer.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur() })
+      await remoteVideo.hover({ position: { x: 50, y: 50 } })
+      await expect(controls).toHaveCSS('opacity', '0', { timeout: 6000 })
+      await expect(remoteVideo).not.toHaveCSS('cursor', 'none')
 
       await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
       await expect(sharer.getByText('A transmissão e o código continuam ativos durante a troca.')).toBeVisible()
@@ -194,18 +241,77 @@ test.describe('duas instâncias Telae', () => {
       await secondViewer.getByRole('button', { name: 'Entrar', exact: true }).click()
       const secondVideo = secondViewer.getByLabel('Transmissão do seu amigo')
       await expect(secondVideo).toBeVisible({ timeout: 60_000 })
+      await expectRenderedFrames(secondViewer)
+
+      await sharer.evaluate(() => window.scrollTo(0, 0))
+      await sharer.screenshot({ path: test.info().outputPath('sharer-ui.png'), fullPage: true, mask: [sharer.getByLabel(/Código de convite/), sharer.locator('video')] })
       await expect(sharer.getByText('2 pessoas conectadas')).toBeVisible()
 
-      await viewer.getByRole('button', { name: 'Sair' }).click()
-      await expect(viewer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+      const liveQuality = sharer.getByRole('combobox', { name: 'Qualidade da transmissão' })
+      await liveQuality.selectOption('720p60')
+      await expect(liveQuality).toHaveValue('720p60')
+      const contentMode = sharer.getByRole('combobox', { name: 'Conteúdo da transmissão' })
+      await contentMode.selectOption('motion')
+      await expect(contentMode).toHaveValue('motion')
+      const upload = sharer.getByRole('spinbutton', { name: 'Limite de vídeo (Mbps)' })
+      await upload.fill('12')
+      await upload.press('Tab')
+      await expect(upload).toHaveValue('12')
+      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
+      await sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true }).click()
+      await expect(sharer.getByRole('button', { name: 'Ativar áudio da transmissão', exact: true })).toBeVisible()
+      await sharer.getByRole('button', { name: 'Ativar áudio da transmissão', exact: true }).click()
+      await expect(sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true })).toBeVisible()
+      await expectRenderedFrames(secondViewer)
+
+      await sharer.getByRole('button', { name: 'Remover ViewerE2E', exact: true }).click()
+      await expect(viewer.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
+      await expect(viewer.getByRole('button', { name: 'Exportar diagnóstico (JSON)', exact: true })).toBeVisible()
+      await expect(sharer.getByRole('button', { name: 'Remover ViewerE2E', exact: true })).toHaveCount(0)
       await expect(secondVideo).toBeVisible()
       await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
       await expect(sharer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
       await expect(secondViewer.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
+      await expect(sharer.getByRole('button', { name: 'Exportar diagnóstico da última transmissão', exact: true })).toBeVisible()
     } finally {
       await sharerApp.close()
       await viewerApp.close()
       await secondViewerApp.close()
+    }
+  })
+
+  test('relay obrigatório recebe frames reais via TURN', async () => {
+    test.skip(!WITH_RELAY, 'Ative TELAE_E2E_MEDIA=1 e TELAE_E2E_RELAY=1 com TURN funcional')
+    const sharerApp = await launchApp()
+    const viewerApp = await launchApp(true)
+    try {
+      const sharer = await firstWindow(sharerApp)
+      const viewer = await firstWindow(viewerApp)
+      for (const page of [sharer, viewer]) {
+        const environment = await page.evaluate(() => window.telae.getEnvironment())
+        expect(environment).toHaveProperty('forceRelay', true)
+      }
+      await enterWithName(sharer, 'RelaySender')
+      await enterWithName(viewer, 'RelayReceiver')
+      await sharer.getByRole('button', { name: /Escolher tela/ }).click()
+      await sharer.getByRole('radio').first().click()
+      await sharer.getByRole('button', { name: /Compartilhar e gerar convite/ }).click()
+      const invite = sharer.getByLabel(/Código de convite/)
+      await expect(invite).toBeVisible({ timeout: 60_000 })
+      const code = (await invite.textContent())?.trim() ?? ''
+      expect(code).toMatch(/^[A-Z2-9]{8}$/)
+      await viewer.getByLabel('Código de convite').fill(code)
+      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      await expectRenderedFrames(viewer)
+      await sharer.getByText('Detalhes da conexão', { exact: true }).click()
+      // The selected candidate pair must report relay, not just a configured TURN URL.
+      await expect(sharer.locator('dl > div').filter({ has: sharer.locator('dt', { hasText: /^Conexão$/ }) }).locator('dd')).toHaveText('Via servidor', { timeout: 30_000 })
+      await viewer.getByText('Detalhes da conexão', { exact: true }).click()
+      await expect(viewer.locator('dl > div').filter({ has: viewer.locator('dt', { hasText: /^Conexão$/ }) }).locator('dd')).toHaveText('Via servidor', { timeout: 30_000 })
+      await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
+    } finally {
+      await sharerApp.close()
+      await viewerApp.close()
     }
   })
 })

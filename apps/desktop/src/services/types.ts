@@ -55,6 +55,7 @@ export type ViewerJoinedEvent = {
 export type ViewerLeftEvent = { sessionId: string; viewerDeviceId: string }
 
 export type QualityProfile = 'auto' | '720p60' | '1080p30' | '1080p60'
+export type ContentMode = 'text' | 'motion'
 
 export type ConnectionStatus = 'offline' | 'connecting' | 'online' | 'reconnecting'
 
@@ -69,6 +70,11 @@ export type PeerStatus = 'new' | 'connecting' | 'connected' | 'disconnected' | '
 export type TransportPath = 'direct' | 'relay' | null
 
 export type DiagnosticsSnapshot = {
+  qualityLimitationReason?: string | null
+  encodeMs?: number | null
+  audioLevel?: number | null
+  audioReceiving?: boolean | null
+  framesDecoded?: number | null
   bitrateKbps: number
   roundTripMs: number | null
   packetLossPercent: number | null

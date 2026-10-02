@@ -1,10 +1,14 @@
 import type { QualityProfile } from './types'
-import { createProcessAudioCapture, type ProcessAudioCapture } from './process-audio'
+import { createProcessAudioCapture, type ProcessAudioCapture, type ProcessAudioDiagnostics } from './process-audio'
 
 const processCaptures = new WeakMap<MediaStream, ProcessAudioCapture>()
 
+export function getProcessAudioDiagnostics(stream: MediaStream | null): ProcessAudioDiagnostics | null {
+  return stream ? processCaptures.get(stream)?.diagnostics ?? null : null
+}
+
 const qualityConstraints: Record<QualityProfile, MediaTrackConstraints> = {
-  auto: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } },
+  auto: { width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: 30, max: 30 } },
   '720p60': { width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 60 } },
   '1080p30': { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 30 } },
   '1080p60': { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } },
@@ -55,7 +59,7 @@ export async function captureDesktopSource(
       stopMediaStream(stream)
       throw new Error('A fonte escolhida não retornou vídeo.')
     }
-    track.contentHint = 'motion'
+    track.contentHint = quality === 'auto' || quality === '1080p30' ? 'detail' : 'motion'
     for (const audioTrack of stream.getAudioTracks()) {
       audioTrack.contentHint = 'music'
     }

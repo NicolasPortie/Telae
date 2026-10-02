@@ -1,4 +1,6 @@
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
+import { spawn, execFile, type ChildProcess } from 'node:child_process'
+import { promisify } from 'node:util'
+const execFileAsync = promisify(execFile)
 import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -166,17 +168,16 @@ function registerIpc() {
       throw new Error('Selecione uma janela válida para capturar seu áudio.')
     const match = /^window:(\d+):/.exec(sourceId)
     if (!match) throw new Error('Não foi possível identificar esta janela.')
-    const result = spawnSync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true })
+    const result = await execFileAsync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     const processId = Number(result.stdout.trim())
-    if (result.status !== 0 || !Number.isInteger(processId) || processId <= 0)
+    if (!Number.isInteger(processId) || processId <= 0)
       throw new Error('Não foi possível identificar o áudio deste aplicativo.')
     return processId
   })
 
-  ipcMain.handle('audio:list-processes', (): AudioProcess[] => {
+  ipcMain.handle('audio:list-processes', async (): Promise<AudioProcess[]> => {
     const executable = findAudioBridge()
-    const result = spawnSync(executable, ['list'], { encoding: 'utf8', windowsHide: true })
-    if (result.status !== 0) throw new Error(result.stderr.trim() || 'Não foi possível listar os aplicativos de áudio.')
+    const result = await execFileAsync(executable, ['list'], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     return JSON.parse(result.stdout) as AudioProcess[]
   })
 
@@ -235,6 +236,7 @@ function registerIpc() {
     platform: process.platform,
     isPackaged: app.isPackaged,
     signalingUrl: readSignalingUrl(),
+    forceRelay: !app.isPackaged && process.env.TELAE_E2E_RELAY === '1',
   }))
   ipcMain.handle('environment:set-signaling-url', (_event, signalingUrl: string) => {
     const saved = persistSignalingUrl(signalingUrl)
@@ -290,6 +292,7 @@ async function createWindow() {
     },
   })
 
+  mainWindow.webContents.on('will-navigate', event => event.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   mainWindow.webContents.on('render-process-gone', () => {
     void stopAudioBridge()

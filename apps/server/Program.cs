@@ -1,19 +1,24 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Options;
 using Telae.Server.Core;
 using Telae.Server.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddTrustedClientAddress(builder.Configuration);
 
 builder.Services.AddSignalR(options =>
 {
     options.EnableDetailedErrors = builder.Environment.IsDevelopment();
     options.AddFilter(typeof(DomainErrorFilter));
+    options.AddFilter<InputLimitFilter>();
+    options.MaximumReceiveMessageSize = 128 * 1024;
 });
 
 builder.Services.Configure<IceConfiguration>(builder.Configuration.GetSection("Ice"));
-builder.Services.Configure<TurnConfiguration>(builder.Configuration.GetSection("Turn"));
+builder.Services.AddSingleton<IValidateOptions<TurnConfiguration>, TurnConfigurationValidator>();
+builder.Services.AddOptions<TurnConfiguration>().Bind(builder.Configuration.GetSection("Turn")).ValidateOnStart();
 builder.Services.Configure<ReconnectConfiguration>(builder.Configuration.GetSection("Reconnect"));
 
 var profilePath = builder.Configuration["Profiles:Path"];
@@ -28,6 +33,8 @@ else if (!Path.IsPathRooted(profilePath))
 
 builder.Services.AddSingleton(new TelaeRegistry(profilePath));
 builder.Services.AddSingleton<DisconnectCoordinator>();
+builder.Services.AddSingleton<PresenceSubscriptions>();
+builder.Services.AddSingleton<InputLimitFilter>();
 
 builder.Services.AddCors(options =>
 {
@@ -47,6 +54,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseCors();
 var updatesPath = builder.Configuration["Updates:Path"];
 if (string.IsNullOrWhiteSpace(updatesPath))
@@ -74,7 +82,8 @@ app.UseStaticFiles(new StaticFileOptions
         context.Context.Response.Headers.XContentTypeOptions = "nosniff";
     }
 });
-app.MapGet("/health", () => Results.Ok(new { service = "telae-signaling", status = "ok" }));
+app.MapGet("/health", (IOptions<IceConfiguration> ice, IOptions<TurnConfiguration> turn) =>
+    Results.Ok(new { service = "telae-signaling", status = "ok", connectivity = ConnectivityHealth.From(ice.Value, turn.Value) }));
 app.MapHub<TelaeHub>("/hubs/telae");
 
 app.Run();

@@ -5,8 +5,19 @@ function audioWorkletUrl(): string {
   return new URL('telae-pcm-processor.js', window.location.href).toString()
 }
 
+export type ProcessAudioDiagnostics = {
+  sampleRate: number
+  maxQueueFrames: number
+  queuedFrames: number
+  queuedMs: number
+  droppedFrames: number
+  underrunFrames: number
+  error: string | null
+}
+
 export type ProcessAudioCapture = {
   track: MediaStreamTrack
+  readonly diagnostics?: ProcessAudioDiagnostics
   stop(): Promise<void>
 }
 
@@ -19,6 +30,8 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
   let node: AudioWorkletNode | null = null
   let destination: MediaStreamAudioDestinationNode | null = null
   let disposeAbort: () => void = () => undefined
+  let bridgeFailure: string | null = null
+  let failCapture: (() => void) | null = null
 
   try {
     const metadata = await new Promise<{ sampleRate: number; channels: number }>((resolve, reject) => {
@@ -27,11 +40,19 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
         reject(new Error('O áudio do aplicativo demorou demais para iniciar.'))
       }, 8000)
 
+      let started = false
       disposeState = window.telae.onAudioState((state: AudioBridgeState) => {
         if (state.captureId !== captureId) return
+        if (started) {
+          if (state.status === 'idle' || state.status === 'error') {
+            bridgeFailure = state.status === 'error' ? state.message : 'A captura de áudio foi interrompida.'
+            failCapture?.()
+          }
+          return
+        }
         if (state.status === 'capturing') {
+          started = true
           window.clearTimeout(timeout)
-          disposeState()
           resolve(state.metadata)
         } else if (state.status === 'error') {
           window.clearTimeout(timeout)
@@ -49,6 +70,11 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
       disposeAbort = () => signal?.removeEventListener('abort', onAbort)
 
       window.telae.startAudioCapture(processId, captureId).catch((error: unknown) => {
+        if (started) {
+          bridgeFailure = error instanceof Error ? error.message : String(error)
+          failCapture?.()
+          return
+        }
         window.clearTimeout(timeout)
         disposeState()
         reject(error instanceof Error ? error : new Error(String(error)))
@@ -83,14 +109,33 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
     const track = destination.stream.getAudioTracks()[0]
     if (!track) throw new Error('Não foi possível criar a faixa de áudio do aplicativo.')
     track.contentHint = 'music'
+    if (bridgeFailure) throw new Error(bridgeFailure)
+
+    let diagnostics: ProcessAudioDiagnostics = {
+      sampleRate: context.sampleRate,
+      maxQueueFrames: Math.max(1, Math.floor(context.sampleRate * 0.12)),
+      queuedFrames: 0, queuedMs: 0, droppedFrames: 0, underrunFrames: 0, error: null,
+    }
+    node.port.onmessage = ({ data }) => {
+      if (data?.type !== 'diagnostics') return
+      diagnostics = {
+        sampleRate: data.sampleRate, maxQueueFrames: data.maxQueueFrames,
+        queuedFrames: data.queuedFrames, queuedMs: data.queuedFrames * 1000 / data.sampleRate,
+        droppedFrames: data.droppedFrames, underrunFrames: data.underrunFrames,
+        error: diagnostics.error,
+      }
+    }
 
     let stopped = false
-    return {
+    const capture: ProcessAudioCapture = {
       track,
+      get diagnostics() { return { ...diagnostics } },
       async stop() {
         if (stopped) return
         stopped = true
+        disposeState()
         disposeChunk()
+        if (node) node.port.onmessage = null
         node?.port.postMessage({ type: 'reset' })
         node?.disconnect()
         track.stop()
@@ -101,6 +146,14 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
         }
       },
     }
+    failCapture = () => {
+      if (stopped) return
+      diagnostics = { ...diagnostics, error: bridgeFailure }
+      // stop() does not emit ended; notify listeners of unexpected bridge failure.
+      void capture.stop().catch(() => undefined)
+      track.dispatchEvent(new Event('ended'))
+    }
+    return capture
   } catch (error) {
     disposeAbort()
     disposeState()
