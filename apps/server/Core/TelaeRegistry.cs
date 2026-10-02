@@ -35,6 +35,8 @@ public sealed class TelaeRegistry
 
         lock (_gate)
         {
+            var profileChanged = false;
+            string? previousName = null;
             if (_deviceByConnection.TryGetValue(connectionId, out var registeredDevice) && registeredDevice != deviceId)
                 throw new TelaeDomainException("device_mismatch", "Esta conexão já pertence a outro dispositivo.");
             if (!_profiles.TryGetValue(deviceId, out var profile))
@@ -44,13 +46,27 @@ public sealed class TelaeRegistry
                     DeviceSecretHash = Convert.ToHexString(secretHash)
                 };
                 _profiles.Add(deviceId, profile);
+                profileChanged = true;
             }
             else
             {
                 if (profile.DeviceSecretHash is null ||
                     !CryptographicOperations.FixedTimeEquals(secretHash, Convert.FromHexString(profile.DeviceSecretHash)))
                     throw new TelaeDomainException("device_unauthorized", "A credencial deste dispositivo é inválida. Atualize o aplicativo e tente novamente.");
+                profileChanged = profile.DisplayName != displayName;
+                previousName = profile.DisplayName;
                 profile.DisplayName = displayName;
+            }
+
+            if (profileChanged)
+            {
+                try { PersistProfiles(); }
+                catch
+                {
+                    if (previousName is null) _profiles.Remove(deviceId);
+                    else profile.DisplayName = previousName;
+                    throw;
+                }
             }
 
             if (_connectionByDevice.TryGetValue(deviceId, out var previousConnection))
@@ -59,7 +75,6 @@ public sealed class TelaeRegistry
             _disconnectGenerationByDevice[deviceId] = NextDisconnectGenerationLocked(deviceId);
             _connectionByDevice[deviceId] = connectionId;
             _deviceByConnection[connectionId] = deviceId;
-            PersistProfiles();
             return ToDeviceSnapshot(profile);
         }
     }
@@ -130,11 +145,15 @@ public sealed class TelaeRegistry
 
     public ShareSessionSnapshot JoinShare(string viewerDeviceId, string sharerDeviceId)
     {
+        if (string.IsNullOrWhiteSpace(sharerDeviceId) || sharerDeviceId.Length > 128)
+            throw new TelaeDomainException("invalid_sharer", "Informe um dispositivo válido.");
         lock (_gate)
         {
             RequireOnlineDevice(viewerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
                 throw new TelaeDomainException("share_not_active", "Esta pessoa não está compartilhando a tela agora.");
+            if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
+                throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
             if (!session.ViewerDeviceIds.Contains(viewerDeviceId))
                 throw new TelaeDomainException("invite_required", "Use um código de convite para entrar nesta transmissão.");
             return AttachViewerLocked(viewerDeviceId, session);
@@ -176,6 +195,8 @@ public sealed class TelaeRegistry
 
     private ShareSessionSnapshot AttachViewerLocked(string viewerDeviceId, ShareSessionRecord session)
     {
+        if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
+            throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
         RequireOnlineDevice(session.SharerDeviceId);
         if (viewerDeviceId == session.SharerDeviceId)
             throw new TelaeDomainException("cannot_view_own_share", "O dispositivo não pode assistir à própria transmissão.");
@@ -200,6 +221,40 @@ public sealed class TelaeRegistry
             // de invite_invalid. Eles saem por expiração no próximo CreateInvite.
             return ToSessionSnapshot(session);
         }
+    }
+
+    public ShareSessionSnapshot RemoveViewer(string sharerDeviceId, string viewerDeviceId)
+    {
+        if (string.IsNullOrWhiteSpace(viewerDeviceId) || viewerDeviceId.Length > 128)
+            throw new TelaeDomainException("invalid_viewer", "Informe um espectador válido.");
+        lock (_gate)
+        {
+            RequireOnlineDevice(sharerDeviceId);
+            if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
+                throw new TelaeDomainException("share_not_active", "Este dispositivo não possui uma transmissão ativa.");
+            if (!session.ViewerDeviceIds.Remove(viewerDeviceId))
+                throw new TelaeDomainException("viewer_not_joined", "O espectador não participa desta transmissão.");
+            session.BlockedViewerDeviceIds.Add(viewerDeviceId);
+            return ToSessionSnapshot(session);
+        }
+    }
+
+    public ShareSessionSnapshot UpdateShareQuality(string sharerDeviceId, string qualityProfile)
+    {
+        var normalized = NormalizeQualityProfile(qualityProfile);
+        lock (_gate)
+        {
+            RequireOnlineDevice(sharerDeviceId);
+            if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
+                throw new TelaeDomainException("share_not_active", "Este dispositivo não possui uma transmissão ativa.");
+            session.QualityProfile = normalized;
+            return ToSessionSnapshot(session);
+        }
+    }
+
+    public bool IsRegisteredConnection(string connectionId)
+    {
+        lock (_gate) return _deviceByConnection.ContainsKey(connectionId);
     }
 
     public LeaveViewerResult LeaveShare(string viewerDeviceId)
@@ -420,17 +475,25 @@ public sealed class TelaeRegistry
 
     private static string NormalizeDisplayName(string value)
     {
-        var normalized = value.Trim();
+        var normalized = value?.Trim() ?? "";
         if (normalized.Length is < 1 or > 32)
             throw new TelaeDomainException("invalid_display_name", "O nome deve ter entre 1 e 32 caracteres.");
         return normalized;
     }
 
-    private static string NormalizeFriendCode(string value) => value.Trim().Replace("-", "").ToUpperInvariant();
+    private static string NormalizeFriendCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 32)
+            throw new TelaeDomainException("invalid_friend_code", "Código inválido.");
+        var normalized = value.Trim().Replace("-", "").ToUpperInvariant();
+        if (normalized.Length is not (6 or 8) || !normalized.All(char.IsAsciiLetterOrDigit))
+            throw new TelaeDomainException("invalid_friend_code", "Código inválido.");
+        return normalized;
+    }
 
     private static string NormalizeQualityProfile(string value)
     {
-        var normalized = value.Trim().ToLowerInvariant();
+        var normalized = value?.Trim().ToLowerInvariant();
         return normalized switch
         {
             "auto" or "720p60" or "1080p30" or "1080p60" => normalized,
@@ -461,8 +524,9 @@ public sealed class TelaeRegistry
     {
         public string SessionId { get; } = sessionId;
         public string SharerDeviceId { get; } = sharerDeviceId;
-        public string QualityProfile { get; } = qualityProfile;
+        public string QualityProfile { get; set; } = qualityProfile;
         public HashSet<string> ViewerDeviceIds { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> BlockedViewerDeviceIds { get; } = new(StringComparer.Ordinal);
         public DateTimeOffset StartedAt { get; } = startedAt;
     }
 
