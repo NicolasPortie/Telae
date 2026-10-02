@@ -7,6 +7,7 @@ namespace Telae.Server.Core;
 public sealed class DisconnectCoordinator(
     TelaeRegistry registry,
     IHubContext<TelaeHub> hubContext,
+    PresenceSubscriptions presence,
     IOptions<ReconnectConfiguration> reconnectConfiguration,
     IHostApplicationLifetime applicationLifetime,
     ILogger<DisconnectCoordinator> logger)
@@ -29,7 +30,7 @@ public sealed class DisconnectCoordinator(
 
             var result = registry.FinalizeDisconnect(pending.DeviceId!, pending.Generation);
             if (result.ChangedDevice is not null)
-                await hubContext.Clients.All.SendAsync("PresenceChanged", result.ChangedDevice, applicationLifetime.ApplicationStopping);
+                await presence.PublishAsync(result.ChangedDevice);
 
             if (result.EndedSession is not null)
             {

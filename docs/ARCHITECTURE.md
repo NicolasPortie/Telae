@@ -152,11 +152,21 @@ The current implementation supports up to 12 Viewers per Share Session. Each Vie
 
 The Sharer captures one source but sends media separately to each Viewer. Upload and encoding cost therefore grow with the Viewer count; 12 is an admission limit, not a measured guarantee of 1080p60 on every machine. An SFU remains a future transport option if one upstream is needed.
 
+The desktop exposes a total video upload ceiling (40 Mbps by default, configurable from 2 to 200 Mbps). Each peer receives a share of that ceiling; audio, protocol overhead and brief negotiation transitions are additional traffic. Text mode prioritizes resolution; motion mode prioritizes frame rate and may downscale. Measured encoder CPU pressure also reduces quality. Quality and audio mute can be changed without recreating the session. Removing a Viewer revokes its access for the remaining lifetime of that session, including when it reuses the same invite.
+
+A Viewer is marked live only after the playback element confirms a presented frame. A connected transport without displayed video retains a bounded recovery deadline. Audio diagnostics distinguish an available track from receiving packets; silence is not itself a transmission failure. The process-audio worklet keeps at most 120 ms of PCM in a fixed ring buffer and reports discarded frames and underruns.
+
+Diagnostic exports use an explicit allowlist without invite codes, identities or session identifiers. They retain up to one hour of structured samples, bounded state/error-category history and aggregates covering all collected samples. Actual glass-to-glass latency and perceptual A/V drift still require the physical benchmark.
+
 ## Device credentials and migration
 
 Each desktop stores a random 256-bit device credential locally. Registration requires it; the server persists only its SHA-256 hash and compares credentials in constant time. Device IDs and friend codes are public identifiers and do not authorize registration or joining.
 
 A new Viewer must present an active invite. Direct `JoinShare` is restricted to Viewers already authorized for that active session; leaving revokes that authorization. Signaling remains restricted to the Sharer/Viewer pair.
+
+Presence is delivered only to registered connections subscribed to known friend codes through `GetFriends`. Each subscription request replaces the prior set, including an empty set; reconnecting clients restore their subscriptions. Public identifiers do not grant access to media. Hub commands enforce input sizes and separate budgets for registration, commands and ICE signaling.
+
+TURN configuration is checked at startup. The health endpoint reports whether relay credentials are configured without returning secrets or claiming verified connectivity. Real relay validation forces the ICE relay policy and checks the selected candidate pair. See [release validation](RELEASE_VALIDATION.md).
 
 Desktop profiles without credentials migrate to a new device ID and credential, preserving the display name and saved friend codes. Legacy server profiles cannot be claimed by supplying an arbitrary new credential. Coordinate the backend and desktop update; pre-0.1.12 clients must update before registering against the secured backend.
 

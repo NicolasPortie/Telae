@@ -1,3 +1,4 @@
+import { getProcessAudioDiagnostics } from './capture'
 import { QualityController } from './quality-controller'
 import { SignalingClient } from './signaling'
 import { StreamController } from './stream-controller'
@@ -5,6 +6,7 @@ import type { DeviceSnapshot } from './types'
 import { WebRtcPeer } from './webrtc'
 import type {
   ConnectionStatus,
+  ContentMode,
   DiagnosticsSnapshot,
   IceServerDto,
   PeerStatus,
@@ -43,6 +45,12 @@ export type SessionSnapshot = {
   viewerPresence: ViewerPresence
   viewerName: string | null
   viewerCount: number
+  viewers: Array<{ deviceId: string; displayName: string; state: string }>
+  contentMode: ContentMode
+  audioMuted: boolean
+  uploadBudgetMbps: number
+  relayAvailable: boolean
+  audioBuffer: ReturnType<typeof getProcessAudioDiagnostics>
   quality: QualityProfile
   includeAudio: boolean
   diagnostics: DiagnosticsSnapshot
@@ -109,6 +117,13 @@ export class ShareSessionController {
   private viewerName: string | null = null
   private quality: QualityProfile = 'auto'
   private includeAudio = true
+  private contentMode: ContentMode = 'text'
+  private audioMuted = false
+  private uploadBudgetMbps = 40
+  private forceRelay = false
+  private framePresented = false
+  private readonly viewerNames = new Map<string, string>()
+  private readonly viewerStates = new Map<string, PeerStatus>()
   private diagnostics: DiagnosticsSnapshot = EMPTY_DIAGNOSTICS
   private liveSinceMs: number | null = null
   private signalingStatus: ConnectionStatus = 'offline'
@@ -166,7 +181,13 @@ export class ShareSessionController {
       inviteExpiresAt: this.inviteExpiresAt,
       viewerPresence: this.viewerPresence,
       viewerName: this.viewerName,
-      viewerCount: this.sharerPeers.size,
+      viewerCount: this.connectedViewers.size,
+      viewers: [...this.sharerPeers.keys()].map(deviceId => ({ deviceId, displayName: this.viewerNames.get(deviceId) ?? 'Espectador', state: this.viewerStates.get(deviceId) ?? 'connecting' })),
+      contentMode: this.contentMode,
+      audioMuted: this.audioMuted,
+      uploadBudgetMbps: this.uploadBudgetMbps,
+      relayAvailable: this.iceServers.some(server => server.urls.some(url => /^turns?:/i.test(url))),
+      audioBuffer: getProcessAudioDiagnostics(this.localStream),
       quality: this.quality,
       includeAudio: this.includeAudio,
       diagnostics: this.diagnostics,
@@ -205,6 +226,7 @@ export class ShareSessionController {
     this.deviceId = saved.deviceId
 
     const environment = await window.telae.getEnvironment()
+    this.forceRelay = environment.forceRelay === true
     const client = new SignalingClient(environment.signalingUrl)
     this.signaling = client
     this.unsubscribers = [
@@ -212,6 +234,9 @@ export class ShareSessionController {
       client.on('viewerLeft', (event) => this.handleViewerLeft(event)),
       client.on('signalReceived', (envelope) => void this.handleSignal(envelope)),
       client.on('sessionEnded', (sessionId) => this.handleSessionEnded(sessionId)),
+      client.on('shareQualityChanged', (session) => {
+        if (this.role === 'viewer' && this.session?.sessionId === session.sessionId) { this.session = session; this.quality = session.qualityProfile; this.emit() }
+      }),
       client.on('connectionChanged', (status) => this.handleSignalingChanged(status)),
     ]
     try {
@@ -252,6 +277,8 @@ export class ShareSessionController {
     this.role = 'sharer'
     this.quality = quality
     this.includeAudio = true
+    this.audioMuted = false
+    this.contentMode = 'text'
     this.viewerPresence = 'none'
     this.viewerName = null
     this.setState('preparing')
@@ -273,6 +300,7 @@ export class ShareSessionController {
       }
       this.session = access.session
       this.iceServers = access.iceServers
+      this.validateRelayConfiguration()
       const invite = await signaling.createInvite()
       if (generation !== this.generation) return
       this.inviteCode = invite.code
@@ -289,8 +317,8 @@ export class ShareSessionController {
       this.inviteCode = null
       this.inviteExpiresAt = null
       this.role = null
-      this.setState('idle', toUserMessage(error, 'Não foi possível iniciar o Share Session.'))
-      throw new Error(this.error ?? 'Não foi possível iniciar o Share Session.')
+      this.setState('idle', toUserMessage(error, 'Não foi possível iniciar a transmissão.'))
+      throw new Error(this.error ?? 'Não foi possível iniciar a transmissão.')
     }
   }
 
@@ -313,6 +341,8 @@ export class ShareSessionController {
         return
       }
       this.session = access.session
+      this.iceServers = access.iceServers
+      this.validateRelayConfiguration()
       this.peerDeviceId = access.session.sharerDeviceId
       this.quality = (access.session.qualityProfile as QualityProfile) ?? 'auto'
       const pendingSignals = this.pendingSignals.splice(0)
@@ -343,19 +373,111 @@ export class ShareSessionController {
     this.switchingInFlight = true
     const generation = this.generation
     try {
-      const { previous, current } = await this.capture.switchSource(sourceId, this.quality)
+      const transaction = await this.capture.prepareSwitch(sourceId, this.quality)
+      const { previous, current } = transaction
+      const peers = [...this.sharerPeers.entries()]
       try {
-        if (generation !== this.generation) throw new Error('A transmissão foi encerrada durante a troca de fonte.')
+        if (generation !== this.generation) return
+        for (const track of current.getAudioTracks()) track.enabled = !this.audioMuted
+        const video = current.getVideoTracks()[0]
+        if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
+        if (video && this.quality === 'auto' && this.contentMode === 'motion') {
+          await video.applyConstraints({ width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: 60, max: 60 } }).catch(() => {
+            this.error = 'A fonte foi trocada; ela manteve a taxa de quadros disponível.'
+          })
+        }
+        if (generation !== this.generation) return
+        const replacements = await Promise.allSettled(peers.map(([, peer]) => peer.replaceLocalStream(current)))
+        // A viewer may join while sender replacement is awaiting native work.
+        while (generation === this.generation) {
+          const added = [...this.sharerPeers.entries()].filter(([, peer]) => !peers.some(([, known]) => known === peer))
+          if (!added.length) break
+          peers.push(...added)
+          replacements.push(...await Promise.allSettled(added.map(([, peer]) => peer.replaceLocalStream(current))))
+        }
+        if (generation !== this.generation) return
+        const failure = replacements.find(result => result.status === 'rejected')
+        if (failure) {
+          // Wait for every rollback before disposing the tentative capture.
+          const rollbacks = await Promise.allSettled(peers.map(([, peer]) => peer.replaceLocalStream(previous)))
+          for (let index = 0; index < rollbacks.length; index++) {
+            const [id, peer] = peers[index]
+            if (rollbacks[index].status === 'rejected' && this.sharerPeers.get(id) === peer) {
+              this.handleViewerLeft({ sessionId: this.session!.sessionId, viewerDeviceId: id })
+            }
+          }
+          throw failure.reason
+        }
+        transaction.commit()
         this.localStream = current
-        this.includeAudio = current.getAudioTracks().length > 0
+        this.includeAudio = current.getAudioTracks().some(track => track.readyState === 'live')
         this.emit()
-        await Promise.all([...this.sharerPeers.values()].map((peer) => peer.replaceLocalStream(current)))
-      } finally {
-        this.capture.release(previous)
-      }
-    } finally {
-      this.switchingInFlight = false
-    }
+      } finally { transaction.rollback() }
+    } finally { this.switchingInFlight = false }
+  }
+
+  confirmVideoPresented(stream: MediaStream) {
+    if (this.role !== 'viewer' || this.remoteStream !== stream || !['negotiating', 'reconnecting', 'live'].includes(this.state)) return
+    this.framePresented = true
+    this.clearReconnectTimer()
+    this.restartAttempts = 0
+    this.liveSinceMs ??= Date.now()
+    this.setState('live')
+  }
+
+  private validateRelayConfiguration() {
+    if (this.forceRelay && !this.iceServers.some(server => server.urls.some(url => /^turns?:/i.test(url))))
+      throw new Error('O teste via servidor exige TURN configurado. Nenhuma credencial TURN foi recebida.')
+  }
+
+  setAudioMuted(muted: boolean) {
+    if (this.role !== 'sharer' || !this.localStream) return
+    this.audioMuted = muted
+    for (const track of this.localStream.getAudioTracks()) track.enabled = !muted
+    this.emit()
+  }
+
+  setUploadBudget(mbps: number) {
+    if (!Number.isFinite(mbps) || mbps < 2 || mbps > 200) throw new Error('Informe um limite entre 2 e 200 Mbps.')
+    this.uploadBudgetMbps = mbps
+    for (const controller of this.viewerQuality.values()) controller.reset()
+    this.emit()
+  }
+
+  async setQuality(quality: QualityProfile, contentMode: ContentMode = this.contentMode) {
+    if (this.role !== 'sharer' || !this.localStream) throw new Error('Inicie a transmissão antes de ajustar a qualidade.')
+    if (this.switchingInFlight) throw new Error('Aguarde a alteração atual terminar.')
+    this.switchingInFlight = true
+    const stream = this.localStream
+    const generation = this.generation
+    const video = stream.getVideoTracks()[0]
+    const previous = video.getConstraints()
+    try {
+      const width = quality === '720p60' ? 1280 : quality === 'auto' ? 2560 : 1920
+      const height = quality === '720p60' ? 720 : quality === 'auto' ? 1440 : 1080
+      const fps = quality === '1080p30' || (quality === 'auto' && contentMode === 'text') ? 30 : 60
+      await video.applyConstraints({ width: { ideal: width, max: width }, height: { ideal: height, max: height }, frameRate: { ideal: fps, max: fps } })
+      if (generation !== this.generation) return
+      const session = await this.requireSignaling().updateShareQuality(quality) as ShareSessionSnapshot | undefined
+      if (session && session.sessionId === this.session?.sessionId) this.session = session
+      if (generation !== this.generation) return
+      this.quality = quality
+      this.contentMode = contentMode
+      video.contentHint = contentMode === 'motion' ? 'motion' : 'detail'
+      for (const controller of this.viewerQuality.values()) controller.reset()
+      await Promise.all([...this.sharerPeers.values()].map(peer => peer.setQualityProfile(quality)))
+      this.emit()
+    } catch (error) {
+      if (generation === this.generation) await video.applyConstraints(previous).catch(() => undefined)
+      throw error
+    } finally { this.switchingInFlight = false }
+  }
+
+  async removeViewer(deviceId: string) {
+    if (this.role !== 'sharer' || !this.sharerPeers.has(deviceId)) return
+    const sessionId = this.session?.sessionId
+    await this.requireSignaling().removeViewer(deviceId)
+    if (sessionId && this.session?.sessionId === sessionId) this.handleViewerLeft({ sessionId, viewerDeviceId: deviceId })
   }
 
   async leave(): Promise<void> {
@@ -397,7 +519,7 @@ export class ShareSessionController {
   // ---- private ----
 
   private requireSignaling(): SignalingClient {
-    if (!this.signaling) throw new Error('Conecte-se antes de iniciar um Share Session.')
+    if (!this.signaling) throw new Error('Conecte-se antes de iniciar uma transmissão.')
     return this.signaling
   }
 
@@ -407,6 +529,7 @@ export class ShareSessionController {
     const peer = new WebRtcPeer({
       iceServers,
       qualityProfile: this.quality,
+      iceTransportPolicy: this.forceRelay ? 'relay' : 'all',
       ...(localStream ? { localStream } : {}),
       sendSignal: async (payload) => {
         const target = this.peerDeviceId
@@ -416,12 +539,8 @@ export class ShareSessionController {
       },
       onRemoteStream: (stream) => {
         this.remoteStream = stream
-        if (this.state === 'negotiating' || this.state === 'reconnecting') {
-          this.liveSinceMs ??= Date.now()
-          this.setState('live')
-        } else {
-          this.emit()
-        }
+        this.includeAudio = stream.getAudioTracks().some(track => track.readyState === 'live')
+        this.emit()
       },
       onStatus: (status) => { if (this.peer === peer) this.handlePeerStatus(status) },
     })
@@ -442,6 +561,7 @@ export class ShareSessionController {
     const peer = new WebRtcPeer({
       iceServers: this.iceServers,
       qualityProfile: this.quality,
+      iceTransportPolicy: this.forceRelay ? 'relay' : 'all',
       ...(this.localStream ? { localStream: this.localStream } : {}),
       sendSignal: async (payload) => {
         await signaling?.sendSignal(viewerId, { sessionId, fromDeviceId: this.deviceId, payload })
@@ -450,6 +570,8 @@ export class ShareSessionController {
       onStatus: (status) => { if (this.sharerPeers.get(viewerId) === peer) this.handlePeerStatus(status, viewerId) },
     })
     this.sharerPeers.set(viewerId, peer)
+    this.viewerNames.set(viewerId, event.viewer.displayName)
+    this.viewerStates.set(viewerId, 'connecting')
     this.startDiagnosticsLoop()
     this.viewerName = event.viewer.displayName
     this.viewerPresence = 'joining'
@@ -461,9 +583,11 @@ export class ShareSessionController {
       if (this.sharerPeers.get(viewerId) !== peer) return
       peer.close()
       this.sharerPeers.delete(viewerId)
+      this.viewerNames.delete(viewerId)
+      this.viewerStates.delete(viewerId)
       this.clearReconnectTimer(viewerId)
       this.viewerQuality.delete(viewerId)
-      this.setState(this.connectedViewers.size ? 'live' : this.sharerPeers.size ? 'negotiating' : 'waiting-for-peer', toUserMessage(error, 'Não foi possível negociar com o Viewer.'))
+      this.setState(this.connectedViewers.size ? 'live' : this.sharerPeers.size ? 'negotiating' : 'waiting-for-peer', toUserMessage(error, 'Não foi possível conectar o espectador.'))
     }
   }
 
@@ -471,6 +595,8 @@ export class ShareSessionController {
     if (this.role !== 'sharer' || this.session?.sessionId !== event.sessionId) return
     this.sharerPeers.get(event.viewerDeviceId)?.close()
     this.sharerPeers.delete(event.viewerDeviceId)
+    this.viewerNames.delete(event.viewerDeviceId)
+    this.viewerStates.delete(event.viewerDeviceId)
     this.clearReconnectTimer(event.viewerDeviceId)
     this.viewerRestartAttempts.delete(event.viewerDeviceId)
     this.viewerQuality.delete(event.viewerDeviceId)
@@ -512,7 +638,7 @@ export class ShareSessionController {
     this.role = null
     this.inviteCode = null
     this.inviteExpiresAt = null
-    this.setState('ended', wasViewer ? 'O Sharer encerrou a transmissão.' : null)
+    this.setState('ended', wasViewer ? 'A transmissão foi encerrada ou seu acesso foi removido.' : null)
   }
 
   private handleSignalingChanged(status: ConnectionStatus) {
@@ -527,6 +653,7 @@ export class ShareSessionController {
 
   private handlePeerStatus(status: PeerStatus, viewerId?: string) {
     if (viewerId) {
+      this.viewerStates.set(viewerId, status)
       if (status === 'connected') {
         this.clearReconnectTimer(viewerId)
         this.viewerRestartAttempts.delete(viewerId)
@@ -542,18 +669,21 @@ export class ShareSessionController {
       return
     }
     if (status === 'connected') {
-      this.restartAttempts = 0
+      if (this.role !== 'viewer' || this.framePresented) this.restartAttempts = 0
       this.clearReconnectTimer()
+      if (this.role === 'viewer' && !this.framePresented) this.scheduleRestart(10_000)
       if (this.state === 'negotiating' || this.state === 'reconnecting') {
-        this.liveSinceMs ??= Date.now()
+        if (this.role !== 'viewer' || this.framePresented) this.liveSinceMs ??= Date.now()
         if (this.role === 'sharer') this.viewerPresence = 'live'
-        this.setState('live')
+        if (this.role !== 'viewer' || this.framePresented) this.setState('live')
+        else this.emit()
       } else {
         this.emit()
       }
       return
     }
     if (status === 'disconnected') {
+      if (this.role === 'viewer') this.framePresented = false
       if (this.state === 'live' || this.state === 'negotiating') {
         this.setState('reconnecting', 'Conexão instável. Tentando restabelecer…')
         this.scheduleRestart(2000)
@@ -561,6 +691,7 @@ export class ShareSessionController {
       return
     }
     if (status === 'failed') {
+      if (this.role === 'viewer') this.framePresented = false
       if (this.state === 'live' || this.state === 'negotiating' || this.state === 'reconnecting') {
         void this.attemptRestart('A conexão falhou. Tentando restabelecer…')
       }
@@ -598,6 +729,8 @@ export class ShareSessionController {
       if (viewerId) {
         peer.close()
         this.sharerPeers.delete(viewerId)
+        this.viewerNames.delete(viewerId)
+        this.viewerStates.delete(viewerId)
         this.viewerQuality.delete(viewerId)
         this.viewerRestartAttempts.delete(viewerId)
         this.connectedViewers.delete(viewerId)
@@ -646,13 +779,15 @@ export class ShareSessionController {
           // Amostra vazia antes do primeiro par selecionado: não polui a UI.
           if (stats.bitrateKbps === 0 && stats.roundTripMs === null && stats.transportPath === null) return
           this.diagnostics = stats
+          const stream = this.role === 'sharer' ? this.localStream : this.remoteStream
+          this.includeAudio = stream?.getAudioTracks().some(track => track.readyState === 'live') ?? false
           if (this.role === 'sharer' && this.state === 'live') {
             this.diagnostics.bitrateKbps = valid.reduce((sum, sample) => sum + sample.stats.bitrateKbps, 0)
             await Promise.all(valid.map(async ({ id, peer, stats: peerStats }) => {
               const controller = this.viewerQuality.get(id)
               if (!controller) return
-              const decision = controller.decide(this.quality, peerStats)
-              await peer.applyQuality(decision.maxBitrateBps, decision.degradationPreference)
+              const decision = controller.decide(this.quality, peerStats, this.contentMode, this.uploadBudgetMbps * 1_000_000 / Math.max(1, this.sharerPeers.size))
+              await peer.applyQuality(decision.maxBitrateBps, decision.degradationPreference, { maxFramerate: decision.maxFramerate, scaleResolutionDownBy: decision.scaleResolutionDownBy })
             }))
           }
           if (generation !== this.generation) return
@@ -685,6 +820,9 @@ export class ShareSessionController {
     this.peer = null
     for (const peer of this.sharerPeers.values()) peer.close()
     this.sharerPeers.clear()
+    this.viewerNames.clear()
+    this.viewerStates.clear()
+    this.framePresented = false
     this.connectedViewers.clear()
     this.viewerQuality.clear()
     this.viewerRestartAttempts.clear()

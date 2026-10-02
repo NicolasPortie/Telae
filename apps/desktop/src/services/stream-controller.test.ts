@@ -71,3 +71,33 @@ describe('StreamController', () => {
     expect(states).toEqual(['preparing', 'live', 'ended'])
   })
 })
+
+
+it('prepares a source without disposing the active stream and releases it only on commit', async () => {
+  const previous = fakeStream()
+  const next = fakeStream()
+  const release = vi.fn()
+  const controller = new StreamController({ capture: vi.fn().mockResolvedValueOnce(previous).mockResolvedValueOnce(next), release })
+  await controller.start('screen:1', 'auto')
+  const prepared = await controller.prepareSwitch('screen:2', 'auto')
+  expect(controller.getMediaStream()).toBe(previous)
+  expect(release).not.toHaveBeenCalled()
+  prepared.commit()
+  prepared.rollback()
+  expect(controller.getMediaStream()).toBe(next)
+  expect(release).toHaveBeenCalledExactlyOnceWith(previous)
+})
+
+it('stopping while a source is prepared releases both captures and makes commit invalid', async () => {
+  const previous = fakeStream()
+  const next = fakeStream()
+  const release = vi.fn()
+  const controller = new StreamController({ capture: vi.fn().mockResolvedValueOnce(previous).mockResolvedValueOnce(next), release })
+  await controller.start('screen:1', 'auto')
+  const prepared = await controller.prepareSwitch('screen:2', 'auto')
+  controller.stop()
+  expect(() => prepared.commit()).toThrow()
+  prepared.rollback()
+  expect(release).toHaveBeenCalledTimes(2)
+  expect(controller.getMediaStream()).toBeNull()
+})

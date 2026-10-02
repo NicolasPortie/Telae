@@ -2,6 +2,8 @@
 
 Aplicativo desktop de compartilhamento de tela com sinalização ASP.NET Core/SignalR e transporte WebRTC.
 
+Consulte [as melhorias e resultados de validação](docs/IMPROVEMENTS_2026-10-02.md) e [os requisitos de publicação](docs/RELEASE_VALIDATION.md) para esta revisão local.
+
 ## Estrutura
 
 - `apps/desktop`: Electron + React + TypeScript.

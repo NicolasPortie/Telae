@@ -45,6 +45,9 @@ describe('captureDesktopSource', () => {
     expect(selectCaptureSource).toHaveBeenCalledOnce()
     expect(getDisplayMedia).toHaveBeenNthCalledWith(1, expect.objectContaining({ audio: true }))
     expect(getDisplayMedia).toHaveBeenNthCalledWith(2, expect.objectContaining({ audio: false }))
-    expect(videoTrack.contentHint).toBe('motion')
+    expect(videoTrack.contentHint).toBe('detail')
+    expect(getDisplayMedia).toHaveBeenLastCalledWith(expect.objectContaining({
+      video: expect.objectContaining({ width: { ideal: 2560, max: 2560 }, frameRate: { ideal: 30, max: 30 } }),
+    }))
   })
 })
