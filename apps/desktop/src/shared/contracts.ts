@@ -35,6 +35,7 @@ export type AudioBridgeState = { captureId?: string } & (
 export type AudioChunk = { captureId: string; data: Uint8Array }
 
 export type DesktopEnvironment = {
+  version: string
   platform: NodeJS.Platform
   isPackaged: boolean
   signalingUrl: string
