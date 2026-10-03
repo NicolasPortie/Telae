@@ -1,17 +1,11 @@
 import type { QualityProfile } from './types'
+import { qualityConstraints } from './quality-profiles'
 import { createProcessAudioCapture, type ProcessAudioCapture, type ProcessAudioDiagnostics } from './process-audio'
 
 const processCaptures = new WeakMap<MediaStream, ProcessAudioCapture>()
 
 export function getProcessAudioDiagnostics(stream: MediaStream | null): ProcessAudioDiagnostics | null {
   return stream ? processCaptures.get(stream)?.diagnostics ?? null : null
-}
-
-const qualityConstraints: Record<QualityProfile, MediaTrackConstraints> = {
-  auto: { width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: 30, max: 30 } },
-  '720p60': { width: { max: 1280 }, height: { max: 720 }, frameRate: { max: 60 } },
-  '1080p30': { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 30 } },
-  '1080p60': { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } },
 }
 
 export async function captureDesktopSource(
@@ -32,7 +26,7 @@ export async function captureDesktopSource(
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
       audio: !isWindow,
-      video: qualityConstraints[quality],
+      video: qualityConstraints(quality),
     })
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
@@ -43,7 +37,7 @@ export async function captureDesktopSource(
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         audio: false,
-        video: qualityConstraints[quality],
+        video: qualityConstraints(quality),
       })
     } catch {
       throw new Error('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.')
@@ -59,7 +53,7 @@ export async function captureDesktopSource(
       stopMediaStream(stream)
       throw new Error('A fonte escolhida não retornou vídeo.')
     }
-    track.contentHint = quality === 'auto' || quality === '1080p30' ? 'detail' : 'motion'
+    track.contentHint = quality === 'auto' || quality === '1080p30' || quality === '1440p30' ? 'detail' : 'motion'
     for (const audioTrack of stream.getAudioTracks()) {
       audioTrack.contentHint = 'music'
     }

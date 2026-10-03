@@ -44,7 +44,7 @@ export type DesktopEnvironment = {
 export type UpdateStatus =
   | { phase: 'idle' | 'checking' | 'current'; version: string }
   | { phase: 'downloading'; version: string; percent: number }
-  | { phase: 'ready'; version: string }
+  | { phase: 'ready' | 'installing'; version: string }
   | { phase: 'error'; version: string; message: string }
 
 export type TelaeDesktopApi = {
