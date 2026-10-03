@@ -58,8 +58,8 @@ describe('DesktopUpdates', () => {
     expect(updater.quitAndInstall).not.toHaveBeenCalled()
 
     updates.setSessionActive(false)
-    vi.advanceTimersByTime(500)
-    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(false, true)
+    vi.advanceTimersByTime(1500)
+    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true)
   })
 
   it('cancels a scheduled restart if a session starts during the delay', async () => {
@@ -72,7 +72,38 @@ describe('DesktopUpdates', () => {
     vi.advanceTimersByTime(1000)
     expect(updater.quitAndInstall).not.toHaveBeenCalled()
     updates.setSessionActive(false)
-    vi.advanceTimersByTime(500)
-    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(false, true)
+    vi.advanceTimersByTime(1500)
+    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true)
+  })
+
+  it('installs silently and relaunches automatically when idle', async () => {
+    const updates = new DesktopUpdates(vi.fn())
+    await updates.check('https://example.com')
+    updaterInstances[0].emit('update-downloaded', { version: '0.1.17' })
+    expect(updates.getStatus()).toEqual({ phase: 'installing', version: '0.1.17' })
+    vi.advanceTimersByTime(1499)
+    expect(updaterInstances[0].quitAndInstall).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
+    expect(updaterInstances[0].quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true)
+  })
+
+  it('allows another check after an installation error', async () => {
+    const updates = new DesktopUpdates(vi.fn())
+    await updates.check('https://example.com')
+    const updater = updaterInstances[0]
+    updater.quitAndInstall.mockImplementationOnce(() => updater.emit('error', new Error('install failed')))
+    updater.emit('update-downloaded', { version: '0.1.17' })
+    vi.advanceTimersByTime(1500)
+    expect(updates.getStatus().phase).toBe('error')
+    await updates.check('https://example.com')
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports invalid feed URLs without an unhandled rejection', async () => {
+    const updates = new DesktopUpdates(vi.fn())
+    await expect(updates.check('invalid')).resolves.toBeUndefined()
+    expect(updates.getStatus().phase).toBe('error')
+    await updates.check('https://example.com')
+    expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
   })
 })

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { DiagnosticsHistory } from './services/diagnostics-history'
 import { DiagnosticsBody } from './components/DiagnosticsBody'
+import { UpdateNotice } from './components/UpdateNotice'
 import { SharerSession } from './components/SharerSession'
 import { SourceGroup } from './components/SourceGroup'
 import { QUALITY_OPTIONS, formatElapsed } from './ui/format'
@@ -33,7 +34,7 @@ export default function App() {
   const [sourcesError, setSourcesError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string>('')
   const [activeSourceId, setActiveSourceId] = useState<string>('')
-  const [quality, setQuality] = useState<QualityProfile>('auto')
+  const [quality, setQuality] = useState<QualityProfile>('1080p30')
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [inviteCode, setInviteCode] = useState('')
@@ -380,7 +381,7 @@ export default function App() {
   const windowsList = sources.filter((item) => item.kind === 'window')
 
   return (
-    <div className={`${viewerLive ? 'telae-viewer-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
+    <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
       <header className="shrink-0 border-b border-[#313029] bg-[#1A1A17]">
         <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-6">
           <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
@@ -409,16 +410,7 @@ export default function App() {
                   : (stateLabel[snapshot.state] ?? 'Pronto')}
           </p>
         </div>
-        {updateStatus && ['downloading', 'ready'].includes(updateStatus.phase) && (
-          <div className="border-t border-[#313029] bg-[#282721]">
-            <div role="status" className="mx-auto flex max-w-[1120px] items-center gap-3 px-5 py-2 text-xs text-[#F1EFE8]">
-              <span>
-                {updateStatus.phase === 'downloading' && `Baixando Telae ${updateStatus.version}: ${updateStatus.percent}%`}
-                {updateStatus.phase === 'ready' && `Telae ${updateStatus.version} pronto. A instalação começa ao encerrar a transmissão.`}
-              </span>
-            </div>
-          </div>
-        )}
+        <UpdateNotice status={updateStatus} sessionActive={sessionActive} onRetry={() => void window.telae.checkForUpdates()} />
         {connectError && (
           <div className="border-t border-[#313029]">
             <p role="alert" className="mx-auto max-w-[1120px] px-5 py-2 text-xs text-[#FF5D5D]">
@@ -431,7 +423,7 @@ export default function App() {
         )}
       </header>
 
-      <main className={viewerLive ? 'telae-viewer-main' : 'mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10'}>
+      <main className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1040px] px-6' : 'mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10'}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -558,7 +550,8 @@ export default function App() {
         )}
 
         {visibleScreen === 'picker' && (
-          <section aria-labelledby="picker-title" className="telae-panel-enter">
+          <section aria-labelledby="picker-title" className="telae-panel-enter telae-picker-section">
+            <div className="shrink-0 pb-3 pt-4">
             <button
               type="button"
               onClick={() => setScreen(switchingSource ? 'session' : 'home')}
@@ -570,6 +563,7 @@ export default function App() {
               O que você quer compartilhar?
             </h1>
             <p className="mt-1 text-sm text-[#9D9A90]">{switchingSource ? 'A transmissão e o código continuam ativos durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
+            </div>
 
             {sourcesLoading && <p className="mt-6 text-sm text-[#9D9A90]">Listando telas e janelas…</p>}
 
@@ -588,10 +582,12 @@ export default function App() {
 
             {!sourcesLoading && !sourcesError && (
               <>
-                <SourceGroup title="Telas" sources={screens} selectedId={selectedId} onSelect={setSelectedId} />
-                <SourceGroup title="Janelas" sources={windowsList} selectedId={selectedId} onSelect={setSelectedId} />
+                <div role="region" aria-label="Fontes disponíveis" tabIndex={0} className="telae-picker-sources min-h-0 flex-1 overflow-y-auto px-1 pb-4">
+                  <SourceGroup title="Telas" sources={screens} selectedId={selectedId} onSelect={setSelectedId} />
+                  <SourceGroup title="Janelas" sources={windowsList} selectedId={selectedId} onSelect={setSelectedId} />
+                </div>
 
-                <div className="mt-6 rounded-[10px] border border-[#313029] bg-[#1C1C19] p-4">
+                <div className="telae-picker-actions shrink-0 rounded-[10px] border border-[#313029] bg-[#1C1C19] p-4">
                   <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
                     {!switchingSource && <fieldset>
                       <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
@@ -689,14 +685,6 @@ export default function App() {
                 {busy ? 'Salvando…' : 'Salvar'}
               </button>
             </form>
-            {updateStatus?.phase === 'error' && (
-              <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-[#4A4031] bg-[#24221D] px-5 py-4 text-sm">
-                <p>Não foi possível verificar atualizações agora.</p>
-                <button type="button" className="shrink-0 font-semibold text-[#D8A85C] underline" onClick={() => void window.telae.checkForUpdates()}>
-                  Tentar novamente
-                </button>
-              </div>
-            )}
           </section>
         )}
 

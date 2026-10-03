@@ -63,6 +63,55 @@ h2 {
   background: var(--telae-canvas);
 }
 
+.telae-picker-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.telae-picker-main {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 16px;
+}
+
+.telae-picker-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.telae-picker-sources {
+  scroll-padding: 8px;
+  scrollbar-gutter: stable;
+}
+
+.telae-update-progress {
+  appearance: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: var(--telae-divider);
+}
+
+.telae-update-progress::-webkit-progress-bar {
+  background: var(--telae-divider);
+}
+
+.telae-update-progress::-webkit-progress-value {
+  background: var(--telae-signal);
+}
+
+.telae-update-spinner {
+  animation: telae-update-spin 1.2s linear infinite;
+}
+
+@keyframes telae-update-spin {
+  to { transform: rotate(360deg); }
+}
+
 .telae-viewer-layout {
   display: flex;
   flex-direction: column;
@@ -133,6 +182,10 @@ select:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .telae-update-spinner {
+    animation: none;
+  }
+
   *,
   *::before,
   *::after {

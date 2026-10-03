@@ -30,6 +30,12 @@ npm run dev
 
 ## Release e deploy
 
+O atualizador verifica novas versões ao abrir, baixa em segundo plano e instala silenciosamente, reabrindo o Telae automaticamente. Se houver sessão ativa, aguarda seu encerramento. A instalação inicial ainda usa o instalador; instalações feitas para todos os usuários podem exigir autorização do Windows na atualização. As mudanças precisam ser distribuídas em uma nova versão para chegar aos aplicativos já instalados.
+
+Os perfis **2K · 1440p** e **2K · 1440p60** capturam até 2560 × 1440 a 30/60 fps. Aqui, 2K é o nome popular de QHD/1440p, não o formato cinema 2048 × 1080. Os tetos iniciais são 20/32 Mbps por espectador, sujeitos ao limite total de upload configurado. A seleção oferece apenas perfis explícitos, com **1080p30 como padrão**; Auto foi removido da interface. O protocolo ainda aceita Auto de versões anteriores para preservar compatibilidade. Fontes menores continuam menores; o perfil não cria detalhes inexistentes. 1440p processa aproximadamente 78% mais pixels que 1080p na mesma taxa de quadros. A adaptação reduz FPS no modo Texto e resolução no modo Movimento quando há pressão de CPU; no modo Movimento também reduz resolução sob congestionamento. Tetos de bitrate são parâmetros iniciais, não requisitos mínimos ou garantia de desempenho. Consulte [o benchmark](docs/BENCHMARK.md) para validar em hardware real.
+
+Para disponibilizar 1440p, atualize o servidor antes de distribuir o desktop: o backend anterior rejeita os novos perfis.
+
 As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, cria o instalador Windows, publica os três arquivos em um GitHub Release privado e os entrega automaticamente ao servidor de atualizações pelo runner `telae-updates`. O backend continua podendo ser atualizado separadamente pela tag:
 
 Exemplo:
