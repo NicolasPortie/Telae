@@ -36,6 +36,10 @@ try
             await CaptureProcessAsync(processId);
             return 0;
 
+        case "capture-screen":
+            await ScreenAudioCapture.RunAsync();
+            return 0;
+
         case "resolve-window":
             if (args.Length < 2 || !long.TryParse(args[1], out var handle) || handle <= 0)
                 throw new ArgumentException("Informe o identificador da janela.");

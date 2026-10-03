@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AudioBridgeState, AudioChunk } from '../shared/contracts'
-import { createProcessAudioCapture } from './process-audio'
+import { createProcessAudioCapture, createScreenAudioCapture } from './process-audio'
 
 let activeCapture: string | null
 let emitMetadata: boolean
@@ -31,6 +31,12 @@ beforeEach(() => {
       })
     },
     stopAudioCapture: stop,
+    startScreenAudioCapture: async (captureId: string) => {
+      activeCapture = captureId
+      for (const listener of [...stateListeners]) listener({
+        status: 'capturing', captureId, metadata: { processId: 0, sampleRate: 48000, channels: 2, sampleFormat: 'f32le' },
+      })
+    },
   } })
   vi.stubGlobal('AudioContext', class {
     state = 'running'
@@ -46,6 +52,15 @@ beforeEach(() => {
 })
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+
+it('starts filtered screen capture and releases its bridge and listeners', async () => {
+  const capture = await createScreenAudioCapture()
+  expect(activeCapture).not.toBeNull()
+  await capture.stop()
+  expect(activeCapture).toBeNull()
+  expect(stateListeners.size).toBe(0)
+  expect(chunkListeners.size).toBe(0)
+})
 
 it('stopping a replaced window capture cannot stop a new capture of the same process', async () => {
   const previous = await createProcessAudioCapture(1234)
