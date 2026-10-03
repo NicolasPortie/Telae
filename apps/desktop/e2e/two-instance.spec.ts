@@ -61,6 +61,8 @@ test.describe('duas instâncias Telae', () => {
     try {
       const page = await firstWindow(app)
       await enterWithName(page, 'JanelaE2E')
+      await expect(page.locator('header svg')).toHaveCount(1) // Only the profile icon remains.
+      await expect(page.locator('header').getByText(/Pronto|Aguardando seu amigo/)).toHaveCount(0)
       await page.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(page.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
       await expect(page.getByRole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeout: 15_000 })
@@ -112,6 +114,7 @@ test.describe('duas instâncias Telae', () => {
       await sharer.getByRole('button', { name: 'Buscar atualização', exact: true }).scrollIntoViewIfNeeded()
       await expect(sharer.getByRole('button', { name: 'Buscar atualização', exact: true })).toBeInViewport()
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 1220, height: 790 }))
+
       await sharer.screenshot({ path: test.info().outputPath('layout-home.png'), fullPage: true })
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(sharer.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
@@ -195,7 +198,27 @@ test.describe('duas instâncias Telae', () => {
       await expect(invite).toBeVisible({ timeout: 60_000 })
       const code = (await invite.textContent())?.trim() ?? ''
       expect(code).toMatch(/^[A-Z2-9]{8}$/)
+      await expect(sharer.locator('header').getByText(/Pronto|Aguardando seu amigo|Ao vivo/)).toHaveCount(0)
+      const preview = sharer.getByLabel(/Pré-visualização de/)
+      for (const bounds of [{ width: 2560, height: 1392 }, { width: 1600, height: 900 }, { width: 1220, height: 790 }, { width: 980, height: 650 }, { width: 640, height: 560 }]) {
+        await sharerApp.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setBounds(size), bounds)
+        await expect.poll(() => sharer.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+        await expect(preview).toBeVisible()
+        await sharer.screenshot({ path: test.info().outputPath(`sharer-${bounds.width}x${bounds.height}.png`) })
+        if (bounds.width >= 960) {
+          await expect.poll(() => preview.evaluate(video => video.getBoundingClientRect().width / innerWidth)).toBeGreaterThan(.55)
+          for (const control of [sharer.getByRole('button', { name: 'Parar transmissão' }), sharer.getByLabel('Qualidade da transmissão'), sharer.getByRole('button', { name: 'Copiar código', exact: true })]) {
+            await expect.poll(() => control.evaluate(element => ({ bottom: element.getBoundingClientRect().bottom, viewport: innerHeight })).then(rect => rect.bottom - rect.viewport), { message: `${bounds.width}x${bounds.height}: ${await control.textContent()}` }).toBeLessThanOrEqual(0)
+          }
+        } else {
+          await sharer.getByRole('button', { name: 'Copiar código', exact: true }).scrollIntoViewIfNeeded()
+          await expect(sharer.getByRole('button', { name: 'Copiar código', exact: true })).toBeInViewport()
+        }
+        await sharer.screenshot({ path: test.info().outputPath(`sharer-${bounds.width}x${bounds.height}.png`) })
+      }
+      await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 1220, height: 790 }))
 
+      await viewerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus())
       await viewer.getByLabel('Código de convite').fill(code)
       await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
       const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
@@ -203,7 +226,7 @@ test.describe('duas instâncias Telae', () => {
       await expectRenderedFrames(viewer)
       expect((await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded).toBeGreaterThan(0)
       await expect(viewer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
-      await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo/)).toBeVisible()
+      await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo|Aguardando seu amigo|Pronto/)).toHaveCount(0)
       await viewer.waitForFunction(
         (selector) => {
           const video = document.querySelector(selector)

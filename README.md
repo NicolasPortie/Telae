@@ -36,6 +36,10 @@ Os perfis **2K · 1440p** e **2K · 1440p60** capturam até 2560 × 1440 a 30/60
 
 Para disponibilizar 1440p, atualize o servidor antes de distribuir o desktop: o backend anterior rejeita os novos perfis.
 
+Na versão 0.1.20, compartilhar uma tela inteira exclui automaticamente o áudio do **aplicativo Discord** (incluindo PTB, Canary e Development) usando process loopback do Windows. O filtro acompanha abertura, fechamento e reinício. Discord no navegador não pode ser separado dos outros sons desse navegador. O filtro requer Windows build 20348 ou superior; se não estiver disponível, o vídeo continua sem som, sem voltar à captura geral. Com duas instalações independentes do Discord abertas ao mesmo tempo, o áudio transmitido fica silencioso até restar uma; o Windows permite excluir uma árvore de processos por capturador. Compartilhar uma janela mantém apenas o áudio daquele aplicativo. A detecção de mudanças ocorre a cada 100 ms, além do tempo da consulta de processos.
+
+Regressão com áudio real: `dotnet build tests/audio/Telae.Audio.Tests.csproj -c Release`, seguido de `python tests/audio/verify.py` no Windows com saída de áudio disponível. O teste usa tons discretos de aplicativos separados e valida exclusão de processos filhos, abertura/reinício, preservação do outro aplicativo e silêncio seguro com duas árvores. Os testes de mídia Electron também verificam a interface de transmissão entre 640×560 e 2560×1392.
+
 As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, cria o instalador Windows, publica os três arquivos em um GitHub Release privado e os entrega automaticamente ao servidor de atualizações pelo runner `telae-updates`. O backend continua podendo ser atualizado separadamente pela tag:
 
 Exemplo:
