@@ -30,6 +30,7 @@ export class DesktopUpdates {
       clearTimeout(this.installTimer)
       this.installTimer = null
       this.installing = false
+      if (this.status.phase === 'installing') this.publish({ phase: 'ready', version: this.status.version })
     }
     if (!active && this.status.phase === 'ready') this.install()
   }
@@ -38,14 +39,13 @@ export class DesktopUpdates {
     if (!app.isPackaged || process.platform !== 'win32' || this.checking || this.installing) return
     if (this.status.phase === 'downloading' || this.status.phase === 'ready') return
 
-    const feedUrl = new URL('updates/windows/', `${signalingUrl.replace(/\/+$/, '')}/`).toString()
-    if (this.feedUrl !== feedUrl) this.configure(feedUrl)
-    const updater = this.updater
-    if (!updater) return
-
     this.checking = true
     this.publish({ phase: 'checking', version: app.getVersion() })
     try {
+      const feedUrl = new URL('updates/windows/', `${signalingUrl.replace(/\/+$/, '')}/`).toString()
+      if (this.feedUrl !== feedUrl) this.configure(feedUrl)
+      const updater = this.updater
+      if (!updater) return
       await updater.checkForUpdates()
     } catch (error) {
       this.publish({
@@ -78,6 +78,9 @@ export class DesktopUpdates {
       if (!this.sessionActive) this.install()
     })
     updater.on('error', (error) => {
+      if (this.installTimer !== null) clearTimeout(this.installTimer)
+      this.installTimer = null
+      this.installing = false
       this.publish({ phase: 'error', version: app.getVersion(), message: this.errorMessage(error) })
     })
     this.updater = updater
@@ -86,15 +89,17 @@ export class DesktopUpdates {
   private install(): void {
     if (this.installing || this.sessionActive || this.status.phase !== 'ready') return
     this.installing = true
+    this.publish({ phase: 'installing', version: this.status.version })
     // Deixa o aviso de reinício chegar à janela antes de encerrá-la.
     this.installTimer = setTimeout(() => {
       this.installTimer = null
-      if (this.sessionActive || this.status.phase !== 'ready') {
+      if (this.sessionActive || this.status.phase !== 'installing') {
         this.installing = false
         return
       }
-      this.updater?.quitAndInstall(false, true)
-    }, 500)
+      // Silent NSIS update; relaunch the app without opening the setup wizard.
+      this.updater?.quitAndInstall(true, true)
+    }, 1500)
   }
 
   private publish(status: UpdateStatus): void {

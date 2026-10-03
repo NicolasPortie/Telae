@@ -240,6 +240,24 @@ it('changes profile without closing peers and rolls capture constraints back on 
   expect(controller.getSnapshot().quality).toBe('720p60')
 })
 
+it.each(['1440p30', '1440p60'] as const)('changes a live stream to %s and preserves it on server rejection', async (profile) => {
+  await controller.startSharing('screen:1', 'auto')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  mocks.signaling.updateShareQuality.mockResolvedValue(undefined)
+  await controller.setQuality(profile, 'motion')
+  const fps = profile === '1440p30' ? 30 : 60
+  expect(stream.getVideoTracks()[0].applyConstraints).toHaveBeenLastCalledWith({
+    width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: fps, max: fps },
+  })
+  expect(mocks.signaling.updateShareQuality).toHaveBeenLastCalledWith(profile)
+  expect(mocks.peers[0].setQualityProfile).toHaveBeenLastCalledWith(profile)
+  expect(mocks.peers[0].close).not.toHaveBeenCalled()
+  mocks.signaling.updateShareQuality.mockRejectedValueOnce(new Error('server error'))
+  await expect(controller.setQuality('1080p60')).rejects.toThrow()
+  expect(controller.getSnapshot().quality).toBe(profile)
+})
+
 it('bounds recovery when transport connects but no frame is displayed', async () => {
   await controller.joinWithInvite('ABCDEFGH')
   mocks.peers[0].options.onStatus('connected')

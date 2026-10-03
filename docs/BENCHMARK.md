@@ -78,6 +78,12 @@ Sessão de **60 min** em 1080p30 com conteúdo em movimento e áudio. Meça dife
 
 O JSON pode manter só uma janela recente de amostras; exportações no final não provam uma hora de comportamento. Recolha amostras continuamente ou exporte em intervalos e preserve resumos de sessão quando disponíveis. Use [VALIDATION_REPORT_TEMPLATE.md](VALIDATION_REPORT_TEMPLATE.md) e associe arquivos brutos ao SHA.
 
+## Validação de 1440p (2K/QHD)
+
+Repita os cenários em 1440p30 e 1440p60 com uma fonte real de pelo menos 2560 × 1440, comparando com 1080p30/60 na mesma máquina e rede. Registre resolução efetivamente recebida (a seleção do perfil não comprova 1440p), FPS, encodeMs/decodeMs, qualityLimitationReason, frames descartados, CPU/GPU, upload e latência. Inclua GPU integrada e dedicada, texto e movimento, direto e relay, um e vários espectadores.
+
+Os tetos de 20 Mbps (30 fps) e 32 Mbps (60 fps) por espectador são iniciais. O orçamento total padrão pode limitar esses valores; documente o limite de upload usado. Não aumente o limite além da capacidade real da conexão. Teste sobrecarga de CPU e congestionamento, confirmando redução e recuperação de FPS/resolução sem encerrar a sessão. Fontes 1080p não validam QHD nativo. Sem essas medições não há garantia de 1440p60 fluido nem de suporte em toda GPU.
+
 ## Gate
 
 Quality Targets ou **atingidos** ou **atualizados com evidência medida** antes do release. Sem exceção silenciosa. O workflow bloqueia publicação até os testes físicos passarem; o responsável pelo release deve revisar também este benchmark antes de criar a tag. Um E2E com faixa de áudio live não comprova som audível nem sincronização A/V; a gravação e o teste de endurance fornecem essa evidência.

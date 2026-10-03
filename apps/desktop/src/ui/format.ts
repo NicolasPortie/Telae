@@ -1,10 +1,11 @@
 import type { QualityProfile, TransportPath } from '../services/types'
 
 export const QUALITY_OPTIONS: { value: QualityProfile; label: string; hint: string }[] = [
-  { value: 'auto', label: 'Auto', hint: 'Até 1440p, adapta à conexão' },
   { value: '720p60', label: '720p', hint: '720p60 leve' },
   { value: '1080p30', label: '1080p', hint: '1080p30 filmes' },
   { value: '1080p60', label: '1080p60', hint: 'Alta taxa de quadros' },
+  { value: '1440p30', label: '2K · 1440p', hint: '2560 × 1440 a 30 fps · até 20 Mbps por espectador' },
+  { value: '1440p60', label: '2K · 1440p60', hint: '2560 × 1440 a 60 fps · até 32 Mbps por espectador' },
 ]
 
 export function formatElapsed(totalSeconds: number) {
@@ -15,6 +16,7 @@ export function formatElapsed(totalSeconds: number) {
 }
 
 export function qualityLabel(value: QualityProfile) {
+  if (value === 'auto') return 'Adaptativo (versão anterior)'
   return QUALITY_OPTIONS.find(option => option.value === value)?.label ?? value
 }
 

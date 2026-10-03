@@ -1,5 +1,6 @@
 import { getProcessAudioDiagnostics } from './capture'
 import { QualityController } from './quality-controller'
+import { qualityConstraints } from './quality-profiles'
 import { SignalingClient } from './signaling'
 import { StreamController } from './stream-controller'
 import type { DeviceSnapshot } from './types'
@@ -115,7 +116,7 @@ export class ShareSessionController {
   private inviteExpiresAt: string | null = null
   private viewerPresence: ViewerPresence = 'none'
   private viewerName: string | null = null
-  private quality: QualityProfile = 'auto'
+  private quality: QualityProfile = '1080p30'
   private includeAudio = true
   private contentMode: ContentMode = 'text'
   private audioMuted = false
@@ -344,7 +345,7 @@ export class ShareSessionController {
       this.iceServers = access.iceServers
       this.validateRelayConfiguration()
       this.peerDeviceId = access.session.sharerDeviceId
-      this.quality = (access.session.qualityProfile as QualityProfile) ?? 'auto'
+      this.quality = (access.session.qualityProfile as QualityProfile) ?? '1080p30'
       const pendingSignals = this.pendingSignals.splice(0)
       this.createPeer(access.iceServers, null)
       this.setState('negotiating')
@@ -382,7 +383,7 @@ export class ShareSessionController {
         const video = current.getVideoTracks()[0]
         if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
         if (video && this.quality === 'auto' && this.contentMode === 'motion') {
-          await video.applyConstraints({ width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: 60, max: 60 } }).catch(() => {
+          await video.applyConstraints(qualityConstraints(this.quality, this.contentMode)).catch(() => {
             this.error = 'A fonte foi trocada; ela manteve a taxa de quadros disponível.'
           })
         }
@@ -453,10 +454,7 @@ export class ShareSessionController {
     const video = stream.getVideoTracks()[0]
     const previous = video.getConstraints()
     try {
-      const width = quality === '720p60' ? 1280 : quality === 'auto' ? 2560 : 1920
-      const height = quality === '720p60' ? 720 : quality === 'auto' ? 1440 : 1080
-      const fps = quality === '1080p30' || (quality === 'auto' && contentMode === 'text') ? 30 : 60
-      await video.applyConstraints({ width: { ideal: width, max: width }, height: { ideal: height, max: height }, frameRate: { ideal: fps, max: fps } })
+      await video.applyConstraints(qualityConstraints(quality, contentMode))
       if (generation !== this.generation) return
       const session = await this.requireSignaling().updateShareQuality(quality) as ShareSessionSnapshot | undefined
       if (session && session.sessionId === this.session?.sessionId) this.session = session

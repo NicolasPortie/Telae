@@ -1,4 +1,5 @@
 import type { ContentMode, DiagnosticsSnapshot, QualityProfile } from './types'
+import { qualityFramerate } from './quality-profiles'
 
 /**
  * QualityController — deep module do Ticket 05.
@@ -22,6 +23,8 @@ export const PROFILE_CEILINGS: Record<QualityProfile, number> = {
   '720p60': 6_000_000,
   '1080p30': 12_000_000,
   '1080p60': 20_000_000,
+  '1440p30': 20_000_000,
+  '1440p60': 32_000_000,
 }
 
 /** Escada do modo Auto: reduz qualidade antes de introduzir buffer longo. */
@@ -51,7 +54,7 @@ export class QualityController {
   }
 
   decide(profile: QualityProfile, stats: DiagnosticsSnapshot, mode: ContentMode = 'text', uploadBudgetBps?: number): QualityDecision {
-    const targetFps = profile === '1080p30' || (profile === 'auto' && mode === 'text') ? 30 : 60
+    const targetFps = qualityFramerate(profile, mode)
     const currentFps = mode === 'text' ? Math.max(10, targetFps / 2 ** this.cpuStep) : targetFps
     const cpuLimited = stats.qualityLimitationReason === 'cpu' ||
       ((stats.encodeMs ?? 0) > 1000 / currentFps &&

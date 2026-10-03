@@ -20,8 +20,22 @@ function stats(overrides: Partial<DiagnosticsSnapshot> = {}): DiagnosticsSnapsho
 }
 
 describe('QualityController', () => {
+  it.each(['1440p30', '1440p60'] as const)('adapts %s to CPU and network pressure and recovers', (profile) => {
+    const controller = new QualityController()
+    const fps = profile === '1440p30' ? 30 : 60
+    expect(controller.decide(profile, stats(), 'motion').maxFramerate).toBe(fps)
+    for (let i = 0; i < 3; i++) controller.decide(profile, stats({ qualityLimitationReason: 'cpu' }), 'motion')
+    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(2)
+    for (let i = 0; i < 5; i++) controller.decide(profile, stats({ encodeMs: 5, qualityLimitationReason: 'none' }), 'motion')
+    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(1)
+    for (let i = 0; i < 2; i++) controller.decide(profile, stats({ packetLossPercent: 12 }), 'motion')
+    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(2)
+    controller.reset()
+    for (let i = 0; i < 3; i++) controller.decide(profile, stats({ qualityLimitationReason: 'cpu' }), 'text')
+    expect(controller.decide(profile, stats(), 'text').maxFramerate).toBe(fps / 2)
+  })
   it('caps every profile by the viewer budget, including below the auto floor', () => {
-    for (const profile of ['auto', '720p60', '1080p30', '1080p60'] as const) {
+    for (const profile of ['auto', '720p60', '1080p30', '1080p60', '1440p30', '1440p60'] as const) {
       const controller = new QualityController()
       const decision = controller.decide(profile, stats(), 'text', 500_000)
       expect(decision.maxBitrateBps).toBe(500_000)
