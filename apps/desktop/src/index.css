@@ -46,6 +46,10 @@ h2 {
 }
 
 .telae-main { padding-top: 44px; }
+.telae-session-header { max-width: none; padding-inline: clamp(24px, 3vw, 64px); }
+.telae-session-main { max-width: none; padding: clamp(20px, 3vh, 40px) clamp(24px, 3vw, 64px) 24px; }
+.telae-session-main .telae-session-grid { grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 360px); }
+.telae-preview-video { display: block; width: 100%; max-height: calc(100dvh - 320px); aspect-ratio: 16 / 9; object-fit: contain; background: #000; }
 .telae-home { padding-top: 12px; }
 .telae-home-actions { align-items: stretch; }
 .telae-share-card { background: #211f19; border-color: #423b2e; padding: 28px 32px 32px; }
@@ -108,6 +112,7 @@ h2 {
 .telae-viewer-controls button:last-child:hover { background: #492b24; }
 
 @media (max-width: 959px) {
+  .telae-session-main .telae-session-grid { grid-template-columns: minmax(0, 1fr); }
   .telae-session-grid { grid-template-columns: minmax(0, 1fr); }
   .telae-session-sidebar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 24px; }
   .telae-audience { margin-top: 8px; }

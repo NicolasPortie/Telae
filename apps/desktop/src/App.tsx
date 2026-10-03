@@ -5,7 +5,6 @@ import {
   LogIn,
   Maximize,
   Minimize,
-  MonitorUp,
   RefreshCw,
   Signal,
   UserRound,
@@ -17,7 +16,7 @@ import { UpdateNotice } from './components/UpdateNotice'
 import { SharerSession } from './components/SharerSession'
 import { SourceGroup } from './components/SourceGroup'
 import { ShareIllustration } from './components/ShareIllustration'
-import { QUALITY_OPTIONS, formatElapsed } from './ui/format'
+import { QUALITY_OPTIONS } from './ui/format'
 import { ShareSessionController } from './services/share-session'
 import type { QualityProfile } from './services/types'
 import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
@@ -369,10 +368,7 @@ export default function App() {
   return (
     <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
       <header className="telae-header shrink-0 border-b border-[#313029] bg-[#1A1A17]">
-        <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-6">
-          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
-            <MonitorUp size={17} strokeWidth={1.8} />
-          </span>
+        <div className={`mx-auto flex h-16 items-center gap-3 px-6 ${visibleScreen === 'session' ? 'telae-session-header' : 'max-w-[1120px]'}`}>
           <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-[#D8A85C]">.</span></p>
           {appVersion && <span aria-label="Versão instalada" title="Versão instalada" className="telae-version tnum">v{appVersion}</span>}
           <button
@@ -386,16 +382,6 @@ export default function App() {
             <UserRound size={16} aria-hidden="true" />
             {profile?.displayName && <span className="max-w-[140px] truncate">{profile.displayName}</span>}
           </button>
-          <p className="tnum ml-auto flex items-center gap-2 text-xs text-[#B8B4AA]">
-            <span aria-hidden="true" className={`h-2 w-2 rounded-full ${snapshot.signaling === 'online' ? 'bg-[#7FB996]' : 'bg-[#D8A85C]'}`} />
-            {snapshot.state === 'live' && snapshot.liveSinceMs !== null
-              ? `Ao vivo · ${formatElapsed(elapsed)}`
-              : snapshot.signaling === 'connecting' || snapshot.signaling === 'reconnecting'
-                ? 'Conectando…'
-                : snapshot.signaling === 'offline' && profile?.displayName
-                  ? 'Sem conexão'
-                  : (stateLabel[snapshot.state] ?? 'Pronto')}
-          </p>
         </div>
         <UpdateNotice status={updateStatus} sessionActive={sessionActive} onRetry={() => void window.telae.checkForUpdates()} />
         {connectError && (
@@ -410,7 +396,7 @@ export default function App() {
         )}
       </header>
 
-      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full max-w-[1120px] px-6 pb-16 pt-10`}>
+      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full px-6 pb-16 pt-10`}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}

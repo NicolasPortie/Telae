@@ -58,6 +58,7 @@ export type TelaeDesktopApi = {
   resolveWindowAudioProcess(sourceId: string): Promise<number>
   listAudioProcesses(): Promise<AudioProcess[]>
   startAudioCapture(processId: number, captureId: string): Promise<void>
+  startScreenAudioCapture(captureId: string): Promise<void>
   stopAudioCapture(captureId: string): Promise<void>
   getEnvironment(): Promise<DesktopEnvironment>
   setSignalingUrl(signalingUrl: string): Promise<DesktopEnvironment>

@@ -12,6 +12,7 @@ const api: TelaeDesktopApi = {
   resolveWindowAudioProcess: (sourceId: string) => ipcRenderer.invoke('capture:resolve-window-audio', sourceId),
   listAudioProcesses: () => ipcRenderer.invoke('audio:list-processes'),
   startAudioCapture: (processId: number, captureId: string) => ipcRenderer.invoke('audio:start', processId, captureId),
+  startScreenAudioCapture: (captureId: string) => ipcRenderer.invoke('audio:start-screen', captureId),
   stopAudioCapture: (captureId: string) => ipcRenderer.invoke('audio:stop', captureId),
   getEnvironment: () => ipcRenderer.invoke('environment:get'),
   setSignalingUrl: (signalingUrl: string) => ipcRenderer.invoke('environment:set-signaling-url', signalingUrl),

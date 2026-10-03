@@ -1,6 +1,6 @@
 import type { QualityProfile } from './types'
 import { qualityConstraints } from './quality-profiles'
-import { createProcessAudioCapture, type ProcessAudioCapture, type ProcessAudioDiagnostics } from './process-audio'
+import { createProcessAudioCapture, createScreenAudioCapture, type ProcessAudioCapture, type ProcessAudioDiagnostics } from './process-audio'
 
 const processCaptures = new WeakMap<MediaStream, ProcessAudioCapture>()
 
@@ -25,23 +25,14 @@ export async function captureDesktopSource(
   let stream: MediaStream
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: !isWindow,
+      audio: false,
       video: qualityConstraints(quality),
     })
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
       throw new Error('A captura foi cancelada. Escolha novamente a tela ou janela.')
     }
-    // Algumas janelas não disponibilizam loopback de áudio. Mantém o vídeo ativo.
-    signal?.throwIfAborted()
-    try {
-      stream = await navigator.mediaDevices.getDisplayMedia({
-        audio: false,
-        video: qualityConstraints(quality),
-      })
-    } catch {
-      throw new Error('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.')
-    }
+    throw new Error('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.')
   }
 
   const onAbort = () => stopMediaStream(stream)
@@ -54,21 +45,19 @@ export async function captureDesktopSource(
       throw new Error('A fonte escolhida não retornou vídeo.')
     }
     track.contentHint = quality === 'auto' || quality === '1080p30' || quality === '1440p30' ? 'detail' : 'motion'
-    for (const audioTrack of stream.getAudioTracks()) {
-      audioTrack.contentHint = 'music'
-    }
-    if (isWindow) {
-      try {
-        const processId = await window.telae.resolveWindowAudioProcess(sourceId)
-        signal?.throwIfAborted()
-        const processCapture = await createProcessAudioCapture(processId, signal)
-        stream.addTrack(processCapture.track)
-        processCaptures.set(stream, processCapture)
-      } catch (error) {
-        signal?.throwIfAborted()
-        console.warn('Telae: áudio isolado desta janela indisponível', error)
-        // Janela sem áudio compatível: o vídeo continua, sem vazar som de outros apps.
-      }
+    try {
+      const processId = isWindow ? await window.telae.resolveWindowAudioProcess(sourceId) : null
+      signal?.throwIfAborted()
+      const processCapture = processId !== null
+        ? await createProcessAudioCapture(processId, signal)
+        : await createScreenAudioCapture(signal)
+      processCapture.track.contentHint = 'music'
+      stream.addTrack(processCapture.track)
+      processCaptures.set(stream, processCapture)
+    } catch (error) {
+      signal?.throwIfAborted()
+      console.warn('Telae: captura de áudio filtrado indisponível', error)
+      // Keep video running without falling back to unfiltered system audio.
     }
     signal?.throwIfAborted()
     return stream

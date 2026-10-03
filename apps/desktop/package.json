@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "0.1.19",
+  "version": "0.1.20",
   "description": "Telae desktop app for low-latency screen sharing with synchronized system audio.",
   "author": "Telae",
   "type": "module",

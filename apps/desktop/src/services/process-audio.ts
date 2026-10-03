@@ -22,6 +22,14 @@ export type ProcessAudioCapture = {
 }
 
 export async function createProcessAudioCapture(processId: number, signal?: AbortSignal): Promise<ProcessAudioCapture> {
+  return createAudioCapture(id => window.telae.startAudioCapture(processId, id), signal)
+}
+
+export async function createScreenAudioCapture(signal?: AbortSignal): Promise<ProcessAudioCapture> {
+  return createAudioCapture(id => window.telae.startScreenAudioCapture(id), signal)
+}
+
+async function createAudioCapture(start: (captureId: string) => Promise<void>, signal?: AbortSignal): Promise<ProcessAudioCapture> {
   signal?.throwIfAborted()
   const captureId = crypto.randomUUID()
   let disposeChunk: () => void = () => undefined
@@ -69,7 +77,7 @@ export async function createProcessAudioCapture(processId: number, signal?: Abor
       signal?.addEventListener('abort', onAbort, { once: true })
       disposeAbort = () => signal?.removeEventListener('abort', onAbort)
 
-      window.telae.startAudioCapture(processId, captureId).catch((error: unknown) => {
+      start(captureId).catch((error: unknown) => {
         if (started) {
           bridgeFailure = error instanceof Error ? error.message : String(error)
           failCapture?.()

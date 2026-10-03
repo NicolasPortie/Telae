@@ -53,7 +53,7 @@ export function SharerSession({
           {snapshot.hasLocalStream ? (
             <figure className="telae-preview">
               <div className="telae-video-canvas telae-preview-canvas">
-                <video ref={videoRef} muted autoPlay playsInline className="block aspect-video w-full bg-black object-contain" aria-label={`Pré-visualização de ${sourceName ?? 'sua tela'}`} />
+                <video ref={videoRef} muted autoPlay playsInline className="telae-preview-video" aria-label={`Pré-visualização de ${sourceName ?? 'sua tela'}`} />
                 <span aria-hidden="true" className="telae-preview-label">Sua prévia</span>
               </div>
               <figcaption className="telae-preview-toolbar">
