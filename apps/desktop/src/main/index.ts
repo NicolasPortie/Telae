@@ -181,14 +181,13 @@ function registerIpc() {
     return JSON.parse(result.stdout) as AudioProcess[]
   })
 
-  ipcMain.handle('audio:start', (_event, processId: number, captureId: string) => {
-    if (!Number.isInteger(processId) || processId <= 0) throw new Error('Processo de áudio inválido.')
+  const startAudioBridge = (processId: number, captureId: string, screen = false) => {
     if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error('Captura de áudio inválida.')
     stopAudioBridge()
     const executable = findAudioBridge()
     sendAudioState({ status: 'starting', processId, captureId })
 
-    const child = spawn(executable, ['capture', '--pid', String(processId)], {
+    const child = spawn(executable, screen ? ['capture-screen'] : ['capture', '--pid', String(processId)], {
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
@@ -227,6 +226,15 @@ function registerIpc() {
         sendAudioState({ status: 'idle', captureId })
       }
     })
+  }
+
+  ipcMain.handle('audio:start', (_event, processId: number, captureId: string) => {
+    if (!Number.isInteger(processId) || processId <= 0) throw new Error('Processo de áudio inválido.')
+    startAudioBridge(processId, captureId)
+  })
+  ipcMain.handle('audio:start-screen', (_event, captureId: string) => {
+    if (!selectedCaptureSourceId?.startsWith('screen:')) throw new Error('Selecione uma tela para capturar o áudio.')
+    startAudioBridge(0, captureId, true)
   })
 
   ipcMain.handle('audio:stop', (_event, captureId: string) => {
@@ -250,7 +258,7 @@ function registerIpc() {
 }
 
 function registerDisplayMediaHandler() {
-  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     const sourceId = selectedCaptureSourceId
     if (!sourceId) {
       callback({})
@@ -270,7 +278,6 @@ function registerDisplayMediaHandler() {
 
     callback({
       video: source,
-      audio: request.audioRequested && process.platform === 'win32' && sourceId.startsWith('screen:') ? 'loopback' : undefined,
     })
   })
 }
