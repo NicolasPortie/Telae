@@ -92,6 +92,26 @@ test.describe('duas instâncias Telae', () => {
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
 
+      const installedVersion = (await sharer.evaluate(() => window.telae.getEnvironment())).version
+      await expect(sharer.getByLabel('Versão instalada')).toHaveText(`v${installedVersion}`)
+      await expect(sharer.getByRole('button', { name: 'Buscar atualização', exact: true })).toBeVisible()
+      for (const size of [{ width: 1220, height: 790 }, { width: 980, height: 650 }]) {
+        await sharerApp.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setBounds(bounds), size)
+        await expect.poll(() => sharer.evaluate(() => ({
+          noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth,
+          noVerticalOverflow: document.documentElement.scrollHeight <= window.innerHeight,
+          actionsVisible: [...document.querySelectorAll('.telae-home button, .telae-home input')].every(element => {
+            const rect = element.getBoundingClientRect()
+            return rect.top >= 0 && rect.bottom <= window.innerHeight
+          }),
+        }))).toEqual({ noHorizontalOverflow: true, noVerticalOverflow: true, actionsVisible: true })
+        await sharer.screenshot({ path: test.info().outputPath(`layout-home-${size.width}x${size.height}.png`) })
+      }
+      await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 760, height: 650 }))
+      await expect.poll(() => sharer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      await sharer.getByRole('button', { name: 'Buscar atualização', exact: true }).scrollIntoViewIfNeeded()
+      await expect(sharer.getByRole('button', { name: 'Buscar atualização', exact: true })).toBeInViewport()
+      await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 1220, height: 790 }))
       await sharer.screenshot({ path: test.info().outputPath('layout-home.png'), fullPage: true })
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(sharer.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
@@ -115,6 +135,7 @@ test.describe('duas instâncias Telae', () => {
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'downloading', version: '0.1.17', percent: 45 }))
       const progress = sharer.getByRole('progressbar', { name: 'Download da atualização' })
       await expect(progress).toHaveAttribute('value', '45')
+      await expect(sharer.getByLabel('Versão instalada')).toHaveText(`v${installedVersion}`)
       await expect.poll(insideViewport).toBe(true)
       await sharer.screenshot({ path: test.info().outputPath('layout-update-download.png'), style: 'img { visibility: hidden !important; }' })
       await sharer.emulateMedia({ reducedMotion: 'reduce' })
@@ -128,6 +149,13 @@ test.describe('duas instâncias Telae', () => {
       await expect.poll(insideViewport).toBe(true)
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'current', version: '0.1.16' }))
       await sharer.screenshot({ path: test.info().outputPath('layout-picker-minimum.png'), fullPage: true, style: 'img { visibility: hidden !important; }' })
+      for (const size of [{ width: 760, height: 560 }, { width: 640, height: 560 }]) {
+        await sharerApp.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setBounds(bounds), size)
+        await expect.poll(insideViewport).toBe(true)
+        await expect.poll(() => sourceRegion.evaluate(element => element.getBoundingClientRect().height)).toBeGreaterThan(0)
+        await expect.poll(() => sharer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+        await sharer.screenshot({ path: test.info().outputPath(`layout-picker-${size.width}x${size.height}.png`), mask: [sharer.locator('img')] })
+      }
       const windowSources = await sharer.evaluate(() => window.telae.listCaptureSources())
       const firstWindowSource = windowSources.find((source: { kind: string; id: string }) => source.kind === 'window')
       if (WITH_MEDIA && firstWindowSource) {
