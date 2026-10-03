@@ -29,6 +29,7 @@ win:
   # no ambiente de release. Sem eles o instalador sai unsigned, só para teste.
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  oneClick: true
+  perMachine: false
+  allowElevation: false
   shortcutName: Telae

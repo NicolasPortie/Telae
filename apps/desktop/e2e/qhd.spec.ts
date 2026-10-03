@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
-// Real Windows window capture, product signaling, encoder and receiver. No fake media.
+// Real Windows display capture, product signaling, encoder and receiver. No fake media.
 test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () => {
   test.skip(process.env.TELAE_E2E_MEDIA !== '1', 'Exige Windows com display e TELAE_E2E_MEDIA=1')
   test.setTimeout(180_000)
@@ -77,7 +77,9 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     }) })
     await sender.getByRole('button', { name: /Escolher tela/ }).click()
     await sender.getByRole('radio', { name: '2K · 1440p', exact: true }).click()
-    const source = sender.getByRole('radio', { name: /Telae QHD Test Pattern/ })
+    // DWM can trim a fullscreen window by two pixels when focus changes. Capture
+    // the display for exact QHD dimensions; isolated window/audio capture has its own E2E.
+    const source = sender.getByRole('radiogroup', { name: 'Telas', exact: true }).getByRole('radio').first()
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()
     await sender.getByRole('button', { name: 'Compartilhar e gerar convite' }).click()

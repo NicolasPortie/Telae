@@ -6,6 +6,7 @@ import {
   Maximize,
   Minimize,
   MonitorUp,
+  RefreshCw,
   Signal,
   UserRound,
   Volume2,
@@ -49,6 +50,7 @@ export default function App() {
   const [switchingSource, setSwitchingSource] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
+  const [appVersion, setAppVersion] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
@@ -96,9 +98,10 @@ export default function App() {
         return
       }
       try {
-        const local = await window.telae.getLocalProfile()
+        const [local, environment] = await Promise.all([window.telae.getLocalProfile(), window.telae.getEnvironment()])
         if (cancelled) return
         setProfile(local)
+        setAppVersion(environment.version)
         setNameInput(local.displayName)
         setScreen(local.displayName ? 'home' : 'setup')
         if (local.displayName) {
@@ -371,6 +374,7 @@ export default function App() {
             <MonitorUp size={17} strokeWidth={1.8} />
           </span>
           <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-[#D8A85C]">.</span></p>
+          {appVersion && <span aria-label="Versão instalada" title="Versão instalada" className="telae-version tnum">v{appVersion}</span>}
           <button
             type="button"
             onClick={() => setScreen('profile')}
@@ -406,7 +410,7 @@ export default function App() {
         )}
       </header>
 
-      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : 'telae-main mx-auto w-full max-w-[1120px] px-6 pb-16 pt-10'}>
+      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full max-w-[1120px] px-6 pb-16 pt-10`}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -497,12 +501,10 @@ export default function App() {
                   void handleJoin()
                 }}
               >
-                <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#3C3A33] text-[#B8B4AA]">
-                  <LogIn size={24} strokeWidth={1.7} />
-                </span>
-                <h2 className="mt-7 text-[24px] font-semibold tracking-[-0.03em]">Assistir a um amigo</h2>
+                <div aria-hidden="true" className="telae-join-illustration"><div className="telae-invite-ticket"><LogIn size={24} strokeWidth={1.5} /><span>•••• ••••</span></div></div>
+                <h2 className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">Assistir a um amigo</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[#B8B4AA]">Digite o código recebido para entrar na transmissão.</p>
-                <label htmlFor="invite-code" className="mb-3 mt-8 block text-xs font-medium text-[#B8B4AA]">
+                <label htmlFor="invite-code" className="mb-3 mt-5 block text-xs font-medium text-[#B8B4AA]">
                   Código de convite
                 </label>
                 <div className="flex gap-2">
@@ -513,19 +515,25 @@ export default function App() {
                     placeholder="Ex.: K7Q2XAP9"
                     autoComplete="off"
                     spellCheck={false}
+                    aria-describedby="invite-code-hint"
                     maxLength={8}
                     className="telae-code-input tnum h-12 min-w-0 flex-1 rounded-lg border border-[#4A473E] bg-[#141412] px-3 text-sm tracking-[0.12em] placeholder:text-[#9D9A90]"
                   />
                   <button
                     type="submit"
-                    disabled={busy || snapshot.signaling !== 'online' || !inviteCode.trim()}
+                    disabled={busy || snapshot.signaling !== 'online' || inviteCode.length !== 8}
                     className="telae-press h-12 shrink-0 rounded-lg border border-[#5B5140] px-5 text-sm font-semibold text-[#F1EFE8] hover:bg-[#282721] disabled:opacity-50"
                   >
                     {busy ? 'Entrando…' : 'Entrar'}
                   </button>
                 </div>
+                <p id="invite-code-hint" className="mt-3 text-xs text-[#9D9A90]">O convite tem 8 caracteres. Você pode colar o código aqui.</p>
                 {formError && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{formError}</p>}
               </form>
+            </div>
+            <div className="telae-home-footer">
+              <p className="text-xs text-[#9D9A90]">{updateStatus?.phase === 'current' ? 'Você está na versão mais recente.' : 'As atualizações são instaladas automaticamente pelo app.'}</p>
+              <button type="button" onClick={() => void window.telae.checkForUpdates()} disabled={!desktopApiAvailable || ['checking', 'downloading', 'ready', 'installing'].includes(updateStatus?.phase ?? '')} className="telae-press telae-check-update"><RefreshCw size={14} aria-hidden="true" className={updateStatus?.phase === 'checking' ? 'telae-update-spinner' : ''} />{updateStatus?.phase === 'checking' ? 'Buscando atualização…' : 'Buscar atualização'}</button>
             </div>
           </section>
         )}

@@ -233,6 +233,7 @@ function registerIpc() {
     if (typeof captureId === 'string') stopAudioBridge(captureId)
   })
   ipcMain.handle('environment:get', () => ({
+    version: app.getVersion(),
     platform: process.platform,
     isPackaged: app.isPackaged,
     signalingUrl: readSignalingUrl(),
@@ -241,7 +242,7 @@ function registerIpc() {
   ipcMain.handle('environment:set-signaling-url', (_event, signalingUrl: string) => {
     const saved = persistSignalingUrl(signalingUrl)
     void updates.check(saved)
-    return { platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
+    return { version: app.getVersion(), platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
   })
   ipcMain.handle('update:status', () => updates.getStatus())
   ipcMain.handle('update:check', () => updates.check(readSignalingUrl()))
@@ -279,8 +280,8 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1220,
     height: 790,
-    minWidth: 980,
-    minHeight: 650,
+    minWidth: 640,
+    minHeight: 560,
     backgroundColor: '#0b0b0c',
     title: 'Telae',
     autoHideMenuBar: true,
@@ -320,6 +321,10 @@ if (!hasSingleInstanceLock) {
     registerDisplayMediaHandler()
     await createWindow()
     void updates.check(readSignalingUrl())
+    // Apps left open also receive releases published after startup.
+    const updateCheckTimer = setInterval(() => void updates.check(readSignalingUrl()), 15 * 60 * 1000)
+    updateCheckTimer.unref()
+    app.once('before-quit', () => clearInterval(updateCheckTimer))
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) await createWindow()
     })

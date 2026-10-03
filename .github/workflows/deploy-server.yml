@@ -38,6 +38,8 @@ jobs:
         with:
           node-version: 22
       - uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
           dotnet-version: 10.0.x
       - run: npm ci
@@ -203,4 +205,3 @@ jobs:
           curl --fail --silent --show-error \
             http://127.0.0.1:5015/updates/windows/latest.yml \
             | grep -Fx "version: ${GITHUB_REF_NAME#v}"
-
