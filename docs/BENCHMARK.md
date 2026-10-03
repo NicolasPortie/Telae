@@ -14,7 +14,7 @@ Protocolo repetível para validar os Quality Targets do `PROJECT_SPEC.md` no rel
 1. Sharer: Share screen → 1080p60 → gerar convite.
 2. Viewer: Join com o código → aguardar primeiro frame (cronometrar join → primeira imagem).
 3. Sessão de 10 min com conteúdo em movimento (vídeo 1080p60) + áudio do sistema.
-4. Durante a sessão, abrir Diagnostics e clicar **Exportar diagnóstico (JSON)** nas duas pontas ao final.
+4. Nos testes automatizados, coletar a telemetria interna nas duas pontas com o helper `e2e/diagnostics.ts`. O teste de carga salva esses dados na evidência; a interface não oferece painel nem exportação de diagnóstico.
 5. Forçar Relay no build de teste não empacotado: `TELAE_E2E_MEDIA=1`, `TELAE_E2E_RELAY=1`, após compilar desktop e bridge. O processo principal expõe `forceRelay`; o controller define `iceTransportPolicy: 'relay'`. Para o E2E execute `npm run test:e2e -- --grep 'relay obrigatório'`. Confirme `transportPath=relay` nas duas pontas. Apenas fornecer servidores TURN não força relay; bloquear só UDP também pode deixar outros caminhos diretos.
 
 ## Amostragem e evidência

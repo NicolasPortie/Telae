@@ -2,6 +2,7 @@ import { expect, test, type ElectronApplication, type Page, _electron as electro
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { diagnosticSnapshot } from './diagnostics.ts'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
@@ -172,6 +173,8 @@ test.describe('duas instâncias Telae', () => {
       const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
       await expect(remoteVideo).toBeVisible({ timeout: 60_000 })
       await expectRenderedFrames(viewer)
+      expect((await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded).toBeGreaterThan(0)
+      await expect(viewer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
       await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo/)).toBeVisible()
       await viewer.waitForFunction(
         (selector) => {
@@ -284,29 +287,22 @@ test.describe('duas instâncias Telae', () => {
       const liveQuality = sharer.getByRole('combobox', { name: 'Qualidade da transmissão' })
       await liveQuality.selectOption('720p60')
       await expect(liveQuality).toHaveValue('720p60')
-      const contentMode = sharer.getByRole('combobox', { name: 'Conteúdo da transmissão' })
-      await contentMode.selectOption('motion')
-      await expect(contentMode).toHaveValue('motion')
-      const upload = sharer.getByRole('spinbutton', { name: 'Limite de vídeo (Mbps)' })
-      await upload.fill('12')
-      await upload.press('Tab')
-      await expect(upload).toHaveValue('12')
+      await expect(sharer.getByRole('combobox')).toHaveCount(1)
+      await expect(sharer.getByRole('spinbutton')).toHaveCount(0)
+      await expect(sharer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
+      await expect(sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true })).toHaveCount(0)
       await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
-      await sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true }).click()
-      await expect(sharer.getByRole('button', { name: 'Ativar áudio da transmissão', exact: true })).toBeVisible()
-      await sharer.getByRole('button', { name: 'Ativar áudio da transmissão', exact: true }).click()
-      await expect(sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true })).toBeVisible()
       await expectRenderedFrames(secondViewer)
 
       await sharer.getByRole('button', { name: 'Remover ViewerE2E', exact: true }).click()
       await expect(viewer.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
-      await expect(viewer.getByRole('button', { name: 'Exportar diagnóstico (JSON)', exact: true })).toBeVisible()
+      await expect(viewer.getByRole('button', { name: /Exportar diagnóstico/ })).toHaveCount(0)
       await expect(sharer.getByRole('button', { name: 'Remover ViewerE2E', exact: true })).toHaveCount(0)
       await expect(secondVideo).toBeVisible()
       await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
       await expect(sharer.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
       await expect(secondViewer.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
-      await expect(sharer.getByRole('button', { name: 'Exportar diagnóstico da última transmissão', exact: true })).toBeVisible()
+      await expect(sharer.getByRole('button', { name: /Exportar diagnóstico/ })).toHaveCount(0)
     } finally {
       await sharerApp.close()
       await viewerApp.close()
@@ -337,11 +333,10 @@ test.describe('duas instâncias Telae', () => {
       await viewer.getByLabel('Código de convite').fill(code)
       await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
       await expectRenderedFrames(viewer)
-      await sharer.getByText('Detalhes da conexão', { exact: true }).click()
       // The selected candidate pair must report relay, not just a configured TURN URL.
-      await expect(sharer.locator('dl > div').filter({ has: sharer.locator('dt', { hasText: /^Conexão$/ }) }).locator('dd')).toHaveText('Via servidor', { timeout: 30_000 })
-      await viewer.getByText('Detalhes da conexão', { exact: true }).click()
-      await expect(viewer.locator('dl > div').filter({ has: viewer.locator('dt', { hasText: /^Conexão$/ }) }).locator('dd')).toHaveText('Via servidor', { timeout: 30_000 })
+      for (const page of [sharer, viewer]) {
+        await expect.poll(async () => (await diagnosticSnapshot(page)).snapshot.diagnostics.transportPath, { timeout: 30_000 }).toBe('relay')
+      }
       await sharer.getByRole('button', { name: 'Parar transmissão' }).click()
     } finally {
       await sharerApp.close()
