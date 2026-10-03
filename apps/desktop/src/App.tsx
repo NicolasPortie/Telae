@@ -12,10 +12,10 @@ import {
   VolumeX,
 } from 'lucide-react'
 import { DiagnosticsHistory } from './services/diagnostics-history'
-import { DiagnosticsBody } from './components/DiagnosticsBody'
 import { UpdateNotice } from './components/UpdateNotice'
 import { SharerSession } from './components/SharerSession'
 import { SourceGroup } from './components/SourceGroup'
+import { ShareIllustration } from './components/ShareIllustration'
 import { QUALITY_OPTIONS, formatElapsed } from './ui/format'
 import { ShareSessionController } from './services/share-session'
 import type { QualityProfile } from './services/types'
@@ -41,7 +41,6 @@ export default function App() {
   const [nameInput, setNameInput] = useState('')
   const [copied, setCopied] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  const [hasDiagnostics, setHasDiagnostics] = useState(false)
   const [overlayVisible, setOverlayVisible] = useState(true)
   const [fullscreen, setFullscreen] = useState(false)
   const [muted, setMuted] = useState(false)
@@ -227,7 +226,7 @@ export default function App() {
       if (switchingSource) await controller.switchSource(selectedId)
       else await controller.startSharing(selectedId, quality)
       setActiveSourceId(selectedId)
-      if (!switchingSource) { historyRef.current.reset(); setHasDiagnostics(false) }
+      if (!switchingSource) historyRef.current.reset()
       setSwitchingSource(false)
       setScreen('session')
     } catch (error) {
@@ -243,7 +242,6 @@ export default function App() {
     try {
       await controller.joinWithInvite(inviteCode)
       historyRef.current.reset()
-      setHasDiagnostics(false)
       setScreen('session')
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Não foi possível entrar.')
@@ -269,20 +267,6 @@ export default function App() {
     }
   }, [snapshot.inviteCode])
 
-  const exportDiagnostics = useCallback(() => {
-    const payload = JSON.stringify(
-      historyRef.current.export(snapshot),
-      null,
-      2,
-    )
-    const url = URL.createObjectURL(new Blob([payload], { type: 'application/json' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = `telae-diagnostics-${Date.now()}.json`
-    anchor.click()
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }, [snapshot])
-
   // Anexa o MediaStream correto ao <video> conforme o papel.
   const activeStream = snapshot.role === 'viewer' ? controller.getRemoteStream() : controller.getLocalStream()
   useEffect(() => {
@@ -302,7 +286,6 @@ export default function App() {
       const current = latestSnapshot.current
       if (current.liveSinceMs !== null) setElapsed(Math.floor((Date.now() - current.liveSinceMs) / 1000))
       historyRef.current.record(current)
-      if (current.state === 'live') setHasDiagnostics(true)
     }, 1000)
     return () => window.clearInterval(timer)
   }, [sessionActive])
@@ -382,12 +365,12 @@ export default function App() {
 
   return (
     <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
-      <header className="shrink-0 border-b border-[#313029] bg-[#1A1A17]">
+      <header className="telae-header shrink-0 border-b border-[#313029] bg-[#1A1A17]">
         <div className="mx-auto flex h-16 max-w-[1120px] items-center gap-3 px-6">
           <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
             <MonitorUp size={17} strokeWidth={1.8} />
           </span>
-          <p className="text-[16px] font-semibold tracking-tight">Telae</p>
+          <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-[#D8A85C]">.</span></p>
           <button
             type="button"
             onClick={() => setScreen('profile')}
@@ -423,7 +406,7 @@ export default function App() {
         )}
       </header>
 
-      <main className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1040px] px-6' : 'mx-auto w-full max-w-[1040px] px-6 pb-16 pt-10'}>
+      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : 'telae-main mx-auto w-full max-w-[1120px] px-6 pb-16 pt-10'}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -481,22 +464,19 @@ export default function App() {
         )}
 
         {visibleScreen === 'home' && (
-          <section aria-labelledby="home-title" className="telae-panel-enter">
-            {hasDiagnostics && <button type="button" onClick={exportDiagnostics} className="telae-press mb-4 min-h-[40px] rounded-md border border-[#313029] px-4 text-sm">Exportar diagnóstico da última transmissão</button>}
+          <section aria-labelledby="home-title" className="telae-panel-enter telae-home">
             <p className="text-sm text-[#B8B4AA]">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
-            <h1 id="home-title" className="mt-2 max-w-[20ch] text-[clamp(30px,4vw,42px)] font-semibold leading-[1.12] tracking-tight">
+            <h1 id="home-title" className="mt-3 max-w-[19ch] text-[clamp(34px,4.5vw,52px)] font-semibold leading-[1.08] tracking-[-0.045em]">
               Compartilhar a tela ficou simples.
             </h1>
-            <p className="mt-4 max-w-[58ch] text-[15px] leading-relaxed text-[#B8B4AA]">
-              Mostre sua tela a um amigo ou entre com o código que ele enviou.
+            <p className="mt-5 max-w-[48ch] text-[15px] leading-relaxed text-[#B8B4AA]">
+              Mostre sua tela ou entre com um convite para assistir.
             </p>
 
-            <div className="mt-9 grid gap-5 md:grid-cols-[1.25fr_1fr]">
-              <section aria-labelledby="share-title" className="flex min-h-[280px] flex-col rounded-2xl border border-[#4A4031] bg-[#24221D] p-7">
-                <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D8A85C]/15 text-[#D8A85C]">
-                  <MonitorUp size={25} strokeWidth={1.7} />
-                </span>
-                <h2 id="share-title" className="mt-7 text-[22px] font-semibold tracking-tight">Mostrar minha tela</h2>
+            <div className="telae-home-actions mt-10 grid gap-5 md:grid-cols-[1.35fr_1fr]">
+              <section aria-labelledby="share-title" className="telae-share-card flex flex-col rounded-2xl border border-[#4A4031] bg-[#24221D] p-7">
+                <ShareIllustration />
+                <h2 id="share-title" className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">Mostrar minha tela</h2>
                 <p className="mt-2 max-w-[35ch] text-sm leading-relaxed text-[#B8B4AA]">
                   Escolha uma tela ou janela e envie o código de convite para quem vai assistir.
                 </p>
@@ -504,14 +484,14 @@ export default function App() {
                   type="button"
                   onClick={openPicker}
                   disabled={snapshot.signaling !== 'online'}
-                  className="telae-press mt-auto flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="telae-press telae-primary-action mt-6 flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Escolher tela <ArrowRight size={17} aria-hidden="true" />
                 </button>
               </section>
 
               <form
-                className="flex min-h-[280px] flex-col rounded-2xl border border-[#313029] bg-[#1C1C19] p-7"
+                className="telae-join-card flex flex-col rounded-2xl border border-[#313029] bg-[#1C1C19] p-7"
                 onSubmit={(event) => {
                   event.preventDefault()
                   void handleJoin()
@@ -520,20 +500,21 @@ export default function App() {
                 <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#3C3A33] text-[#B8B4AA]">
                   <LogIn size={24} strokeWidth={1.7} />
                 </span>
-                <h2 className="mt-7 text-[22px] font-semibold tracking-tight">Assistir a um amigo</h2>
+                <h2 className="mt-7 text-[24px] font-semibold tracking-[-0.03em]">Assistir a um amigo</h2>
                 <p className="mt-2 text-sm leading-relaxed text-[#B8B4AA]">Digite o código recebido para entrar na transmissão.</p>
-                <label htmlFor="invite-code" className="mb-2 mt-5 block text-xs font-medium text-[#B8B4AA]">
+                <label htmlFor="invite-code" className="mb-3 mt-8 block text-xs font-medium text-[#B8B4AA]">
                   Código de convite
                 </label>
                 <div className="flex gap-2">
                   <input
                     id="invite-code"
                     value={inviteCode}
-                    onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+                    onChange={(event) => setInviteCode(event.target.value.replace(/\s/g, '').toUpperCase())}
                     placeholder="Ex.: K7Q2XAP9"
                     autoComplete="off"
                     spellCheck={false}
-                    className="h-12 min-w-0 flex-1 rounded-lg border border-[#4A473E] bg-[#141412] px-3 text-sm tracking-[0.12em] placeholder:text-[#77746C]"
+                    maxLength={8}
+                    className="telae-code-input tnum h-12 min-w-0 flex-1 rounded-lg border border-[#4A473E] bg-[#141412] px-3 text-sm tracking-[0.12em] placeholder:text-[#9D9A90]"
                   />
                   <button
                     type="submit"
@@ -559,7 +540,7 @@ export default function App() {
             >
               <ArrowLeft size={16} aria-hidden="true" /> Voltar
             </button>
-            <h1 id="picker-title" className="mt-2 text-2xl font-semibold tracking-tight">
+            <h1 id="picker-title" className="mt-2 text-[28px] font-semibold tracking-[-0.035em]">
               O que você quer compartilhar?
             </h1>
             <p className="mt-1 text-sm text-[#9D9A90]">{switchingSource ? 'A transmissão e o código continuam ativos durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
@@ -587,11 +568,15 @@ export default function App() {
                   <SourceGroup title="Janelas" sources={windowsList} selectedId={selectedId} onSelect={setSelectedId} />
                 </div>
 
-                <div className="telae-picker-actions shrink-0 rounded-[10px] border border-[#313029] bg-[#1C1C19] p-4">
+                <div className="telae-picker-actions shrink-0 rounded-xl border border-[#38362E] bg-[#1C1C19] p-4">
+                  <p className="telae-selected-source mb-3 truncate text-sm font-medium" title={sources.find(item => item.id === selectedId)?.name}>
+                    {sources.find(item => item.id === selectedId)?.name ?? 'Escolha uma tela ou janela acima'}
+                  </p>
+                  <div className="telae-picker-action-row">
                   <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
                     {!switchingSource && <fieldset>
-                      <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">
-                        Qualidade da imagem
+                      <legend className="mb-2 text-xs font-medium text-[#9D9A90]">
+                        Qualidade
                       </legend>
                       <div role="radiogroup" aria-label="Qualidade da imagem" className="flex flex-wrap gap-2">
                         {QUALITY_OPTIONS.map((option) => {
@@ -604,7 +589,7 @@ export default function App() {
                               aria-checked={active}
                               title={option.hint}
                               onClick={() => setQuality(option.value)}
-                              className={`telae-press min-h-[40px] rounded-md border px-4 text-sm font-semibold ${
+                              className={`telae-press min-h-[40px] rounded-md border px-3 text-xs font-medium ${
                                 active
                                   ? 'border-[#D8A85C] bg-[#282721] text-[#F1EFE8]'
                                   : 'border-[#313029] bg-transparent text-[#9D9A90] hover:text-[#F1EFE8]'
@@ -625,15 +610,16 @@ export default function App() {
                     </p>
                   )}
 
-                  <div className="mt-4 border-t border-[#313029] pt-4">
+                  <div className="telae-picker-submit">
                     <button
                       type="button"
                       onClick={() => void handleStartSharing()}
                       disabled={busy || !selectedId}
-                      className="telae-press min-h-[44px] w-full rounded-md bg-[#D8A85C] px-5 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
+                      className="telae-press telae-primary-action min-h-[48px] w-full rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50"
                     >
                       {busy ? 'Preparando…' : switchingSource ? 'Trocar fonte agora' : 'Compartilhar e gerar convite'}
                     </button>
+                  </div>
                   </div>
                 </div>
               </>
@@ -698,12 +684,9 @@ export default function App() {
             onCopyInvite={copyInvite}
             onStop={() => void handleLeave()}
             onChangeSource={openSourceSwitch}
-            onExport={exportDiagnostics}
             formError={formError}
             busy={busy}
             onQuality={(value, mode) => void runSessionAction(() => controller.setQuality(value, mode))}
-            onAudio={() => controller.setAudioMuted(!snapshot.audioMuted)}
-            onUpload={(value) => void runSessionAction(async () => controller.setUploadBudget(value))}
             onRemove={(id) => void runSessionAction(() => controller.removeViewer(id))}
           />
         )}
@@ -754,10 +737,6 @@ export default function App() {
 
             {snapshot.hasRemoteStream && (
               <div className="telae-viewer-playback relative">
-                <details onToggle={pokeOverlay} className="telae-viewer-diagnostics absolute right-3 top-3 z-10 max-h-[calc(100%-100px)] max-w-[min(600px,calc(100%-24px))] overflow-auto rounded-md border border-[#313029] bg-[#1C1C19]/95 transition-opacity duration-200">
-                  <summary className="cursor-pointer px-4 py-3 text-sm">Detalhes da conexão</summary>
-                  <DiagnosticsBody snapshot={snapshot} onExport={exportDiagnostics} />
-                </details>
                 <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-[#313029]">
                   <video
                     ref={videoRef}
@@ -843,7 +822,6 @@ export default function App() {
           <div className="mx-auto max-w-[520px] py-16 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
             {snapshot.error && <p className="mt-2 text-sm text-[#9D9A90]">{snapshot.error}</p>}
-            <button type="button" onClick={exportDiagnostics} className="telae-press mt-4 min-h-[44px] rounded-md border border-[#313029] px-5 text-sm">Exportar diagnóstico (JSON)</button>
             <button
               type="button"
               onClick={() => {

@@ -18,8 +18,8 @@ export function SourceGroup({
   if (sources.length === 0) return null
   return (
     <div className="mt-6">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-[#9D9A90]">{title}</h2>
-      <ul role="radiogroup" aria-label={title} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-[#B8B4AA]">{title}<span aria-hidden="true" className="telae-count tnum">{sources.length}</span></h2>
+      <ul role="radiogroup" aria-label={title} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {sources.map((source, index) => {
           const active = source.id === selectedId
           return (
@@ -52,12 +52,12 @@ export function SourceGroup({
                   onSelect(next.id)
                   buttons.current.get(next.id)?.focus()
                 }}
-                className={`telae-press relative block w-full overflow-hidden rounded-[10px] border bg-[#141412] text-left ${
+                className={`telae-press telae-source-card relative block w-full overflow-hidden rounded-xl border bg-[#141412] text-left ${
                   active ? 'border-[#D8A85C] ring-1 ring-[#D8A85C]/40' : 'border-[#313029] hover:border-[#9D9A90]'
                 }`}
               >
                 {source.thumbnailDataUrl ? (
-                  <img src={source.thumbnailDataUrl} alt="" aria-hidden="true" draggable={false} className="aspect-video w-full object-cover" />
+                  <img src={source.thumbnailDataUrl} alt="" aria-hidden="true" draggable={false} className="aspect-video w-full object-contain" />
                 ) : (
                   <span aria-hidden="true" className="block aspect-video w-full bg-[#1C1C19]" />
                 )}
@@ -67,7 +67,7 @@ export function SourceGroup({
                   </span>
                 )}
                 <span
-                  className={`block truncate border-t px-3 py-2 text-[13px] ${
+                  className={`block truncate border-t px-3 py-3 text-[13px] ${
                     active ? 'border-[#D8A85C] bg-[#282721] font-semibold text-[#F1EFE8]' : 'border-[#313029] text-[#9D9A90]'
                   }`}
                 >

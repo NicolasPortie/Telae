@@ -40,10 +40,10 @@ Acrescente `ClientAddress__KnownProxies__1=::1` somente se o túnel usa também 
 Os comandos novos `UpdateShareQuality` e `RemoveViewer` exigem implantar este backend antes de distribuir este desktop. Clientes anteriores ainda negociam mídia, mas não conhecem esses controles.
 
 - `getEnvironment()` expõe `forceRelay: true` quando `!app.isPackaged && TELAE_E2E_RELAY === '1'` no processo principal. O renderer passa `iceTransportPolicy: 'relay'` a todos os peers e valida presença de credenciais TURN. Não altere a política com monkey patch no teste.
-- Select `Qualidade da transmissão`, valores `auto`, `720p60`, `1080p30`, `1080p60`.
-- Botões `Silenciar transmissão`, `Ativar áudio da transmissão`, `Remover ${displayName}`.
+- Select `Qualidade da transmissão`, valores `720p60`, `1080p30`, `1080p60`, `1440p30`, `1440p60`. É o único ajuste de transmissão na interface.
+- Botões `Parar transmissão`, `Trocar fonte`, `Remover ${displayName}`. O receptor mantém volume e silenciamento local.
 - Vídeo `Transmissão do seu amigo`; `Assistindo` somente após confirmação de primeiro frame.
-- `Detalhes da conexão` no emissor expõe caminho ICE real (`relay`) do par selecionado; o teste também exige frames decodificados no receptor.
+- O helper E2E `diagnosticSnapshot` coleta telemetria interna para confirmar o caminho ICE real (`relay`) do par selecionado; o teste também exige frames decodificados no receptor. Diagnósticos não aparecem na interface.
 
 Após as mudanças do aplicativo serem compiladas, execute os E2E. Um teste que falha por contrato ausente é bloqueio de integração, não motivo para ignorá-lo.
 

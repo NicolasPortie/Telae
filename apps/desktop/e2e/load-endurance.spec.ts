@@ -3,9 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { DiagnosticsSnapshot } from '../src/services/types.ts'
-
-type DiagnosticExport = { snapshot: { diagnostics: DiagnosticsSnapshot }; samples: unknown[] }
+import { diagnosticSnapshot } from './diagnostics.ts'
 
 const requestedViewers = process.env.TELAE_E2E_VIEWERS
 const viewerCount = Number(requestedViewers)
@@ -35,24 +33,6 @@ async function memorySnapshot(app: ElectronApplication) {
   return app.evaluate(({ app }) => ({
     capturedAt: new Date().toISOString(), memoryUnit: 'KiB', processes: app.getAppMetrics(),
   }))
-}
-
-// Capture the Blob from the public export. Restore the browser API synchronously;
-// detached download anchors do not bubble clicks to document.
-async function diagnosticSnapshot(page: Page) {
-  return page.evaluate(async () => {
-    const button = [...document.querySelectorAll('button')].find(element => element.textContent?.includes('Exportar diagnóstico (JSON)'))
-    if (!button) throw new Error('Exportação de diagnóstico ausente')
-    const original = URL.createObjectURL
-    let payload: Promise<string> | undefined
-    URL.createObjectURL = function(blob) {
-      if (blob instanceof Blob && blob.type === 'application/json') payload = blob.text()
-      return original.call(URL, blob)
-    }
-    try { button.click() } finally { URL.createObjectURL = original }
-    if (!payload) throw new Error('Exportação não produziu Blob JSON')
-    return JSON.parse(await payload) as DiagnosticExport
-  })
 }
 
 async function joinUntilFirstPresentedFrame(page: Page, code: string) {
@@ -163,7 +143,7 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     }
     evidence.actualSoakSeconds = (performance.now() - soakStarted) / 1000
     evidence.memoryEnd = await Promise.all(instances.map(async (instance, index) => ({ instance: index, ...await memorySnapshot(instance.app) })))
-    // Public exports include RTC framesDecoded/FPS and one-hour samples; playback counters above are separately named.
+    // Internal telemetry includes RTC framesDecoded/FPS and one-hour samples; playback counters above are separately named.
     const diagnosticsEnd = await Promise.all(instances.map(instance => diagnosticSnapshot(instance.page)))
     evidence.diagnosticsEnd = diagnosticsEnd
     evidence.receiverRtcEnd = diagnosticsEnd.slice(1).map((exported, index) => ({

@@ -4,8 +4,8 @@ export const QUALITY_OPTIONS: { value: QualityProfile; label: string; hint: stri
   { value: '720p60', label: '720p', hint: '720p60 leve' },
   { value: '1080p30', label: '1080p', hint: '1080p30 filmes' },
   { value: '1080p60', label: '1080p60', hint: 'Alta taxa de quadros' },
-  { value: '1440p30', label: '2K · 1440p', hint: '2560 × 1440 a 30 fps · até 20 Mbps por espectador' },
-  { value: '1440p60', label: '2K · 1440p60', hint: '2560 × 1440 a 60 fps · até 32 Mbps por espectador' },
+  { value: '1440p30', label: '2K · 1440p', hint: 'Maior nitidez' },
+  { value: '1440p60', label: '2K · 1440p60', hint: 'Maior nitidez e fluidez' },
 ]
 
 export function formatElapsed(totalSeconds: number) {
