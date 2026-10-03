@@ -197,6 +197,23 @@ it('uses the updated profile for future offers', async () => {
   expect(sender.getParameters().encodings[0].maxBitrate).toBe(6_000_000)
 })
 
+it.each(['1440p30', '1440p60'] as const)('applies %s bitrate and framerate after a live profile change', async (profile) => {
+  const { peer: sharer } = peer(true)
+  const sender = installSender()
+  const fps = profile === '1440p30' ? 30 : 60
+  const ceiling = profile === '1440p30' ? 20_000_000 : 32_000_000
+  await sharer.applyQuality(6_000_000, 'maintain-framerate', { maxFramerate: 60, scaleResolutionDownBy: 2 })
+  await sharer.setQualityProfile(profile)
+  await sharer.applyQuality(ceiling, 'maintain-resolution', { maxFramerate: fps, scaleResolutionDownBy: 1 })
+  expect(sender.getParameters().encodings[0]).toMatchObject({ maxBitrate: ceiling, maxFramerate: fps, scaleResolutionDownBy: 1 })
+  await sharer.createOffer()
+  expect(sender.getParameters().encodings[0]).toMatchObject({ maxBitrate: ceiling, maxFramerate: fps })
+  await sharer.applyQuality(100_000_000, 'maintain-resolution')
+  expect(sender.getParameters().encodings[0].maxBitrate).toBe(ceiling)
+  await sharer.applyQuality(8_000_000, 'maintain-resolution')
+  expect(sender.getParameters().encodings[0].maxBitrate).toBe(8_000_000)
+})
+
 it('preserves relay-only policy when updating ICE servers', () => {
   const viewer = new WebRtcPeer({ iceServers: [], qualityProfile: 'auto', iceTransportPolicy: 'relay',
     sendSignal: async () => undefined, onRemoteStream: vi.fn(), onStatus: vi.fn() })

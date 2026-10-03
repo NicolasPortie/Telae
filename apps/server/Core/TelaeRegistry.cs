@@ -496,7 +496,7 @@ public sealed class TelaeRegistry
         var normalized = value?.Trim().ToLowerInvariant();
         return normalized switch
         {
-            "auto" or "720p60" or "1080p30" or "1080p60" => normalized,
+            "auto" or "720p60" or "1080p30" or "1080p60" or "1440p30" or "1440p60" => normalized,
             _ => throw new TelaeDomainException("invalid_quality_profile", "Perfil de qualidade inválido.")
         };
     }

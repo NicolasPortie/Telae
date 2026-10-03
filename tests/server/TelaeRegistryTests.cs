@@ -4,6 +4,22 @@ namespace Telae.Server.Tests;
 
 public sealed class TelaeRegistryTests
 {
+    [Theory]
+    [InlineData("1440p30")]
+    [InlineData("1440p60")]
+    public void Qhd_profile_is_preserved_for_start_join_and_live_quality_changes(string profile)
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterDevice("device-nicolas", "Nicolas", "connection-nicolas", new string('a', 64));
+        registry.RegisterDevice("device-biel", "Biel", "connection-biel", new string('a', 64));
+        Assert.Equal(profile, registry.StartShare("device-nicolas", profile).QualityProfile);
+        var invite = registry.CreateInvite("device-nicolas");
+        Assert.Equal(profile, registry.JoinWithInvite("device-biel", invite.Code).QualityProfile);
+        registry.UpdateShareQuality("device-nicolas", "1080p30");
+        Assert.Equal(profile, registry.UpdateShareQuality("device-nicolas", profile).QualityProfile);
+        Assert.Equal(profile, registry.GetActiveSessionForSharer("device-nicolas")!.QualityProfile);
+    }
+
     [Fact]
     public void Viewer_cannot_join_before_sharer_explicitly_starts_sharing()
     {
