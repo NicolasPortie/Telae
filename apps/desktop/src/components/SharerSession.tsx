@@ -1,18 +1,16 @@
-import { Check, Copy, Monitor, Square, Users, X } from 'lucide-react'
+import { Monitor, Square, Users, X } from 'lucide-react'
 import type { ShareSessionController } from '../services/share-session'
 import type { ContentMode, QualityProfile } from '../services/types'
 import { formatElapsed, QUALITY_OPTIONS } from '../ui/format'
 
 export function SharerSession({
-  snapshot, elapsed, sourceName, videoRef, copied, onCopyInvite,
+  snapshot, elapsed, sourceName, videoRef,
   onStop, onChangeSource, formError, busy, onQuality, onRemove,
 }: {
   snapshot: ReturnType<ShareSessionController['getSnapshot']>
   elapsed: number
   sourceName: string | null
   videoRef: React.RefObject<HTMLVideoElement | null>
-  copied: boolean
-  onCopyInvite: () => void
   onStop: () => void
   onChangeSource: () => void
   formError: string | null
@@ -83,19 +81,14 @@ export function SharerSession({
           {snapshot.error && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{snapshot.error}</p>}
         </div>
 
-        <aside className="telae-session-sidebar" aria-label="Convite e espectadores">
-          {snapshot.inviteCode && snapshot.state !== 'ended' && (
-            <section className="telae-invite-card" aria-labelledby="invite-title">
+        <aside className="telae-session-sidebar" aria-label="Espectadores">
+          {snapshot.state !== 'ended' && (
+            <section className="telae-live-card" aria-labelledby="live-title">
               <div className="flex items-center gap-2 text-[#D8A85C]">
-                <Users size={16} aria-hidden="true" /><h2 id="invite-title" className="text-sm font-medium">Convide seus amigos</h2>
+                <Users size={16} aria-hidden="true" /><h2 id="live-title" className="text-sm font-medium">Ao vivo para seus amigos</h2>
               </div>
-              <p className="mt-3 text-[13px] leading-relaxed text-[#B8B4AA]">Envie este código para quem vai assistir.</p>
-              <p className="telae-invite-code tnum" aria-label={`Código de convite ${snapshot.inviteCode}`}>{snapshot.inviteCode}</p>
-              <button type="button" onClick={onCopyInvite} disabled={!snapshot.inviteCode} className={`telae-press telae-copy-button ${copied ? 'is-copied' : ''}`}>
-                {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-                {copied ? 'Copiado' : 'Copiar código'}
-              </button>
-              <p className="mt-3 text-center text-xs text-[#9D9A90]">Até 12 pessoas com o mesmo convite</p>
+              <p className="mt-3 text-[13px] leading-relaxed text-[#B8B4AA]">Seus amigos veem <span className="font-semibold text-[#D8A85C]">Ao vivo</span> na lista e entram em 1 clique — sem código.</p>
+              <p className="mt-3 text-center text-xs text-[#9D9A90]">Até 12 amigos ao mesmo tempo</p>
             </section>
           )}
 
@@ -105,7 +98,7 @@ export function SharerSession({
               <div className="telae-audience-empty">
                 <span aria-hidden="true" className="telae-empty-icon"><Users size={22} strokeWidth={1.5} /></span>
                 <p className="text-sm text-[#B8B4AA]">Tudo pronto para receber.</p>
-                <p className="mt-1 text-xs leading-relaxed text-[#9D9A90]">Seus amigos aparecem aqui quando entrarem com o convite.</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#9D9A90]">Seus amigos aparecem aqui quando entrarem.</p>
               </div>
             ) : (
               <>
