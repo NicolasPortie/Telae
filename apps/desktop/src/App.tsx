@@ -109,15 +109,16 @@ export default function App() {
     try {
       const local = await window.telae.getLocalProfile()
       setProfile(current => (current?.deviceId === local.deviceId && JSON.stringify(current.friendCodes) === JSON.stringify(local.friendCodes) ? current : local))
+      // Meu código independe de ter amigos: precisa aparecer mesmo com a lista vazia.
+      const me = controller.getMyFriendCode()
+      if (me) setMyFriendCode(me)
       const current = local.friendCodes ?? []
-      if (current.length === 0) {
-        setFriends([])
+      if (snapshot.signaling !== 'online' || current.length === 0) {
+        if (current.length === 0) setFriends([])
         return
       }
-      if (snapshot.signaling !== 'online') return
       // Declara a lista ao servidor: a lista volta ordenada e a amizade passa a valer nos dois lados.
       setFriends(await controller.fetchFriends(current))
-      setMyFriendCode(controller.getMyFriendCode())
     } catch {
       // lista de amigos não bloqueia a home
     }
