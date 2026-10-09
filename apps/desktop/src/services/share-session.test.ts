@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => void>(),
   signaling: {
     connect: vi.fn(), disconnect: vi.fn(), getActiveShare: vi.fn(), startShare: vi.fn(),
-    createInvite: vi.fn(), stopShare: vi.fn(), joinWithInvite: vi.fn(), leaveShare: vi.fn(),
+    stopShare: vi.fn(), joinFriendShare: vi.fn(), getFriends: vi.fn(async () => []), leaveShare: vi.fn(),
     getTurnCredentials: vi.fn(), sendSignal: vi.fn(), updateShareQuality: vi.fn(), removeViewer: vi.fn(),
   },
 }))
@@ -72,9 +72,8 @@ beforeEach(async () => {
   mocks.signaling.disconnect.mockResolvedValue(undefined)
   mocks.signaling.getActiveShare.mockResolvedValue(null)
   mocks.signaling.startShare.mockResolvedValue(access)
-  mocks.signaling.createInvite.mockResolvedValue({ code: 'ABCDEFGH', expiresAt: '', sessionId: 'session' })
   mocks.signaling.stopShare.mockResolvedValue(undefined)
-  mocks.signaling.joinWithInvite.mockResolvedValue(access)
+  mocks.signaling.joinFriendShare.mockResolvedValue(access)
   mocks.signaling.leaveShare.mockResolvedValue(undefined)
   mocks.signaling.getTurnCredentials.mockResolvedValue([])
   vi.stubGlobal('window', { setTimeout, clearTimeout, setInterval, clearInterval, telae: {
@@ -120,18 +119,24 @@ it('cleans a server session whose creation completed after cancellation', async 
   expect(track.stop).toHaveBeenCalledOnce()
 })
 
-it('releases capture when invite creation fails without waiting for remote cleanup', async () => {
-  mocks.signaling.createInvite.mockRejectedValue(new Error('Convite indisponível'))
+it('releases capture when the server refuses to start the share', async () => {
+  mocks.signaling.startShare.mockRejectedValue(new Error('Servidor indisponível'))
   mocks.signaling.stopShare.mockReturnValue(new Promise(() => undefined))
-  await expect(controller.startSharing('screen:1', 'auto')).rejects.toThrow('Convite indisponível')
+  await expect(controller.startSharing('screen:1', 'auto')).rejects.toThrow('Servidor indisponível')
   expect(track.stop).toHaveBeenCalledOnce()
   expect(controller.getSnapshot()).toMatchObject({ state: 'idle', role: null, hasLocalStream: false })
 })
 
+it('exposes no invite code: sharing relies on friend join only', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  expect(controller.getSnapshot()).not.toHaveProperty('inviteCode')
+  expect(controller.getSnapshot().state).toBe('waiting-for-peer')
+})
+
 it('keeps an offer that arrives before the join reply', async () => {
   const request = deferred<ShareAccessResult>()
-  mocks.signaling.joinWithInvite.mockReturnValue(request.promise)
-  const join = controller.joinWithInvite('ABCDEFGH')
+  mocks.signaling.joinFriendShare.mockReturnValue(request.promise)
+  const join = controller.joinFriendShare('ABCDEF')
   const offer: SignalingEnvelope = { sessionId: 'session', fromDeviceId: 'sharer', payload: { kind: 'offer', sdp: 'offer' } }
   mocks.handlers.get('signalReceived')!(offer)
   request.resolve(access)
@@ -140,7 +145,7 @@ it('keeps an offer that arrives before the join reply', async () => {
 })
 
 it('bounds viewer recovery even when offers succeed without restoring media', async () => {
-  await controller.joinWithInvite('ABCDEFGH')
+  await controller.joinFriendShare('ABCDEF')
   await vi.advanceTimersByTimeAsync(40_000)
   expect(mocks.peers[0].restartIce).toHaveBeenCalledTimes(3)
   expect(mocks.peers[0].close).toHaveBeenCalled()
@@ -150,7 +155,7 @@ it('bounds viewer recovery even when offers succeed without restoring media', as
 })
 
 it('clears a viewer recovery deadline when connected', async () => {
-  await controller.joinWithInvite('ABCDEFGH')
+  await controller.joinFriendShare('ABCDEF')
   mocks.peers[0].options.onStatus('connected')
   expect(controller.getSnapshot().state).toBe('negotiating')
   mocks.peers[0].options.onRemoteStream!(stream)
@@ -200,7 +205,7 @@ it('ends the session when the captured window ends its video track', async () =>
 
 
 it('waits for a displayed frame and rejects stale stream confirmations', async () => {
-  await controller.joinWithInvite('ABCDEFGH')
+  await controller.joinFriendShare('ABCDEF')
   mocks.peers[0].options.onRemoteStream!(stream)
   expect(controller.getSnapshot().state).toBe('negotiating')
   controller.confirmVideoPresented({} as MediaStream)
@@ -259,7 +264,7 @@ it.each(['1440p30', '1440p60'] as const)('changes a live stream to %s and preser
 })
 
 it('bounds recovery when transport connects but no frame is displayed', async () => {
-  await controller.joinWithInvite('ABCDEFGH')
+  await controller.joinFriendShare('ABCDEF')
   mocks.peers[0].options.onStatus('connected')
   await vi.advanceTimersByTimeAsync(40_000)
   expect(mocks.peers[0].restartIce).toHaveBeenCalledTimes(3)
@@ -267,7 +272,7 @@ it('bounds recovery when transport connects but no frame is displayed', async ()
 })
 
 it('never renews viewer recovery merely because ICE connects again without video', async () => {
-  await controller.joinWithInvite('ABCDEFGH')
+  await controller.joinFriendShare('ABCDEF')
   for (let index = 0; index < 4; index++) {
     mocks.peers[0].options.onStatus('connected')
     await vi.advanceTimersByTimeAsync(10_000)
@@ -310,4 +315,46 @@ it('transitions viewers arriving during the source swap before releasing the old
   expect(mocks.peers[1].replaceLocalStream).toHaveBeenCalledWith(next)
   expect(controller.getLocalStream()).toBe(next)
   expect(track.stop).toHaveBeenCalledOnce()
+})
+
+const friendAccess: ShareAccessResult = {
+  session: { sessionId: 'session-b', sharerDeviceId: 'friend-b', sharerDisplayName: 'Bia',
+    qualityProfile: '1080p30', viewerDeviceId: null, viewerDeviceIds: [], startedAt: '' },
+  iceServers: [],
+}
+
+it('keeps the current friend stream when the server refuses the switch', async () => {
+  await controller.joinFriendShare('ABCDEF')
+  mocks.signaling.joinFriendShare.mockRejectedValueOnce(new Error('Seu amigo não está transmitindo agora.'))
+  await expect(controller.joinFriendShare('BBBBBB')).rejects.toThrow('Seu amigo não está transmitindo agora.')
+  expect(mocks.peers[0].close).not.toHaveBeenCalled()
+  expect(mocks.signaling.leaveShare).not.toHaveBeenCalled()
+  expect(controller.getSnapshot()).toMatchObject({ role: 'viewer', session: access.session })
+  expect(controller.getSnapshot().state).not.toBe('idle')
+})
+
+it('switches friends without passing through idle and releases the previous peer', async () => {
+  await controller.joinFriendShare('ABCDEF')
+  const states: string[] = []
+  controller.subscribe(() => states.push(controller.getSnapshot().state))
+  mocks.signaling.joinFriendShare.mockResolvedValueOnce(friendAccess)
+  await controller.joinFriendShare('BBBBBB')
+  expect(states).not.toContain('idle')
+  expect(mocks.peers[0].close).toHaveBeenCalledOnce()
+  expect(mocks.peers).toHaveLength(2)
+  // O servidor já trocou o espectador de transmissão: nada de LeaveShare separado.
+  expect(mocks.signaling.leaveShare).not.toHaveBeenCalled()
+  expect(controller.getSnapshot()).toMatchObject({ role: 'viewer', state: 'negotiating', session: friendAccess.session })
+})
+
+it('buffers the new friend offer that arrives before the switch is confirmed', async () => {
+  await controller.joinFriendShare('ABCDEF')
+  const request = deferred<ShareAccessResult>()
+  mocks.signaling.joinFriendShare.mockReturnValueOnce(request.promise)
+  const switching = controller.joinFriendShare('BBBBBB')
+  const offer: SignalingEnvelope = { sessionId: 'session-b', fromDeviceId: 'friend-b', payload: { kind: 'offer', sdp: 'offer-b' } }
+  mocks.handlers.get('signalReceived')!(offer)
+  request.resolve(friendAccess)
+  await switching
+  expect(mocks.peers.at(-1)!.handleSignal).toHaveBeenCalledWith(offer.payload)
 })

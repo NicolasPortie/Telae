@@ -162,7 +162,7 @@ Diagnostic exports use an explicit allowlist without invite codes, identities or
 
 Each desktop stores a random 256-bit device credential locally. Registration requires it; the server persists only its SHA-256 hash and compares credentials in constant time. Device IDs and friend codes are public identifiers and do not authorize registration or joining.
 
-A new Viewer must present an active invite. Direct `JoinShare` is restricted to Viewers already authorized for that active session; leaving revokes that authorization. Signaling remains restricted to the Sharer/Viewer pair.
+Friend joins (`JoinFriendShare`) require mutual friendship: each device must have declared the other through `GetFriends`. Declarations persist across reconnects and change only when the device sends a new list. When mutual friendship stops holding for an active viewer, the viewer is removed from that session and both participants are notified (`SessionEnded` / `ViewerLeft`). Switching to another friend is a single server operation: if the server refuses it, the current session is kept. Legacy `CreateInvite` / `JoinWithInvite` exist only for clients up to 0.1.20; the current desktop never creates or shows invites. Direct `JoinShare` is restricted to Viewers already authorized for that active session; leaving revokes that authorization. Signaling remains restricted to the Sharer/Viewer pair.
 
 Presence is delivered only to registered connections subscribed to known friend codes through `GetFriends`. Each subscription request replaces the prior set, including an empty set; reconnecting clients restore their subscriptions. Public identifiers do not grant access to media. Hub commands enforce input sizes and separate budgets for registration, commands and ICE signaling.
 

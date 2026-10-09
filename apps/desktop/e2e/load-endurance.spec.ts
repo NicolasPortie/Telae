@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { diagnosticSnapshot } from './diagnostics.ts'
+import { befriend, watchFriend } from './friends.ts'
 
 const requestedViewers = process.env.TELAE_E2E_VIEWERS
 const viewerCount = Number(requestedViewers)
@@ -35,8 +36,7 @@ async function memorySnapshot(app: ElectronApplication) {
   }))
 }
 
-async function joinUntilFirstPresentedFrame(page: Page, code: string) {
-  await page.getByLabel('Código de convite').fill(code)
+async function joinUntilFirstPresentedFrame(page: Page, sharerName: string) {
   await page.evaluate(() => {
     const state = { clickMs: null as number | null, firstFrameMs: null as number | null }
     ;(window as Window & { __telaeLoadJoin?: typeof state }).__telaeLoadJoin = state
@@ -51,14 +51,14 @@ async function joinUntilFirstPresentedFrame(page: Page, code: string) {
     }
     document.addEventListener('click', function start(event) {
       const button = event.target instanceof Element ? event.target.closest('button') : null
-      if (button?.textContent?.trim() !== 'Entrar') return
+      if (button?.textContent?.trim() !== 'Assistir') return
       state.clickMs = performance.now()
       document.removeEventListener('click', start, true)
       observer.observe(document.body, { childList: true, subtree: true })
       watchVideo()
     }, true)
   })
-  await page.getByRole('button', { name: 'Entrar', exact: true }).click()
+  await watchFriend(page, sharerName)
   await expect.poll(() => page.evaluate(() =>
     (window as Window & { __telaeLoadJoin?: { firstFrameMs: number | null } }).__telaeLoadJoin?.firstFrameMs ?? null,
   ), { timeout: 60_000 }).not.toBeNull()
@@ -110,16 +110,14 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     const sharer = await launch('LoadSender', false)
     await sharer.page.getByRole('button', { name: /Escolher tela/ }).click()
     await sharer.page.getByRole('radio').first().click()
-    await sharer.page.getByRole('button', { name: 'Compartilhar e gerar convite', exact: true }).click()
-    const invite = sharer.page.getByLabel(/Código de convite/)
-    await expect(invite).toBeVisible({ timeout: 60_000 })
-    const code = (await invite.textContent())?.trim() ?? ''
-    expect(code).toMatch(/^[A-Z2-9]{8}$/)
+    await sharer.page.getByRole('button', { name: 'Começar a compartilhar', exact: true }).click()
+    await expect(sharer.page.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
     for (let index = 1; index <= viewerCount; index++) {
       const viewer = await launch(`LoadViewer${index}`, true)
+      await befriend({ page: sharer.page, name: 'LoadSender' }, { page: viewer.page, name: `LoadViewer${index}` })
       const join = { viewer: index, joinFirstFrameMs: null as number | null, outcome: 'pending' }
       joins.push(join)
-      try { join.joinFirstFrameMs = await joinUntilFirstPresentedFrame(viewer.page, code); join.outcome = 'presented' }
+      try { join.joinFirstFrameMs = await joinUntilFirstPresentedFrame(viewer.page, 'LoadSender'); join.outcome = 'presented' }
       catch (error) { join.outcome = 'failed'; throw error }
       await saveEvidence()
     }
@@ -164,9 +162,8 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     const sorted = joins.map(join => join.joinFirstFrameMs!).sort((a, b) => a - b)
     evidence.joinFirstFrameP95Ms = sorted[Math.ceil(sorted.length * 0.95) - 1]
     evidence.p95Caveat = 'Only 3/6/12 sequential same-host joins; insufficient for release p95 claims. Repeat >=30 independent joins per scenario.'
-    // Hide only the active access code in the sharer image; retain every product control.
     const sharerImage = testInfo.outputPath('sharer-controls.png')
-    await sharer.page.screenshot({ path: sharerImage, fullPage: true, mask: [invite] })
+    await sharer.page.screenshot({ path: sharerImage, fullPage: true })
     await testInfo.attach('sharer-controls', { path: sharerImage, contentType: 'image/png' })
     const viewerImage = testInfo.outputPath('viewer.png')
     await viewers[0].page.getByLabel('Transmissão do seu amigo').hover()
