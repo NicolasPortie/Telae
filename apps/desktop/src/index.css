@@ -108,6 +108,9 @@ h2 {
 .telae-viewer-controls > button:last-child { background: #30221e; color: #f1aca0; font-size: 13px; }
 .telae-viewer-controls > button:last-child:hover { background: #492b24; }
 
+/* Long friend lists scroll inside the section instead of pushing the page. */
+.telae-friends-list { max-height: 320px; overflow-y: auto; scroll-padding: 8px; scrollbar-gutter: stable; }
+
 /* Troca rápida entre amigos ao vivo (player, espera e fim da transmissão). */
 .telae-live-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; width: 100%; }
 .telae-live-switch-label { color: #9d9a90; font-size: 12px; font-weight: 500; }
@@ -144,6 +147,7 @@ h2 {
 }
 
 @media (min-width: 768px) and (max-height: 700px) {
+  .telae-friends-list { max-height: 220px; }
   .telae-home-main { padding-top: 16px; padding-bottom: 12px; }
   .telae-home h1 { font-size: 28px; }
   .telae-home-actions { margin-top: 20px; }

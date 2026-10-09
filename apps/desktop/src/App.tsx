@@ -647,7 +647,7 @@ export default function App() {
                   <button type="button" onClick={() => setAddFriendOpen(true)} className="telae-press mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412]">Adicionar primeiro amigo</button>
                 </div>
               ) : (
-                <ul className="mt-5 grid gap-2">
+                <ul className="telae-friends-list mt-5 grid gap-2">
                   {(friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).length === 0 && friendFilter === 'live' ? (
                     <li className="rounded-xl border border-[#313029] bg-[#141412] px-4 py-8 text-center text-sm text-[#9D9A90]">Nenhum amigo transmitindo agora.</li>
                   ) : (friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).map(friend => {
