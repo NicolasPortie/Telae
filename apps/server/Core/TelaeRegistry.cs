@@ -13,7 +13,11 @@ public sealed class TelaeRegistry
     private readonly Dictionary<string, long> _disconnectGenerationByDevice = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ShareSessionRecord> _sessionsBySharer = new(StringComparer.Ordinal);
     private readonly Dictionary<string, InviteRecord> _invitesByCode = new(StringComparer.OrdinalIgnoreCase);
+    // Lista de amigos declarada por cada dispositivo (GetFriends). Persiste entre reconexões:
+    // só muda quando o próprio dispositivo envia uma nova lista.
+    private readonly Dictionary<string, HashSet<string>> _declaredFriendsByDevice = new(StringComparer.Ordinal);
 
+    public const int MaxViewersPerSession = 12;
     public static readonly TimeSpan InviteLifetime = TimeSpan.FromHours(24);
 
     public TelaeRegistry(string? profilePath = null)
@@ -157,6 +161,98 @@ public sealed class TelaeRegistry
             if (!session.ViewerDeviceIds.Contains(viewerDeviceId))
                 throw new TelaeDomainException("invite_required", "Use um código de convite para entrar nesta transmissão.");
             return AttachViewerLocked(viewerDeviceId, session);
+        }
+    }
+
+    /// <summary>
+    /// Entrada por amizade. Exige amizade mútua (ambos declararam o outro em GetFriends).
+    /// Se o espectador já assiste outro amigo, a troca é feita aqui, atomicamente: nenhuma
+    /// mudança acontece se qualquer validação falhar.
+    /// </summary>
+    public FriendJoinResult JoinFriendShare(string viewerDeviceId, string friendCode)
+    {
+        var normalized = NormalizeFriendCode(friendCode);
+        if (normalized.Length != 6)
+            throw new TelaeDomainException("invalid_friend_code", "Código de amigo deve ter 6 caracteres.");
+        lock (_gate)
+        {
+            RequireOnlineDevice(viewerDeviceId);
+            var sharerProfile = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized)
+                ?? throw new TelaeDomainException("friend_not_found", "Amigo não encontrado. Confira o código e tente novamente.");
+            var sharerDeviceId = sharerProfile.DeviceId;
+            if (sharerDeviceId == viewerDeviceId)
+                throw new TelaeDomainException("cannot_view_own_share", "Você não pode assistir à sua própria transmissão.");
+            if (!AreMutualFriendsLocked(viewerDeviceId, sharerDeviceId))
+                throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos para assistir.");
+            if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var target))
+                throw new TelaeDomainException("share_not_active", "Seu amigo não está transmitindo agora.");
+            RequireOnlineDevice(sharerDeviceId);
+            if (target.BlockedViewerDeviceIds.Contains(viewerDeviceId))
+                throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
+            if (_sessionsBySharer.ContainsKey(viewerDeviceId))
+                throw new TelaeDomainException("share_already_active", "Encerre sua transmissão antes de assistir a outra.");
+
+            var current = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(viewerDeviceId));
+            if (ReferenceEquals(current, target))
+                throw new TelaeDomainException("already_watching", "Você já está assistindo esta transmissão.");
+            if (target.ViewerDeviceIds.Count >= MaxViewersPerSession)
+                throw new TelaeDomainException("share_full", $"Esta transmissão atingiu o limite de {MaxViewersPerSession} espectadores.");
+
+            ViewerDetachment? detached = null;
+            if (current is not null)
+            {
+                current.ViewerDeviceIds.Remove(viewerDeviceId);
+                detached = new ViewerDetachment(current.SessionId, current.SharerDeviceId, viewerDeviceId);
+            }
+            target.ViewerDeviceIds.Add(viewerDeviceId);
+            return new FriendJoinResult(ToSessionSnapshot(target), detached);
+        }
+    }
+
+    /// <summary>
+    /// Registra a lista de amigos declarada pelo dispositivo. Quando a amizade mútua deixa de
+    /// valer para uma transmissão em andamento, o espectador é removido e a lista de saídas é
+    /// devolvida para o hub notificar as duas partes.
+    /// </summary>
+    public IReadOnlyList<ViewerDetachment> DeclareFriends(string deviceId, IEnumerable<string> friendCodes)
+    {
+        lock (_gate)
+        {
+            _declaredFriendsByDevice[deviceId] = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.Ordinal);
+
+            var detached = new List<ViewerDetachment>();
+            if (_sessionsBySharer.TryGetValue(deviceId, out var own))
+            {
+                foreach (var viewerId in own.ViewerDeviceIds.ToArray())
+                {
+                    if (AreMutualFriendsLocked(deviceId, viewerId)) continue;
+                    own.ViewerDeviceIds.Remove(viewerId);
+                    detached.Add(new ViewerDetachment(own.SessionId, own.SharerDeviceId, viewerId));
+                }
+            }
+
+            var watching = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(deviceId));
+            if (watching is not null && !AreMutualFriendsLocked(deviceId, watching.SharerDeviceId))
+            {
+                watching.ViewerDeviceIds.Remove(deviceId);
+                detached.Add(new ViewerDetachment(watching.SessionId, watching.SharerDeviceId, deviceId));
+            }
+            return detached;
+        }
+    }
+
+    private bool AreMutualFriendsLocked(string deviceA, string deviceB)
+    {
+        if (!_profiles.TryGetValue(deviceA, out var a) || !_profiles.TryGetValue(deviceB, out var b)) return false;
+        return _declaredFriendsByDevice.TryGetValue(deviceA, out var aFriends) && aFriends.Contains(b.FriendCode)
+            && _declaredFriendsByDevice.TryGetValue(deviceB, out var bFriends) && bFriends.Contains(a.FriendCode);
+    }
+
+    public string? FindConnectionId(string deviceId)
+    {
+        lock (_gate)
+        {
+            return _connectionByDevice.TryGetValue(deviceId, out var connectionId) ? connectionId : null;
         }
     }
 

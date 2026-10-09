@@ -2,6 +2,7 @@ import { expect, test, _electron as electron, type ElectronApplication, type Pag
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { befriend, watchFriend } from './friends.ts'
 
 // Real Windows display capture, product signaling, encoder and receiver. No fake media.
 test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () => {
@@ -56,6 +57,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     const receiver = await receiverApp.firstWindow()
     await enter(sender, 'QhdSender')
     await enter(receiver, 'QhdReceiver')
+    await befriend({ page: sender, name: 'QhdSender' }, { page: receiver, name: 'QhdReceiver' })
     evidence.push({ displays: await senderApp.evaluate(({ screen }) => screen.getAllDisplays().map(display => ({
       size: display.size, scaleFactor: display.scaleFactor, displayFrequency: display.displayFrequency,
     }))) })
@@ -82,12 +84,9 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     const source = sender.getByRole('radiogroup', { name: 'Telas', exact: true }).getByRole('radio').first()
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()
-    await sender.getByRole('button', { name: 'Compartilhar e gerar convite' }).click()
-    const invite = sender.getByLabel(/Código de convite/)
-    await expect(invite).toBeVisible({ timeout: 60_000 })
-    const code = (await invite.textContent())!.trim()
-    await receiver.getByLabel('Código de convite').fill(code)
-    await receiver.getByRole('button', { name: 'Entrar', exact: true }).click()
+    await sender.getByRole('button', { name: 'Começar a compartilhar' }).click()
+    await expect(sender.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
+    await watchFriend(receiver, 'QhdSender')
     const video = receiver.getByLabel('Transmissão do seu amigo')
     await expect(video).toBeVisible({ timeout: 60_000 })
     await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).getVideoPlaybackQuality().totalVideoFrames),
@@ -112,7 +111,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
       const end = await video.evaluate(element => ({ time: performance.now(), frames: (element as HTMLVideoElement).getVideoPlaybackQuality().totalVideoFrames }))
       evidence.push({ profile, presentedFps: (end.frames - start.frames) * 1000 / (end.time - start.time) })
       expect(end.frames).toBeGreaterThan(start.frames)
-      await expect(invite).toContainText(code)
+      await expect(sender.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible()
       expect((await sample(sender))[0].state).toBe('connected')
       const settings = (await sample(sender))[0].senders[0].settings
       expect(settings.width).toBe(width)
