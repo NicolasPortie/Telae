@@ -227,7 +227,9 @@ test.describe('duas instâncias Telae', () => {
       const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
       await expect(remoteVideo).toBeVisible({ timeout: 60_000 })
       await expectRenderedFrames(viewer)
-      expect((await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded).toBeGreaterThan(0)
+      // O diagnóstico é amostrado a cada 1s: espera até dois ciclos após o primeiro frame renderizado.
+      await expect.poll(async () => (await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded ?? 0,
+        { timeout: 30_000 }).toBeGreaterThan(0)
       await expect(viewer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
       await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo|Aguardando seu amigo|Pronto/)).toHaveCount(0)
       await viewer.waitForFunction(
