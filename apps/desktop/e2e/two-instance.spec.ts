@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { diagnosticSnapshot } from './diagnostics.ts'
+import { befriend, watchFriend } from './friends.ts'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
@@ -75,8 +76,8 @@ test.describe('duas instâncias Telae', () => {
       await expect(windowChoices.first()).toBeFocused()
       await expect(windowChoices.first()).toHaveAttribute('aria-checked', 'true')
       await windowChoices.first().click()
-      await page.getByRole('button', { name: 'Compartilhar e gerar convite' }).click()
-      await expect(page.getByLabel(/Código de convite/)).toBeVisible({ timeout: 60_000 })
+      await page.getByRole('button', { name: 'Começar a compartilhar' }).click()
+      await expect(page.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
       await expect(page.getByText('O Windows não disponibilizou áudio desta fonte.')).toHaveCount(0)
       await page.getByRole('button', { name: 'Parar transmissão' }).click()
     } finally {
@@ -84,7 +85,7 @@ test.describe('duas instâncias Telae', () => {
     }
   })
 
-  test('convite inválido falha com motivo específico', async () => {
+  test('código de amigo inexistente falha com motivo específico', async () => {
     const sharerApp = await launchApp()
     const viewerApp = await launchApp(true)
     try {
@@ -99,14 +100,17 @@ test.describe('duas instâncias Telae', () => {
       await expect(sharer.getByRole('button', { name: 'Buscar atualização', exact: true })).toBeVisible()
       for (const size of [{ width: 1220, height: 790 }, { width: 980, height: 650 }]) {
         await sharerApp.evaluate(({ BrowserWindow }, bounds) => BrowserWindow.getAllWindows()[0].setBounds(bounds), size)
-        await expect.poll(() => sharer.evaluate(() => ({
-          noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth,
-          noVerticalOverflow: document.documentElement.scrollHeight <= window.innerHeight,
-          actionsVisible: [...document.querySelectorAll('.telae-home button, .telae-home input')].every(element => {
+        await expect.poll(() => sharer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+        // Primary actions stay above the fold without scrolling; the friends section may extend below it.
+        for (const control of [
+          sharer.getByRole('button', { name: /Escolher tela/ }),
+          sharer.getByRole('heading', { name: 'Seus amigos ao vivo' }),
+        ]) {
+          await expect.poll(() => control.evaluate(element => {
             const rect = element.getBoundingClientRect()
             return rect.top >= 0 && rect.bottom <= window.innerHeight
-          }),
-        }))).toEqual({ noHorizontalOverflow: true, noVerticalOverflow: true, actionsVisible: true })
+          })).toBe(true)
+        }
         await sharer.screenshot({ path: test.info().outputPath(`layout-home-${size.width}x${size.height}.png`) })
       }
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 760, height: 650 }))
@@ -125,7 +129,7 @@ test.describe('duas instâncias Telae', () => {
       await sharer.screenshot({ path: test.info().outputPath('layout-picker.png'), fullPage: true, mask: [sharer.locator('img')] })
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 980, height: 650 }))
       await expect.poll(() => sharer.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-      const shareAction = sharer.getByRole('button', { name: 'Compartilhar e gerar convite' })
+      const shareAction = sharer.getByRole('button', { name: 'Começar a compartilhar' })
       const insideViewport = () => shareAction.evaluate(button => {
         const rect = button.getBoundingClientRect()
         return rect.top >= 0 && rect.bottom <= window.innerHeight
@@ -167,16 +171,17 @@ test.describe('duas instâncias Telae', () => {
         expect(processId).toBeGreaterThan(0)
       }
 
-      await viewer.getByLabel('Código de convite').fill('ZZZZZZZZ')
-      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
-      await expect(viewer.getByRole('alert')).toContainText(/não existe/, { timeout: 30_000 })
+      await viewer.getByRole('button', { name: 'Adicionar', exact: true }).first().click()
+      await viewer.getByLabel('Código do amigo (6 caracteres)').fill('ZZZZZZ')
+      await viewer.getByRole('button', { name: 'Adicionar', exact: true }).last().click()
+      await expect(viewer.getByRole('alert')).toContainText(/não encontrado/, { timeout: 30_000 })
     } finally {
       await sharerApp.close()
       await viewerApp.close()
     }
   })
 
-  test('sharer gera convite e viewer assiste (mídia real)', async () => {
+  test('amigos mútuos: sharer compartilha e viewers assistem pela lista (mídia real)', async () => {
     test.skip(!WITH_MEDIA, 'Exige display e captura real: rode com TELAE_E2E_MEDIA=1')
     const sharerApp = await launchApp()
     const viewerApp = await launchApp(true)
@@ -189,15 +194,14 @@ test.describe('duas instâncias Telae', () => {
       await enterWithName(sharer, 'SharerE2E')
       await enterWithName(viewer, 'ViewerE2E')
       await enterWithName(secondViewer, 'Viewer2E2E')
+      await befriend({ page: sharer, name: 'SharerE2E' }, { page: viewer, name: 'ViewerE2E' })
+      await befriend({ page: sharer, name: 'SharerE2E' }, { page: secondViewer, name: 'Viewer2E2E' })
 
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       const firstSource = sharer.getByRole('radio').first()
       await firstSource.click()
-      await sharer.getByRole('button', { name: /Compartilhar e gerar convite/ }).click()
-      const invite = sharer.getByLabel(/Código de convite/)
-      await expect(invite).toBeVisible({ timeout: 60_000 })
-      const code = (await invite.textContent())?.trim() ?? ''
-      expect(code).toMatch(/^[A-Z2-9]{8}$/)
+      await sharer.getByRole('button', { name: /Começar a compartilhar/ }).click()
+      await expect(sharer.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
       await expect(sharer.locator('header').getByText(/Pronto|Aguardando seu amigo|Ao vivo/)).toHaveCount(0)
       const preview = sharer.getByLabel(/Pré-visualização de/)
       for (const bounds of [{ width: 2560, height: 1392 }, { width: 1600, height: 900 }, { width: 1220, height: 790 }, { width: 980, height: 650 }, { width: 640, height: 560 }]) {
@@ -207,24 +211,25 @@ test.describe('duas instâncias Telae', () => {
         await sharer.screenshot({ path: test.info().outputPath(`sharer-${bounds.width}x${bounds.height}.png`) })
         if (bounds.width >= 960) {
           await expect.poll(() => preview.evaluate(video => video.getBoundingClientRect().width / innerWidth)).toBeGreaterThan(.55)
-          for (const control of [sharer.getByRole('button', { name: 'Parar transmissão' }), sharer.getByLabel('Qualidade da transmissão'), sharer.getByRole('button', { name: 'Copiar código', exact: true })]) {
+          for (const control of [sharer.getByRole('button', { name: 'Parar transmissão' }), sharer.getByLabel('Qualidade da transmissão'), sharer.getByRole('button', { name: 'Parar transmissão', exact: true })]) {
             await expect.poll(() => control.evaluate(element => ({ bottom: element.getBoundingClientRect().bottom, viewport: innerHeight })).then(rect => rect.bottom - rect.viewport), { message: `${bounds.width}x${bounds.height}: ${await control.textContent()}` }).toBeLessThanOrEqual(0)
           }
         } else {
-          await sharer.getByRole('button', { name: 'Copiar código', exact: true }).scrollIntoViewIfNeeded()
-          await expect(sharer.getByRole('button', { name: 'Copiar código', exact: true })).toBeInViewport()
+          await sharer.getByRole('button', { name: 'Parar transmissão', exact: true }).scrollIntoViewIfNeeded()
+          await expect(sharer.getByRole('button', { name: 'Parar transmissão', exact: true })).toBeInViewport()
         }
         await sharer.screenshot({ path: test.info().outputPath(`sharer-${bounds.width}x${bounds.height}.png`) })
       }
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setBounds({ width: 1220, height: 790 }))
 
       await viewerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus())
-      await viewer.getByLabel('Código de convite').fill(code)
-      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      await watchFriend(viewer, 'SharerE2E')
       const remoteVideo = viewer.getByLabel('Transmissão do seu amigo')
       await expect(remoteVideo).toBeVisible({ timeout: 60_000 })
       await expectRenderedFrames(viewer)
-      expect((await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded).toBeGreaterThan(0)
+      // O diagnóstico é amostrado a cada 1s: espera até dois ciclos após o primeiro frame renderizado.
+      await expect.poll(async () => (await diagnosticSnapshot(viewer)).snapshot.diagnostics.framesDecoded ?? 0,
+        { timeout: 30_000 }).toBeGreaterThan(0)
       await expect(viewer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
       await expect(viewer.locator('header').getByText(/Ao vivo ·|Assistindo|Aguardando seu amigo|Pronto/)).toHaveCount(0)
       await viewer.waitForFunction(
@@ -314,25 +319,23 @@ test.describe('duas instâncias Telae', () => {
       await expect(remoteVideo).not.toHaveCSS('cursor', 'none')
 
       await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
-      await expect(sharer.getByText('A transmissão e o código continuam ativos durante a troca.')).toBeVisible()
+      await expect(sharer.getByText('A transmissão continua ativa durante a troca.')).toBeVisible()
       await expect(sharer.getByRole('button', { name: 'Abrir perfil' })).toBeDisabled()
       await sharer.getByRole('button', { name: /Voltar/ }).click()
       await expect(sharer.getByRole('button', { name: 'Parar transmissão' })).toBeVisible()
-      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
 
       await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
       await sharer.getByRole('button', { name: 'Trocar fonte agora' }).click()
-      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
+      await expect(sharer.getByRole('button', { name: 'Parar transmissão' })).toBeVisible()
       await expect(remoteVideo).toBeVisible()
 
-      await secondViewer.getByLabel('Código de convite').fill(code)
-      await secondViewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      await watchFriend(secondViewer, 'SharerE2E')
       const secondVideo = secondViewer.getByLabel('Transmissão do seu amigo')
       await expect(secondVideo).toBeVisible({ timeout: 60_000 })
       await expectRenderedFrames(secondViewer)
 
       await sharer.evaluate(() => window.scrollTo(0, 0))
-      await sharer.screenshot({ path: test.info().outputPath('sharer-ui.png'), fullPage: true, mask: [sharer.getByLabel(/Código de convite/), sharer.locator('video')] })
+      await sharer.screenshot({ path: test.info().outputPath('sharer-ui.png'), fullPage: true, mask: [sharer.locator('video')] })
       await expect(sharer.getByText('2 pessoas conectadas')).toBeVisible()
 
       const liveQuality = sharer.getByRole('combobox', { name: 'Qualidade da transmissão' })
@@ -342,7 +345,7 @@ test.describe('duas instâncias Telae', () => {
       await expect(sharer.getByRole('spinbutton')).toHaveCount(0)
       await expect(sharer.getByText('Detalhes da conexão', { exact: true })).toHaveCount(0)
       await expect(sharer.getByRole('button', { name: 'Silenciar transmissão', exact: true })).toHaveCount(0)
-      await expect(sharer.getByLabel(/Código de convite/)).toContainText(code)
+      await expect(sharer.getByRole('button', { name: 'Parar transmissão' })).toBeVisible()
       await expectRenderedFrames(secondViewer)
 
       await sharer.getByRole('button', { name: 'Remover ViewerE2E', exact: true }).click()
@@ -374,15 +377,12 @@ test.describe('duas instâncias Telae', () => {
       }
       await enterWithName(sharer, 'RelaySender')
       await enterWithName(viewer, 'RelayReceiver')
+      await befriend({ page: sharer, name: 'RelaySender' }, { page: viewer, name: 'RelayReceiver' })
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await sharer.getByRole('radio').first().click()
-      await sharer.getByRole('button', { name: /Compartilhar e gerar convite/ }).click()
-      const invite = sharer.getByLabel(/Código de convite/)
-      await expect(invite).toBeVisible({ timeout: 60_000 })
-      const code = (await invite.textContent())?.trim() ?? ''
-      expect(code).toMatch(/^[A-Z2-9]{8}$/)
-      await viewer.getByLabel('Código de convite').fill(code)
-      await viewer.getByRole('button', { name: 'Entrar', exact: true }).click()
+      await sharer.getByRole('button', { name: /Começar a compartilhar/ }).click()
+      await expect(sharer.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
+      await watchFriend(viewer, 'RelaySender')
       await expectRenderedFrames(viewer)
       // The selected candidate pair must report relay, not just a configured TURN URL.
       for (const page of [sharer, viewer]) {

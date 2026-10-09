@@ -25,11 +25,18 @@ public sealed class TelaeHub(
 
     public async Task<IReadOnlyList<DeviceSnapshot>> GetFriends(string[] friendCodes)
     {
-        registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
         if (friendCodes is null || friendCodes.Length > 200)
             throw new TelaeDomainException("invalid_friend_list", "Informe no máximo 200 códigos de amigos.");
         var friends = registry.GetDevicesByFriendCodes(friendCodes);
         await presence.ReplaceAsync(Context.ConnectionId, friends);
+        // Quem deixou de ser amigo (de qualquer um dos lados) sai da transmissão em andamento.
+        foreach (var detachment in registry.DeclareFriends(deviceId, friendCodes))
+        {
+            await NotifyAsync(detachment.ViewerDeviceId, "SessionEnded", detachment.SessionId);
+            await NotifyAsync(detachment.SharerDeviceId, "ViewerLeft",
+                new ViewerLeftEvent(detachment.SessionId, detachment.ViewerDeviceId));
+        }
         // Read again after subscribing so changes during group setup are reflected.
         return registry.GetDevicesByFriendCodes(friendCodes);
     }
@@ -128,6 +135,19 @@ public sealed class TelaeHub(
         return new ShareAccessResult(session, GetIceServers(viewerDeviceId));
     }
 
+    public async Task<ShareAccessResult> JoinFriendShare(string friendCode)
+    {
+        var viewerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var result = registry.JoinFriendShare(viewerDeviceId, friendCode);
+        // A troca já foi aplicada no registro: as notificações não podem lançar exceção aqui.
+        if (result.Detached is { } detached)
+            await NotifyAsync(detached.SharerDeviceId, "ViewerLeft",
+                new ViewerLeftEvent(detached.SessionId, detached.ViewerDeviceId));
+        await NotifyAsync(result.Session.SharerDeviceId, "ViewerJoined",
+            new ViewerJoinedEvent(result.Session.SessionId, registry.GetDevice(viewerDeviceId)!));
+        return new ShareAccessResult(result.Session, GetIceServers(viewerDeviceId));
+    }
+
     public async Task LeaveShare()
     {
         var viewerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
@@ -174,6 +194,13 @@ public sealed class TelaeHub(
         var (username, password) = TurnCredentialIssuer.Issue(
             turn.Secret, deviceId, DateTimeOffset.UtcNow, turn.TtlSeconds);
         return [.. servers, new IceServerDto(turn.Urls, username, password)];
+    }
+
+    private async Task NotifyAsync(string deviceId, string method, object payload)
+    {
+        var connectionId = registry.FindConnectionId(deviceId);
+        if (connectionId is not null)
+            await Clients.Client(connectionId).SendAsync(method, payload);
     }
 
     private void EnsureCallerMatches(string deviceId)

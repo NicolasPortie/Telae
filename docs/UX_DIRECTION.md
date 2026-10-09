@@ -30,7 +30,7 @@ Use the **one big object** pattern.
 
 ### Home
 
-Two direct actions dominate the window: **Share screen** and **Join**. Join accepts the invite code inline. Recent sessions, friends lists, servers, dashboards, and promotional content do not compete with those actions.
+Two things dominate the window: **Share screen** and the **friends list**. Friends are added by their six-character code and appear as Ao vivo when they are sharing; watching is one click, and switching to another live friend is available from the player. There is no invite code in the product. Recent sessions, servers, dashboards, and promotional content do not compete with those actions.
 
 ### Source picker
 

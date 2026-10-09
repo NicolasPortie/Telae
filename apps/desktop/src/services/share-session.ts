@@ -12,6 +12,7 @@ import type {
   IceServerDto,
   PeerStatus,
   QualityProfile,
+  ShareAccessResult,
   ShareSessionSnapshot,
   SignalingEnvelope,
   TransportPath,
@@ -41,8 +42,6 @@ export type SessionSnapshot = {
   role: SessionRole | null
   error: string | null
   session: ShareSessionSnapshot | null
-  inviteCode: string | null
-  inviteExpiresAt: string | null
   viewerPresence: ViewerPresence
   viewerName: string | null
   viewerCount: number
@@ -78,6 +77,8 @@ const EMPTY_DIAGNOSTICS: DiagnosticsSnapshot = {
 }
 
 const MAX_RESTART_ATTEMPTS = 3
+// Estados em que o Viewer já está ligado a uma transmissão (troca de amigo sem passar por idle).
+const VIEWING_STATES: SessionState[] = ['joining', 'negotiating', 'live', 'reconnecting']
 
 function toUserMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
@@ -93,7 +94,7 @@ function toUserMessage(error: unknown, fallback: string): string {
 /**
  * ShareSessionController — módulo profundo dos Tickets 02–07.
  *
- * Interface pequena: connect / startSharing / joinWithInvite / leave /
+  * Interface pequena: connect / startSharing / joinFriendShare / leave /
  * subscribe / getSnapshot / media getters. A UI renderiza o snapshot;
  * ela nunca coordena captura, SDP, ICE ou qualidade diretamente.
  */
@@ -112,8 +113,9 @@ export class ShareSessionController {
   private role: SessionRole | null = null
   private error: string | null = null
   private session: ShareSessionSnapshot | null = null
-  private inviteCode: string | null = null
-  private inviteExpiresAt: string | null = null
+  private myFriendCode: string | null = null
+  // Verdadeiro entre o pedido de entrada e a resposta do servidor: sinais chegam antes do fim do join.
+  private joinPending = false
   private viewerPresence: ViewerPresence = 'none'
   private viewerName: string | null = null
   private quality: QualityProfile = '1080p30'
@@ -178,8 +180,6 @@ export class ShareSessionController {
       role: this.role,
       error: this.error,
       session: this.session,
-      inviteCode: this.inviteCode,
-      inviteExpiresAt: this.inviteExpiresAt,
       viewerPresence: this.viewerPresence,
       viewerName: this.viewerName,
       viewerCount: this.connectedViewers.size,
@@ -215,6 +215,24 @@ export class ShareSessionController {
     this.emit()
   }
 
+  async fetchFriends(friendCodes: string[]): Promise<DeviceSnapshot[]> {
+    const signaling = this.requireSignaling()
+    return signaling.getFriends(friendCodes)
+  }
+
+  lookupFriend(friendCode: string): Promise<DeviceSnapshot | null> {
+    return this.requireSignaling().lookupFriend(friendCode)
+  }
+
+  getMyFriendCode(): string | null {
+    return this.myFriendCode
+  }
+
+  onPresenceChanged(listener: (device: DeviceSnapshot) => void): () => void {
+    if (!this.signaling) return () => undefined
+    return this.signaling.on('presenceChanged', listener)
+  }
+
   async connect(displayName?: string): Promise<DeviceSnapshot> {
     if (typeof window === 'undefined' || typeof window.telae === 'undefined') {
       throw new Error('Abra o Telae pelo Electron para conectar.')
@@ -231,6 +249,7 @@ export class ShareSessionController {
     const client = new SignalingClient(environment.signalingUrl)
     this.signaling = client
     this.unsubscribers = [
+      client.on('presenceChanged', () => this.emit()),
       client.on('viewerJoined', (event) => void this.handleViewerJoined(event)),
       client.on('viewerLeft', (event) => this.handleViewerLeft(event)),
       client.on('signalReceived', (envelope) => void this.handleSignal(envelope)),
@@ -242,8 +261,14 @@ export class ShareSessionController {
     ]
     try {
       const device = await client.connect(saved.deviceId, name, saved.deviceSecret)
+      this.myFriendCode = device.friendCode ?? null
       this.signalingStatus = 'online'
       this.emit()
+      // Declara a lista de amigos local: o servidor só libera entrada por amizade mútua.
+      // Sempre enviada (mesmo vazia) para que revogações pendentes sejam aplicadas.
+      try {
+        await client.getFriends(saved.friendCodes ?? [])
+      } catch { /* presença e amizade são restauradas na próxima conexão */ }
       return device
     } catch (error) {
       throw new Error(toUserMessage(error, 'Não foi possível conectar ao Telae. Verifique sua internet e tente novamente.'))
@@ -302,10 +327,6 @@ export class ShareSessionController {
       this.session = access.session
       this.iceServers = access.iceServers
       this.validateRelayConfiguration()
-      const invite = await signaling.createInvite()
-      if (generation !== this.generation) return
-      this.inviteCode = invite.code
-      this.inviteExpiresAt = invite.expiresAt
       this.setState('waiting-for-peer')
     } catch (error) {
       if (generation !== this.generation) return
@@ -315,53 +336,85 @@ export class ShareSessionController {
       this.teardownLocal()
       this.teardownPeer()
       this.session = null
-      this.inviteCode = null
-      this.inviteExpiresAt = null
       this.role = null
       this.setState('idle', toUserMessage(error, 'Não foi possível iniciar a transmissão.'))
       throw new Error(this.error ?? 'Não foi possível iniciar a transmissão.')
     }
   }
 
-  async joinWithInvite(inviteCode: string): Promise<void> {
-    if (this.startInFlight || this.joiningInFlight || (this.role !== null && !['idle', 'ended'].includes(this.state)))
-      throw new Error('Encerre a sessão atual antes de entrar em outra.')
+  /**
+   * Entra na transmissão de um amigo mútuo. Se o espectador já assiste outro amigo, o servidor
+   * faz a troca em uma única operação: se ela for recusada, a transmissão atual continua.
+   */
+  async joinFriendShare(friendCode: string): Promise<void> {
+    const code = friendCode.trim().replaceAll('-', '').toUpperCase()
+    if (!code || code.length !== 6) throw new Error('Código de amigo deve ter 6 caracteres.')
+    if (this.startInFlight || this.joiningInFlight) throw new Error('Aguarde a operação atual terminar.')
+    if (this.role === 'sharer' && !['idle', 'ended'].includes(this.state))
+      throw new Error('Encerre sua transmissão antes de assistir a um amigo.')
     const signaling = this.requireSignaling()
-    const code = inviteCode.trim().replaceAll('-', '').toUpperCase()
-    if (!code) throw new Error('Digite o código de convite.')
-    this.joiningInFlight = true
-    const generation = ++this.generation
-    this.teardownPeer()
-    this.role = 'viewer'
-    this.setState('joining')
+    const switching = this.role === 'viewer' && VIEWING_STATES.includes(this.state)
+    const generation = this.generation
+    if (!switching) {
+      this.teardownPeer()
+      this.role = 'viewer'
+      this.setState('joining')
+    }
 
+    this.joiningInFlight = true
+    this.joinPending = true
+    let access: ShareAccessResult
     try {
-      const access = await signaling.joinWithInvite(code)
+      access = await signaling.joinFriendShare(code)
+    } catch (error) {
+      this.joinPending = false
+      this.pendingSignals.length = 0
+      this.joiningInFlight = false
+      const message = toUserMessage(error, 'Não foi possível entrar na transmissão do amigo.')
+      if (generation !== this.generation) throw new Error(message)
+      if (!switching) {
+        // Nada foi anexado no servidor: a entrada anterior (se houver) já foi liberada localmente.
+        this.session = null
+        this.role = null
+        this.setState('idle', message)
+      }
+      // Na troca, a transmissão atual permanece intacta.
+      throw new Error(message)
+    }
+
+    this.joinPending = false
+    const pending = this.pendingSignals.splice(0)
+    try {
       if (generation !== this.generation) {
+        // A sessão terminou ou o usuário saiu durante a chamada: desfaz a entrada no servidor.
         void signaling.leaveShare().catch(() => undefined)
         return
       }
+      this.validateRelayConfiguration(access.iceServers)
+      const next = ++this.generation
+      this.teardownPeer()
+      this.liveSinceMs = null
+      this.role = 'viewer'
       this.session = access.session
       this.iceServers = access.iceServers
-      this.validateRelayConfiguration()
       this.peerDeviceId = access.session.sharerDeviceId
       this.quality = (access.session.qualityProfile as QualityProfile) ?? '1080p30'
-      const pendingSignals = this.pendingSignals.splice(0)
       this.createPeer(access.iceServers, null)
       this.setState('negotiating')
       this.scheduleRestart(10_000)
-      for (const pending of pendingSignals) {
-        if (generation !== this.generation) return
-        if (pending.sessionId === access.session.sessionId) await this.handleSignal(pending)
+      for (const env of pending) {
+        if (next !== this.generation) return
+        if (env.sessionId === access.session.sessionId) await this.handleSignal(env)
       }
     } catch (error) {
-      if (generation !== this.generation) return
+      // O servidor já anexou o espectador: desfaz a entrada e encerra o estado local.
       void signaling.leaveShare().catch(() => undefined)
       this.teardownPeer()
       this.session = null
       this.role = null
-      this.setState('idle', toUserMessage(error, 'Não foi possível entrar na transmissão.'))
-      throw new Error(this.error ?? 'Não foi possível entrar na transmissão.')
+      this.liveSinceMs = null
+      this.setState('idle', toUserMessage(error, 'Não foi possível entrar na transmissão do amigo.'))
+      throw new Error(this.error ?? 'Não foi possível entrar na transmissão do amigo.')
     } finally {
       this.joiningInFlight = false
     }
@@ -426,8 +479,8 @@ export class ShareSessionController {
     this.setState('live')
   }
 
-  private validateRelayConfiguration() {
-    if (this.forceRelay && !this.iceServers.some(server => server.urls.some(url => /^turns?:/i.test(url))))
+  private validateRelayConfiguration(iceServers: IceServerDto[] = this.iceServers) {
+    if (this.forceRelay && !iceServers.some(server => server.urls.some(url => /^turns?:/i.test(url))))
       throw new Error('O teste via servidor exige TURN configurado. Nenhuma credencial TURN foi recebida.')
   }
 
@@ -486,8 +539,6 @@ export class ShareSessionController {
     this.teardownLocal()
     this.teardownPeer()
     this.session = null
-    this.inviteCode = null
-    this.inviteExpiresAt = null
     this.viewerPresence = 'none'
     this.setState('ended')
     if (role === 'sharer') void signaling?.stopShare().catch(() => undefined)
@@ -500,7 +551,6 @@ export class ShareSessionController {
     this.teardownLocal()
     this.teardownPeer()
     this.session = null
-    this.inviteCode = null
     this.role = null
     this.viewerPresence = 'none'
     this.setState('idle')
@@ -604,11 +654,11 @@ export class ShareSessionController {
   }
 
   private async handleSignal(envelope: SignalingEnvelope) {
-    if (this.role === 'viewer' && !this.peer && this.state === 'joining') {
+    if (this.role === 'viewer' && this.joinPending) {
       this.pendingSignals.push(envelope)
       return
     }
-    if (this.session?.sessionId !== envelope.sessionId) return
+    if (!this.session || this.session.sessionId !== envelope.sessionId) return
     const peer = this.role === 'sharer' ? this.sharerPeers.get(envelope.fromDeviceId) : this.peer
     if (!peer) return
     const generation = this.generation
@@ -634,8 +684,6 @@ export class ShareSessionController {
     this.session = null
     const wasViewer = this.role === 'viewer'
     this.role = null
-    this.inviteCode = null
-    this.inviteExpiresAt = null
     this.setState('ended', wasViewer ? 'A transmissão foi encerrada ou seu acesso foi removido.' : null)
   }
 
@@ -733,7 +781,7 @@ export class ShareSessionController {
         this.viewerRestartAttempts.delete(viewerId)
         this.connectedViewers.delete(viewerId)
         this.viewerPresence = this.connectedViewers.size ? 'live' : 'gone'
-        this.setState(this.connectedViewers.size ? 'live' : 'waiting-for-peer', 'Um espectador perdeu a conexão. Ele pode entrar novamente com o convite.')
+        this.setState(this.connectedViewers.size ? 'live' : 'waiting-for-peer', 'Um espectador perdeu a conexão. Ele pode entrar novamente pela lista de amigos.')
       } else {
         void this.leave()
         this.setState('ended', 'Não foi possível restabelecer a conexão. Tente entrar novamente.')

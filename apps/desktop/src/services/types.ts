@@ -59,11 +59,6 @@ export type ContentMode = 'text' | 'motion'
 
 export type ConnectionStatus = 'offline' | 'connecting' | 'online' | 'reconnecting'
 
-export type InviteSnapshot = {
-  code: string
-  sessionId: string
-  expiresAt: string
-}
 
 export type PeerStatus = 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed'
 

@@ -8,7 +8,6 @@ import type {
   ConnectionStatus,
   DeviceSnapshot,
   IceServerDto,
-  InviteSnapshot,
   QualityProfile,
   ShareAccessResult,
   ShareSessionSnapshot,
@@ -101,6 +100,10 @@ export class SignalingClient {
     return this.connection.invoke<DeviceSnapshot[]>('GetFriends', friendCodes)
   }
 
+  joinFriendShare(friendCode: string) {
+    return this.connection.invoke<ShareAccessResult>('JoinFriendShare', friendCode)
+  }
+
   startShare(qualityProfile: QualityProfile) {
     return this.connection.invoke<ShareAccessResult>('StartShare', {
       deviceId: this.deviceId,
@@ -122,18 +125,6 @@ export class SignalingClient {
 
   stopShare() {
     return this.connection.invoke('StopShare')
-  }
-
-  joinShare(sharerDeviceId: string) {
-    return this.connection.invoke<ShareAccessResult>('JoinShare', sharerDeviceId)
-  }
-
-  createInvite() {
-    return this.connection.invoke<InviteSnapshot>('CreateInvite')
-  }
-
-  joinWithInvite(inviteCode: string) {
-    return this.connection.invoke<ShareAccessResult>('JoinWithInvite', inviteCode)
   }
 
   getTurnCredentials() {

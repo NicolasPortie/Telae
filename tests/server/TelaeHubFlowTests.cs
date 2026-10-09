@@ -522,4 +522,215 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
                 new SignalingEnvelope(join.Session.SessionId, "device-stranger", new SignalingPayload("offer", "x"))));
         Assert.Contains("participantes", error.Message);
     }
+
+    private async Task<DeviceSnapshot> RegisterAsync(HubConnection connection, string deviceId, string displayName) =>
+        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest(deviceId, displayName, new string('a', 64)));
+
+    // Amizade mútua: cada lado declara o outro através de GetFriends.
+    private async Task<(DeviceSnapshot First, DeviceSnapshot Second)> MakeMutualFriendsAsync(
+        HubConnection first, string firstId, HubConnection second, string secondId)
+    {
+        var firstSnapshot = await RegisterAsync(first, firstId, firstId);
+        var secondSnapshot = await RegisterAsync(second, secondId, secondId);
+        await first.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { secondSnapshot.FriendCode });
+        await second.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { firstSnapshot.FriendCode });
+        return (firstSnapshot, secondSnapshot);
+    }
+
+    [Fact]
+    public async Task Friend_join_directly_by_friend_code_without_invite()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var (sharerSnapshot, _) = await MakeMutualFriendsAsync(sharer, "device-sharer", viewer, "device-viewer");
+
+        var joinedEvent = new TaskCompletionSource<ViewerJoinedEvent>();
+        sharer.On<ViewerJoinedEvent>("ViewerJoined", e => joinedEvent.TrySetResult(e));
+
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "1080p30"));
+
+        // Amigo mútuo entra direto pelo friendCode de 6 chars, sem convite.
+        var access = await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+        Assert.Equal("device-sharer", access.Session.SharerDeviceId);
+        Assert.Contains("device-viewer", access.Session.ViewerDeviceIds);
+
+        var notified = await WaitForAsync(joinedEvent, "ViewerJoined via friend code");
+        Assert.Equal("device-viewer", notified.Viewer.DeviceId);
+        Assert.Equal(access.Session.SessionId, notified.SessionId);
+    }
+
+    [Fact]
+    public async Task Friend_join_validations_cover_offline_blocked_and_limits()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var outsider = await ConnectUnregisteredAsync();
+        var (sharerSnapshot, _) = await MakeMutualFriendsAsync(sharer, "sharer", viewer, "viewer");
+        await RegisterAsync(outsider, "outsider", "Outsider");
+
+        // Sem transmissão ativa: share_not_active
+        var noShareError = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("transmitindo", noShareError.Message);
+
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("sharer", "auto"));
+
+        // Código inexistente: friend_not_found
+        var notFound = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ZZZZZZ"));
+        Assert.Contains("não encontrado", notFound.Message);
+
+        // Código com formato de convite (8 chars): invalid_friend_code
+        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
+        var badFormat = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", invite.Code));
+        Assert.Contains("6 caracteres", badFormat.Message);
+
+        // Própria transmissão: cannot_view_own_share
+        var selfError = await Assert.ThrowsAsync<HubException>(() => sharer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("própria", selfError.Message);
+
+        // Quem não é amigo mútuo não entra, mesmo com o código: not_friends
+        var notFriend = await Assert.ThrowsAsync<HubException>(() => outsider.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("amigos", notFriend.Message);
+
+        // Acesso normal por amigo funciona
+        await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+
+        // Entrar de novo na mesma transmissão não duplica o espectador
+        var already = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("já está assistindo", already.Message);
+
+        // Após remoção pelo dono, o amigo fica bloqueado nesta transmissão
+        await sharer.InvokeAsync<ShareSessionSnapshot>("RemoveViewer", "viewer");
+        var blocked = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("removido", blocked.Message);
+        var blockedInvite = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code));
+        Assert.Contains("removido", blockedInvite.Message);
+    }
+
+    [Fact]
+    public async Task Friend_join_requires_friendship_declared_by_both_sides()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var sharerSnapshot = await RegisterAsync(sharer, "device-sharer", "Sharer");
+        var viewerSnapshot = await RegisterAsync(viewer, "device-viewer", "Viewer");
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
+
+        // Código conhecido, nenhuma amizade declarada: negado.
+        var stranger = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("amigos", stranger.Message);
+
+        // Só o espectador declarou o dono: o dono ainda não o adicionou.
+        await viewer.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { sharerSnapshot.FriendCode });
+        await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+
+        // Amizade mútua: entra sem convite.
+        await sharer.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { viewerSnapshot.FriendCode });
+        var access = await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+        Assert.Contains("device-viewer", access.Session.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public async Task Friend_switch_moves_viewer_atomically_and_keeps_current_on_failure()
+    {
+        var first = await ConnectUnregisteredAsync();
+        var second = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var firstSnapshot = await RegisterAsync(first, "device-first", "First");
+        var secondSnapshot = await RegisterAsync(second, "device-second", "Second");
+        var viewerSnapshot = await RegisterAsync(viewer, "device-viewer", "Viewer");
+        await viewer.InvokeAsync("GetFriends", new[] { firstSnapshot.FriendCode, secondSnapshot.FriendCode });
+        await first.InvokeAsync("GetFriends", new[] { viewerSnapshot.FriendCode });
+        await second.InvokeAsync("GetFriends", new[] { viewerSnapshot.FriendCode });
+        await first.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-first", "auto"));
+        await second.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-second", "auto"));
+
+        var leftFirst = new TaskCompletionSource<ViewerLeftEvent>();
+        first.On<ViewerLeftEvent>("ViewerLeft", e => leftFirst.TrySetResult(e));
+
+        await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", firstSnapshot.FriendCode);
+
+        // Falha na troca (o segundo amigo parou de transmitir): o espectador continua no primeiro.
+        await second.InvokeAsync("StopShare");
+        await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", secondSnapshot.FriendCode));
+        var stillFirst = await first.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
+        Assert.Contains("device-viewer", stillFirst!.ViewerDeviceIds);
+
+        // Troca válida: sai do primeiro e entra no segundo no mesmo passo.
+        await second.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-second", "auto"));
+        var switched = await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", secondSnapshot.FriendCode);
+        Assert.Contains("device-viewer", switched.Session.ViewerDeviceIds);
+        var left = await WaitForAsync(leftFirst, "ViewerLeft after switch");
+        Assert.Equal("device-viewer", left.ViewerDeviceId);
+        var afterSwitch = await first.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
+        Assert.DoesNotContain("device-viewer", afterSwitch!.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public async Task Removing_a_friend_ends_their_active_watch_on_both_sides()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var (sharerSnapshot, _) = await MakeMutualFriendsAsync(sharer, "device-sharer", viewer, "device-viewer");
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
+        var access = await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+
+        var ended = new TaskCompletionSource<string>();
+        var left = new TaskCompletionSource<ViewerLeftEvent>();
+        viewer.On<string>("SessionEnded", id => ended.TrySetResult(id));
+        sharer.On<ViewerLeftEvent>("ViewerLeft", e => left.TrySetResult(e));
+
+        // O dono remove o espectador da lista de amigos: ele deixa de assistir.
+        await sharer.InvokeAsync<DeviceSnapshot[]>("GetFriends", Array.Empty<string>());
+        Assert.Equal(access.Session.SessionId, await WaitForAsync(ended, "SessionEnded"));
+        Assert.Equal("device-viewer", (await WaitForAsync(left, "ViewerLeft")).ViewerDeviceId);
+        var reentry = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
+        Assert.Contains("amigos", reentry.Message);
+    }
+
+    [Fact]
+    public async Task Viewer_removing_the_sharer_ends_their_own_watch()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var (sharerSnapshot, _) = await MakeMutualFriendsAsync(sharer, "device-sharer", viewer, "device-viewer");
+        await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
+        await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+
+        var ended = new TaskCompletionSource<string>();
+        viewer.On<string>("SessionEnded", id => ended.TrySetResult(id));
+
+        await viewer.InvokeAsync<DeviceSnapshot[]>("GetFriends", Array.Empty<string>());
+        await WaitForAsync(ended, "SessionEnded after unfriending");
+        var active = await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
+        Assert.Empty(active!.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public async Task Declared_friendship_survives_reconnect_without_a_new_declaration()
+    {
+        var sharer = await ConnectUnregisteredAsync();
+        var viewer = await ConnectUnregisteredAsync();
+        var (sharerSnapshot, _) = await MakeMutualFriendsAsync(sharer, "device-sharer", viewer, "device-viewer");
+
+        // O dono reconecta (nova conexão, sem reenviar a lista): a amizade continua valendo.
+        await sharer.StopAsync();
+        var reconnected = await ConnectUnregisteredAsync();
+        await RegisterAsync(reconnected, "device-sharer", "Sharer");
+        await reconnected.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
+
+        var access = await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode);
+        Assert.Contains("device-viewer", access.Session.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public async Task Friend_join_rejected_when_not_online_or_not_registered()
+    {
+        // Não registrado não passa pelo IsRegisteredConnection
+        var anonymous = await ConnectUnregisteredAsync();
+        await Assert.ThrowsAsync<HubException>(() => anonymous.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ABCDEF"));
+
+        var viewer = await ConnectAsync("viewer", "Viewer");
+        await viewer.StopAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ABCDEF"));
+    }
 }

@@ -44,6 +44,8 @@ public sealed record DisconnectResult(
     ShareSessionSnapshot? ViewerLeftSession,
     string? ViewerLeftDeviceId);
 public sealed record LeaveViewerResult(ShareSessionSnapshot? Session, string? SharerConnectionId, string? ViewerDeviceId);
+public sealed record ViewerDetachment(string SessionId, string SharerDeviceId, string ViewerDeviceId);
+public sealed record FriendJoinResult(ShareSessionSnapshot Session, ViewerDetachment? Detached);
 
 public sealed class TelaeDomainException(string code, string message) : Exception(message)
 {
