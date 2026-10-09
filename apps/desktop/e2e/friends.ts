@@ -2,8 +2,8 @@ import { expect, type Page } from '@playwright/test'
 
 /** Código de amigo exibido na Home (6 caracteres, sem ambiguidade). */
 export async function friendCodeOf(page: Page): Promise<string> {
-  const code = page.getByLabel('Copiar seu código de amigo').locator('xpath=preceding-sibling::span[1]')
-  await expect(code).toHaveText(/^[A-Z2-9]{6}$/)
+  const code = page.getByTestId('my-friend-code')
+  await expect(code).toHaveText(/^[A-Z2-9]{6}$/, { timeout: 30_000 })
   return ((await code.textContent()) ?? '').trim()
 }
 

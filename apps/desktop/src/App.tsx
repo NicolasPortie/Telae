@@ -574,7 +574,7 @@ export default function App() {
                 <div className="telae-my-code flex shrink-0 flex-col items-start gap-2 rounded-xl border border-[#38362E] bg-[#1C1C19] px-4 py-3 sm:items-end">
                   <span className="text-[11px] font-medium tracking-wide text-[#9D9A90]">Seu código de amigo</span>
                   <div className="flex items-center gap-2">
-                    <span className="tnum rounded-md border border-[#4A473E] bg-[#141412] px-3 py-1.5 text-sm font-semibold tracking-[0.16em] text-[#F1EFE8]">{myFriendCode}</span>
+                    <span data-testid="my-friend-code" className="tnum rounded-md border border-[#4A473E] bg-[#141412] px-3 py-1.5 text-sm font-semibold tracking-[0.16em] text-[#F1EFE8]">{myFriendCode}</span>
                     <button type="button" onClick={() => void copyMyFriendCode()} aria-label="Copiar seu código de amigo" title={myCodeCopied ? 'Copiado!' : 'Copiar código'} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md border border-[#38362E] bg-[#282721] text-[#B8B4AA] hover:text-[#F1EFE8]">{myCodeCopied ? <span className="text-xs font-semibold text-[#7FB996]">✓</span> : <Copy size={14} aria-hidden="true" />}</button>
                   </div>
                   <span className="text-[11px] text-[#9D9A90]">Compartilhe para seus amigos te adicionarem.</span>
