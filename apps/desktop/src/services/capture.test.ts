@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureDesktopSource } from './capture'
 import { createProcessAudioCapture, createScreenAudioCapture } from './process-audio'
+import { scaleDesktopVideo } from './video-scaler'
 
 vi.mock('./process-audio', () => ({ createProcessAudioCapture: vi.fn(), createScreenAudioCapture: vi.fn() }))
+vi.mock('./video-scaler', () => ({ scaleDesktopVideo: vi.fn(async stream => stream), stopScaledCapture: vi.fn() }))
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,8 +19,12 @@ describe('captureDesktopSource', () => {
     await captureDesktopSource('screen:1', profile)
     const fps = profile === '1440p30' ? 30 : 60
     expect(getDisplayMedia).toHaveBeenCalledWith({ audio: false, video: {
-      width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 }, frameRate: { ideal: fps, max: fps },
+      frameRate: { ideal: fps, max: fps },
     } })
+    expect(scaleDesktopVideo).toHaveBeenCalledWith(stream, {
+      width: { ideal: 2560, max: 2560 }, height: { ideal: 1440, max: 1440 },
+      frameRate: { ideal: fps, max: fps },
+    }, undefined)
     expect(track.contentHint).toBe(fps === 30 ? 'detail' : 'motion')
     expect(createScreenAudioCapture).toHaveBeenCalledWith(undefined)
     expect(stream.addTrack).toHaveBeenCalledOnce()
@@ -62,7 +68,7 @@ describe('captureDesktopSource', () => {
     expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false }))
     expect(videoTrack.contentHint).toBe('detail')
     expect(getDisplayMedia).toHaveBeenLastCalledWith(expect.objectContaining({
-      video: expect.objectContaining({ width: { ideal: 2560, max: 2560 }, frameRate: { ideal: 30, max: 30 } }),
+      video: expect.objectContaining({ frameRate: { ideal: 30, max: 30 } }),
     }))
   })
 })

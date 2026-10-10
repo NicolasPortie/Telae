@@ -1,0 +1,230 @@
+[
+  {
+    "profile": "1080p60",
+    "fps": 53,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 1.748,
+    "frames": 283,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "fps": 57,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 3.504,
+    "frames": 561,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "fps": 57,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 5.341,
+    "frames": 847,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "sourceRenderedFps": 59.993370898243285
+  },
+  {
+    "profile": "1080p60",
+    "presentedFps": 55.151201792424956
+  },
+  {
+    "profile": "1440p30",
+    "fps": 27,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 6.826,
+    "frames": 998,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "fps": 26,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 8.223,
+    "frames": 1136,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "fps": 28,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 9.924,
+    "frames": 1282,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "sourceRenderedFps": 60.040734819005905
+  },
+  {
+    "profile": "1440p30",
+    "presentedFps": 28.06342466662244
+  },
+  {
+    "profile": "1440p60",
+    "fps": 54,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 12.341,
+    "frames": 1531,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p60",
+    "fps": 43,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 14.884,
+    "frames": 1769,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p60",
+    "fps": 53,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 17.492,
+    "frames": 2024,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p60",
+    "sourceRenderedFps": 60.034191658861126
+  },
+  {
+    "profile": "1440p60",
+    "presentedFps": 48.83284853866843
+  },
+  {
+    "profile": "1080p60",
+    "fps": 58,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 19.585,
+    "frames": 2297,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "fps": 56,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 21.619,
+    "frames": 2583,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "fps": 57,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 23.611,
+    "frames": 2871,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p60",
+    "sourceRenderedFps": 59.84646925739522
+  },
+  {
+    "profile": "1080p60",
+    "presentedFps": 55.46672328343964
+  },
+  {
+    "profile": "1080p30",
+    "fps": 29,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 24.712,
+    "frames": 3014,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p30",
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 25.893,
+    "frames": 3161,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p30",
+    "fps": 28,
+    "width": 1920,
+    "height": 1080,
+    "encodeSeconds": 26.96,
+    "frames": 3307,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1080p30",
+    "sourceRenderedFps": 60.011816485977626
+  },
+  {
+    "profile": "1080p30",
+    "presentedFps": 28.478680819724946
+  },
+  {
+    "profile": "1440p30",
+    "fps": 29,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 28.805,
+    "frames": 3457,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "fps": 30,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 30.469,
+    "frames": 3599,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "fps": 25,
+    "width": 2560,
+    "height": 1440,
+    "encodeSeconds": 32.152,
+    "frames": 3738,
+    "limitation": "none",
+    "encoder": "MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)"
+  },
+  {
+    "profile": "1440p30",
+    "sourceRenderedFps": 59.96891976252698
+  },
+  {
+    "profile": "1440p30",
+    "presentedFps": 28.422296893480762
+  }
+]

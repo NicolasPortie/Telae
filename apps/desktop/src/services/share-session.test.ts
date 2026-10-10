@@ -86,6 +86,38 @@ beforeEach(async () => {
 
 afterEach(() => { controller.dispose(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
+it.each(['720p60', '1080p60', '1440p60'] as const)('starts %s with consistent motion capture and sender adaptation', async profile => {
+  await controller.startSharing('screen:1', profile)
+  expect(controller.getSnapshot().contentMode).toBe('motion')
+  expect(stream.getVideoTracks()[0].contentHint).toBe('motion')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  mocks.peers[0].options.onStatus('connected')
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(mocks.peers[0].applyQuality).toHaveBeenLastCalledWith(expect.any(Number), 'maintain-framerate', {
+    maxFramerate: 60, scaleResolutionDownBy: 1,
+  })
+})
+
+it('restores 1080p60 immediately after a live profile change and respects the upload budget', async () => {
+  await controller.startSharing('screen:1', '1080p30')
+  mocks.handlers.get('viewerJoined')!({ sessionId: 'session', viewer: { deviceId: 'viewer', displayName: 'Ana' } })
+  await vi.advanceTimersByTimeAsync(0)
+  controller.setUploadBudget(8)
+  await controller.setQuality('1080p60')
+  expect(controller.getSnapshot().contentMode).toBe('motion')
+  expect(stream.getVideoTracks()[0].contentHint).toBe('motion')
+  expect(mocks.peers[0].applyQuality).toHaveBeenLastCalledWith(8_000_000, 'maintain-framerate', {
+    maxFramerate: 60, scaleResolutionDownBy: 1,
+  })
+  await controller.setQuality('1080p30')
+  expect(controller.getSnapshot().contentMode).toBe('text')
+  expect(stream.getVideoTracks()[0].contentHint).toBe('detail')
+  expect(mocks.peers[0].applyQuality).toHaveBeenLastCalledWith(8_000_000, 'maintain-resolution', {
+    maxFramerate: 30, scaleResolutionDownBy: 1,
+  })
+})
+
 it('stops capture and peers immediately even when the server never answers', async () => {
   await controller.startSharing('screen:1', 'auto')
   mocks.signaling.stopShare.mockReturnValue(new Promise(() => undefined))

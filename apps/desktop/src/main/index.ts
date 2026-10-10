@@ -4,6 +4,7 @@ const execFileAsync = promisify(execFile)
 import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
+import { release } from 'node:os'
 import { app, BrowserWindow, desktopCapturer, ipcMain, session } from 'electron'
 import type {
   AudioBridgeState,
@@ -15,6 +16,21 @@ import type {
 import { DesktopUpdates } from './updates.ts'
 import { readLocalProfile, writeJsonAtomically } from './profile-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
+
+// Sharing remains active when the main window is minimized or covered.
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+
+if (process.platform === 'win32' && Number(release().split('.')[2]) >= 26100) {
+  // Chromium uses WGC screen capture on Windows 11 24H2 and later.
+  // WGC textures require the zero-copy capture path as well. Configure both
+  // before ready so Chromium avoids CPU copies/scaling for every desktop frame.
+  // Preserve switches supplied by the launcher (including Playwright).
+  const enabledFeatures = app.commandLine.getSwitchValue('enable-features').split(',').filter(Boolean)
+  app.commandLine.appendSwitch('enable-features', [...new Set([
+    ...enabledFeatures, 'ZeroCopyDesktopCapture', 'WebRtcAllowWgcUsingTexture',
+  ])].join(','))
+}
 
 let mainWindow: BrowserWindow | null = null
 let audioBridge: ChildProcess | null = null
@@ -297,6 +313,8 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Sharing and playback must keep their cadence while the user uses another app.
+      backgroundThrottling: false,
     },
   })
 

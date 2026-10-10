@@ -7,6 +7,7 @@ import type {
   TransportPath,
 } from './types'
 import { PROFILE_CEILINGS } from './quality-controller'
+import { qualityContentMode, qualityFramerate } from './quality-profiles'
 
 export type PeerOptions = {
   iceServers: IceServerDto[]
@@ -334,6 +335,7 @@ export class WebRtcPeer {
     }
     if (!videoReport) return empty
     const item: StatItem = videoReport
+    const source = typeof item.mediaSourceId === 'string' ? reports.get(item.mediaSourceId) as StatItem | undefined : undefined
 
     const bytes = Number(item.bytesReceived ?? item.bytesSent ?? 0)
     const now = Number(item.timestamp ?? performance.now())
@@ -412,6 +414,7 @@ export class WebRtcPeer {
       candidateType,
       qualityLimitationReason: typeof item.qualityLimitationReason === 'string' ? item.qualityLimitationReason : null,
       encodeMs,
+      captureFramesPerSecond: typeof source?.framesPerSecond === 'number' ? source.framesPerSecond : null,
       framesDecoded: typeof item.framesDecoded === 'number' ? item.framesDecoded : null,
     }
   }
@@ -433,7 +436,14 @@ export class WebRtcPeer {
   }
 
   private async applySenderQuality() {
-    this.requestedQuality ??= { maxBitrateBps: PROFILE_CEILINGS[this.qualityProfile], degradationPreference: 'maintain-resolution' }
+    const track = this.localSenders.get('video')?.track
+    const mode = track?.contentHint === 'motion' ? 'motion'
+      : track?.contentHint === 'detail' || track?.contentHint === 'text' ? 'text' : qualityContentMode(this.qualityProfile)
+    this.requestedQuality ??= {
+      maxBitrateBps: PROFILE_CEILINGS[this.qualityProfile],
+      degradationPreference: mode === 'motion' ? 'maintain-framerate' : 'maintain-resolution',
+      maxFramerate: qualityFramerate(this.qualityProfile, mode), scaleResolutionDownBy: 1,
+    }
     await this.queueSenderQuality(this.requestedQuality)
   }
 }

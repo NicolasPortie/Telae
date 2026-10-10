@@ -1,6 +1,7 @@
 import { getProcessAudioDiagnostics } from './capture'
-import { QualityController } from './quality-controller'
-import { qualityConstraints } from './quality-profiles'
+import { PROFILE_CEILINGS, QualityController } from './quality-controller'
+import { qualityConstraints, qualityContentMode, qualityFramerate } from './quality-profiles'
+import { applyVideoConstraints, getVideoConstraints } from './video-scaler'
 import { SignalingClient } from './signaling'
 import { StreamController } from './stream-controller'
 import type { DeviceSnapshot } from './types'
@@ -317,7 +318,7 @@ export class ShareSessionController {
     this.quality = quality
     this.includeAudio = true
     this.audioMuted = false
-    this.contentMode = 'text'
+    this.contentMode = qualityContentMode(quality)
     this.viewerPresence = 'none'
     this.viewerName = null
     this.setState('preparing')
@@ -331,6 +332,8 @@ export class ShareSessionController {
       if (generation !== this.generation) return
       if (!this.capture.getSnapshot().hasStream) throw new Error('A fonte escolhida foi encerrada. Selecione outra fonte.')
       this.localStream = stream
+      const video = stream.getVideoTracks()[0]
+      if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
       this.includeAudio = this.localStream.getAudioTracks().length > 0
       const access = await signaling.startShare(quality)
       if (generation !== this.generation) {
@@ -449,7 +452,7 @@ export class ShareSessionController {
         const video = current.getVideoTracks()[0]
         if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
         if (video && this.quality === 'auto' && this.contentMode === 'motion') {
-          await video.applyConstraints(qualityConstraints(this.quality, this.contentMode)).catch(() => {
+          await applyVideoConstraints(current, qualityConstraints(this.quality, this.contentMode)).catch(() => {
             this.error = 'A fonte foi trocada; ela manteve a taxa de quadros disponível.'
           })
         }
@@ -511,16 +514,17 @@ export class ShareSessionController {
     this.emit()
   }
 
-  async setQuality(quality: QualityProfile, contentMode: ContentMode = this.contentMode) {
+  async setQuality(quality: QualityProfile, contentMode: ContentMode = qualityContentMode(quality)) {
     if (this.role !== 'sharer' || !this.localStream) throw new Error('Inicie a transmissão antes de ajustar a qualidade.')
     if (this.switchingInFlight) throw new Error('Aguarde a alteração atual terminar.')
+    if (quality === this.quality && contentMode === this.contentMode) return
     this.switchingInFlight = true
     const stream = this.localStream
     const generation = this.generation
     const video = stream.getVideoTracks()[0]
-    const previous = video.getConstraints()
+    const previous = getVideoConstraints(stream)
     try {
-      await video.applyConstraints(qualityConstraints(quality, contentMode))
+      await applyVideoConstraints(stream, qualityConstraints(quality, contentMode))
       if (generation !== this.generation) return
       const session = await this.requireSignaling().updateShareQuality(quality) as ShareSessionSnapshot | undefined
       if (session && session.sessionId === this.session?.sessionId) this.session = session
@@ -529,10 +533,16 @@ export class ShareSessionController {
       this.contentMode = contentMode
       video.contentHint = contentMode === 'motion' ? 'motion' : 'detail'
       for (const controller of this.viewerQuality.values()) controller.reset()
-      await Promise.all([...this.sharerPeers.values()].map(peer => peer.setQualityProfile(quality)))
+      const bitrate = Math.min(PROFILE_CEILINGS[quality], this.uploadBudgetMbps * 1_000_000 / Math.max(1, this.sharerPeers.size))
+      await Promise.all([...this.sharerPeers.values()].map(async peer => {
+        await peer.setQualityProfile(quality)
+        await peer.applyQuality(bitrate, contentMode === 'motion' ? 'maintain-framerate' : 'maintain-resolution', {
+          maxFramerate: qualityFramerate(quality, contentMode), scaleResolutionDownBy: 1,
+        })
+      }))
       this.emit()
     } catch (error) {
-      if (generation === this.generation) await video.applyConstraints(previous).catch(() => undefined)
+      if (generation === this.generation) await applyVideoConstraints(stream, previous).catch(() => undefined)
       throw error
     } finally { this.switchingInFlight = false }
   }

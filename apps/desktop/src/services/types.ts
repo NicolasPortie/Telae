@@ -67,6 +67,7 @@ export type TransportPath = 'direct' | 'relay' | null
 export type DiagnosticsSnapshot = {
   qualityLimitationReason?: string | null
   encodeMs?: number | null
+  captureFramesPerSecond?: number | null
   audioLevel?: number | null
   audioReceiving?: boolean | null
   framesDecoded?: number | null

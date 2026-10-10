@@ -56,14 +56,18 @@ export class QualityController {
   decide(profile: QualityProfile, stats: DiagnosticsSnapshot, mode: ContentMode = 'text', uploadBudgetBps?: number): QualityDecision {
     const targetFps = qualityFramerate(profile, mode)
     const currentFps = mode === 'text' ? Math.max(10, targetFps / 2 ** this.cpuStep) : targetFps
+    // A slow capture source cannot feed the requested fps. Measure encoder pressure
+    // against its actual input cadence before sacrificing image quality.
+    const captureFps = stats.captureFramesPerSecond
+    const encoderFps = captureFps != null && captureFps > 0 ? Math.min(currentFps, captureFps) : currentFps
     const cpuLimited = stats.qualityLimitationReason === 'cpu' ||
-      ((stats.encodeMs ?? 0) > 1000 / currentFps &&
-        stats.framesPerSecond !== null && stats.framesPerSecond < currentFps * 0.8)
+      ((stats.encodeMs ?? 0) > 1000 / encoderFps &&
+        stats.framesPerSecond !== null && stats.framesPerSecond < encoderFps * 0.8)
     this.cpuSamples = cpuLimited ? this.cpuSamples + 1 : 0
     // Unknown telemetry must not undo a measured CPU limitation.
     const cpuHealthy = !cpuLimited && (stats.encodeMs != null || stats.qualityLimitationReason != null) &&
       stats.framesPerSecond !== null &&
-      stats.framesPerSecond >= currentFps * 0.8 && (stats.encodeMs ?? 0) <= 1000 / currentFps
+      stats.framesPerSecond >= encoderFps * 0.8 && (stats.encodeMs ?? 0) <= 1000 / encoderFps
     this.cpuHealthySamples = cpuHealthy ? this.cpuHealthySamples + 1 : 0
     if (this.cpuSamples >= 3) {
       this.cpuStep = Math.min(2, this.cpuStep + 1)

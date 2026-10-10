@@ -4,6 +4,11 @@ import { createProcessAudioCapture } from './process-audio'
 import { captureDesktopSource, getProcessAudioDiagnostics, stopMediaStream } from './capture'
 import type { AudioBridgeState } from '../shared/contracts'
 
+vi.mock('./video-scaler', () => ({
+  scaleDesktopVideo: vi.fn(async (stream: MediaStream) => stream),
+  stopScaledCapture: vi.fn(),
+}))
+
 const source = readFileSync(new URL('../../public/telae-pcm-processor.js', import.meta.url), 'utf8')
 interface Processor {
   buffer: Float32Array
