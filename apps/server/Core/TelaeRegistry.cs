@@ -16,6 +16,9 @@ public sealed class TelaeRegistry
     // Lista de amigos declarada por cada dispositivo (GetFriends). Persiste entre reconexões:
     // só muda quando o próprio dispositivo envia uma nova lista.
     private readonly Dictionary<string, HashSet<string>> _declaredFriendsByDevice = new(StringComparer.Ordinal);
+    // Pedidos dispensados: quem dispensou (key) -> quem pediu (set). Some quando o pedido deixa de
+    // existir (quem pediu removeu) ou quando a amizade vira mútua.
+    private readonly Dictionary<string, HashSet<string>> _dismissedRequests = new(StringComparer.Ordinal);
 
     public const int MaxViewersPerSession = 12;
     public static readonly TimeSpan InviteLifetime = TimeSpan.FromHours(24);
@@ -214,11 +217,22 @@ public sealed class TelaeRegistry
     /// valer para uma transmissão em andamento, o espectador é removido e a lista de saídas é
     /// devolvida para o hub notificar as duas partes.
     /// </summary>
-    public IReadOnlyList<ViewerDetachment> DeclareFriends(string deviceId, IEnumerable<string> friendCodes)
+    public DeclareFriendsResult DeclareFriends(string deviceId, IEnumerable<string> friendCodes)
     {
         lock (_gate)
         {
-            _declaredFriendsByDevice[deviceId] = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.Ordinal);
+            var newSet = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.Ordinal);
+            var oldSet = _declaredFriendsByDevice.GetValueOrDefault(deviceId)
+                ?? new HashSet<string>(StringComparer.Ordinal);
+            _declaredFriendsByDevice[deviceId] = newSet;
+
+            // Dispensa caduca quando o pedido deixa de existir: removeu e readicionou = nova intenção.
+            foreach (var removed in oldSet.Except(newSet))
+            {
+                var target = _profiles.Values.FirstOrDefault(p => p.FriendCode == removed);
+                if (target is not null && _dismissedRequests.TryGetValue(target.DeviceId, out var set))
+                    set.Remove(deviceId);
+            }
 
             var detached = new List<ViewerDetachment>();
             if (_sessionsBySharer.TryGetValue(deviceId, out var own))
@@ -237,7 +251,72 @@ public sealed class TelaeRegistry
                 watching.ViewerDeviceIds.Remove(deviceId);
                 detached.Add(new ViewerDetachment(watching.SessionId, watching.SharerDeviceId, deviceId));
             }
-            return detached;
+
+            // Amizade mútua dispensa o pedido pendente (para os dois lados).
+            foreach (var code in newSet)
+            {
+                var other = _profiles.Values.FirstOrDefault(p => p.FriendCode == code);
+                if (other is null || !AreMutualFriendsLocked(deviceId, other.DeviceId)) continue;
+                if (_dismissedRequests.TryGetValue(deviceId, out var mine)) mine.Remove(other.DeviceId);
+                if (_dismissedRequests.TryGetValue(other.DeviceId, out var theirs)) theirs.Remove(deviceId);
+            }
+
+            // Pedidos novos: declarados agora, ainda não mútuos, não dispensados, nunca a si mesmo.
+            // O hub avisa cada alvo com o snapshot de quem declarou.
+            var requests = new List<string>();
+            if (_profiles.ContainsKey(deviceId))
+            {
+                var dismissedMine = _dismissedRequests.GetValueOrDefault(deviceId);
+                foreach (var code in newSet.Except(oldSet))
+                {
+                    var other = _profiles.Values.FirstOrDefault(p => p.FriendCode == code);
+                    if (other is null || other.DeviceId == deviceId) continue;
+                    if (AreMutualFriendsLocked(deviceId, other.DeviceId)) continue;
+                    if (dismissedMine?.Contains(other.DeviceId) == true) continue;
+                    requests.Add(other.DeviceId);
+                }
+            }
+            return new DeclareFriendsResult(detached, requests);
+        }
+    }
+
+    /// <summary>
+    /// Quem declarou este dispositivo sem reciprocidade (e sem dispensa): os pedidos a aceitar.
+    /// </summary>
+    public IReadOnlyList<DeviceSnapshot> GetFriendRequests(string deviceId)
+    {
+        lock (_gate)
+        {
+            if (!_profiles.TryGetValue(deviceId, out var me)) return [];
+            var dismissedMine = _dismissedRequests.GetValueOrDefault(deviceId);
+            return _profiles.Values
+                .Where(p => p.DeviceId != deviceId
+                    && _declaredFriendsByDevice.TryGetValue(p.DeviceId, out var theirs) && theirs.Contains(me.FriendCode)
+                    && !AreMutualFriendsLocked(deviceId, p.DeviceId)
+                    && (dismissedMine is null || !dismissedMine.Contains(p.DeviceId)))
+                .Select(ToDeviceSnapshot)
+                .OrderBy(device => device.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+        }
+    }
+
+    public void DismissFriendRequest(string deviceId, string friendCode)
+    {
+        var normalized = NormalizeFriendCode(friendCode);
+        if (normalized.Length != 6)
+            throw new TelaeDomainException("invalid_friend_code", "Código de amigo deve ter 6 caracteres.");
+        lock (_gate)
+        {
+            RequireOnlineDevice(deviceId);
+            var target = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized)
+                ?? throw new TelaeDomainException("friend_not_found", "Amigo não encontrado. Confira o código e tente novamente.");
+            if (target.DeviceId == deviceId) return;
+            if (!_dismissedRequests.TryGetValue(deviceId, out var set))
+            {
+                set = new HashSet<string>(StringComparer.Ordinal);
+                _dismissedRequests[deviceId] = set;
+            }
+            set.Add(target.DeviceId);
         }
     }
 
