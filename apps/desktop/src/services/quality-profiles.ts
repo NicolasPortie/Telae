@@ -9,6 +9,10 @@ const dimensions: Record<QualityProfile, [number, number]> = {
   '1440p60': [2560, 1440],
 }
 
+export function qualityContentMode(profile: QualityProfile): ContentMode {
+  return profile === '720p60' || profile === '1080p60' || profile === '1440p60' ? 'motion' : 'text'
+}
+
 export function qualityFramerate(profile: QualityProfile, mode: ContentMode = 'text'): number {
   return profile === '1080p30' || profile === '1440p30' || (profile === 'auto' && mode === 'text') ? 30 : 60
 }
