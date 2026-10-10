@@ -18,6 +18,7 @@ import type {
 
 type Events = {
   presenceChanged: (device: DeviceSnapshot) => void
+  friendRequestReceived: (device: DeviceSnapshot) => void
   viewerJoined: (event: ViewerJoinedEvent) => void
   viewerLeft: (event: ViewerLeftEvent) => void
   signalReceived: (envelope: SignalingEnvelope) => void
@@ -42,6 +43,7 @@ export class SignalingClient {
       .build()
 
     this.connection.on('PresenceChanged', (device: DeviceSnapshot) => this.emit('presenceChanged', device))
+    this.connection.on('FriendRequestReceived', (device: DeviceSnapshot) => this.emit('friendRequestReceived', device))
     this.connection.on('ViewerJoined', (event: ViewerJoinedEvent) => this.emit('viewerJoined', event))
     this.connection.on('ViewerLeft', (event: ViewerLeftEvent) => this.emit('viewerLeft', event))
     this.connection.on('SignalReceived', (envelope: SignalingEnvelope) => this.emit('signalReceived', envelope))
@@ -93,6 +95,14 @@ export class SignalingClient {
 
   lookupFriend(friendCode: string) {
     return this.connection.invoke<DeviceSnapshot | null>('LookupFriend', friendCode)
+  }
+
+  getFriendRequests() {
+    return this.connection.invoke<DeviceSnapshot[]>('GetFriendRequests')
+  }
+
+  dismissFriendRequest(friendCode: string) {
+    return this.connection.invoke('DismissFriendRequest', friendCode)
   }
 
   getFriends(friendCodes: string[]) {
