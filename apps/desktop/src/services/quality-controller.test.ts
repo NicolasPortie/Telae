@@ -20,6 +20,18 @@ function stats(overrides: Partial<DiagnosticsSnapshot> = {}): DiagnosticsSnapsho
 }
 
 describe('QualityController', () => {
+  it('preserves detail when a 60 fps profile receives only 24 captured frames per second', () => {
+    const controller = new QualityController()
+    for (let i = 0; i < 10; i++) {
+      expect(controller.decide('1080p60', stats({
+        captureFramesPerSecond: 24, framesPerSecond: 24, encodeMs: 22, qualityLimitationReason: 'none',
+      }), 'motion')).toMatchObject({ maxFramerate: 60, scaleResolutionDownBy: 1 })
+    }
+    for (let i = 0; i < 3; i++) controller.decide('1080p60', stats({
+      captureFramesPerSecond: 24, framesPerSecond: 12, encodeMs: 60,
+    }), 'motion')
+    expect(controller.decide('1080p60', stats(), 'motion').scaleResolutionDownBy).toBe(2)
+  })
   it.each(['1440p30', '1440p60'] as const)('adapts %s to CPU and network pressure and recovers', (profile) => {
     const controller = new QualityController()
     const fps = profile === '1440p30' ? 30 : 60
