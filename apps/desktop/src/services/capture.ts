@@ -1,5 +1,6 @@
 import type { QualityProfile } from './types'
 import { qualityConstraints } from './quality-profiles'
+import { scaleDesktopVideo, stopScaledCapture } from './video-scaler'
 import { createProcessAudioCapture, createScreenAudioCapture, type ProcessAudioCapture, type ProcessAudioDiagnostics } from './process-audio'
 
 const processCaptures = new WeakMap<MediaStream, ProcessAudioCapture>()
@@ -26,7 +27,8 @@ export async function captureDesktopSource(
   try {
     stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
-      video: qualityConstraints(quality),
+      // Keep native pixels on the GPU; output dimensions are applied by the scaler.
+      video: { frameRate: qualityConstraints(quality).frameRate },
     })
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
@@ -45,6 +47,7 @@ export async function captureDesktopSource(
       throw new Error('A fonte escolhida não retornou vídeo.')
     }
     track.contentHint = quality === 'auto' || quality === '1080p30' || quality === '1440p30' ? 'detail' : 'motion'
+    stream = await scaleDesktopVideo(stream, qualityConstraints(quality), signal)
     try {
       const processId = isWindow ? await window.telae.resolveWindowAudioProcess(sourceId) : null
       signal?.throwIfAborted()
@@ -71,6 +74,7 @@ export async function captureDesktopSource(
 
 export function stopMediaStream(stream: MediaStream | null): void {
   if (!stream) return
+  stopScaledCapture(stream)
   const processCapture = processCaptures.get(stream)
   if (processCapture) {
     processCaptures.delete(stream)

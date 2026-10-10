@@ -164,6 +164,20 @@ function installSender() {
   return sender
 }
 
+it.each(['1080p30', '1080p60'] as const)('configures %s cadence on the first offer before diagnostics start', async profile => {
+  const sharer = new WebRtcPeer({
+    iceServers: [], qualityProfile: profile,
+    localStream: { getTracks: () => [{ kind: 'video', contentHint: profile === '1080p60' ? 'motion' : 'detail' }] } as unknown as MediaStream,
+    sendSignal: vi.fn(async () => undefined), onRemoteStream: vi.fn(), onStatus: vi.fn(),
+  })
+  const sender = installSender()
+  await sharer.createOffer()
+  expect(sender.getParameters()).toMatchObject({
+    degradationPreference: profile === '1080p60' ? 'maintain-framerate' : 'maintain-resolution',
+    encodings: [{ maxFramerate: profile === '1080p60' ? 60 : 30, scaleResolutionDownBy: 1 }],
+  })
+})
+
 it('applies fps and scale, skips identical parameters, and allows restoration', async () => {
   const { peer: sharer } = peer(true)
   const sender = installSender()
@@ -246,6 +260,18 @@ it('measures interval encode time rather than lifetime average and handles count
   expect((await sharer.getDiagnostics()).qualityLimitationReason).toBe('cpu')
   setReports({ ...video, totalEncodeTime: 0, framesEncoded: 0 })
   expect((await sharer.getDiagnostics()).encodeMs).toBeNull()
+})
+
+it('reports the capture cadence linked to the outbound video source', async () => {
+  const { peer: sharer } = peer(true)
+  setReports(
+    { id: 'video', type: 'outbound-rtp', kind: 'video', mediaSourceId: 'capture', framesPerSecond: 24 },
+    { id: 'capture', type: 'media-source', kind: 'video', framesPerSecond: 24 },
+    { id: 'other-source', type: 'media-source', kind: 'video', framesPerSecond: 60 },
+  )
+  expect((await sharer.getDiagnostics()).captureFramesPerSecond).toBe(24)
+  setReports({ id: 'video', type: 'outbound-rtp', kind: 'video' })
+  expect((await sharer.getDiagnostics()).captureFramesPerSecond).toBeNull()
 })
 
 it('prefers the video transport selected pair over a stale nominated pair', async () => {

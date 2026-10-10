@@ -1,6 +1,7 @@
 import { Monitor, Square, Users, X } from 'lucide-react'
 import type { ShareSessionController } from '../services/share-session'
 import type { ContentMode, QualityProfile } from '../services/types'
+import { qualityContentMode } from '../services/quality-profiles'
 import { formatElapsed, QUALITY_OPTIONS } from '../ui/format'
 
 export function SharerSession({
@@ -62,7 +63,10 @@ export function SharerSession({
                 <button type="button" onClick={onChangeSource} disabled={controlsDisabled} className="telae-press telae-text-button">Trocar fonte</button>
                 <div aria-busy={busy} className="telae-quality-control">
                   <label htmlFor="stream-quality" className="text-xs text-[#9D9A90]">Qualidade</label>
-                  <select id="stream-quality" aria-label="Qualidade da transmissão" value={snapshot.quality} disabled={controlsDisabled} onChange={event => onQuality(event.target.value as QualityProfile, snapshot.contentMode)}>
+                  <select id="stream-quality" aria-label="Qualidade da transmissão" value={snapshot.quality} disabled={controlsDisabled} onChange={event => {
+                    const profile = event.target.value as QualityProfile
+                    onQuality(profile, qualityContentMode(profile))
+                  }}>
                     {QUALITY_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
