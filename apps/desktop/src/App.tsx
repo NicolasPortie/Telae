@@ -63,6 +63,7 @@ export default function App() {
   const [friendSuccess, setFriendSuccess] = useState<string | null>(null)
   const [watchingDeviceId, setWatchingDeviceId] = useState<string | null>(null)
   const [watchError, setWatchError] = useState<string | null>(null)
+  const [requests, setRequests] = useState<DeviceSnapshot[]>([])
   const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null)
   const [myFriendCode, setMyFriendCode] = useState<string | null>(null)
   const [myCodeCopied, setMyCodeCopied] = useState(false)
@@ -113,8 +114,11 @@ export default function App() {
       const me = controller.getMyFriendCode()
       if (me) setMyFriendCode(me)
       const current = local.friendCodes ?? []
-      if (snapshot.signaling !== 'online' || current.length === 0) {
-        if (current.length === 0) setFriends([])
+      if (snapshot.signaling !== 'online') return
+      // Pedidos recebidos (quem me adicionou sem reciprocidade): não bloqueiam a lista.
+      try { setRequests(await controller.fetchFriendRequests()) } catch { /* pedidos não bloqueiam */ }
+      if (current.length === 0) {
+        setFriends([])
         return
       }
       // Declara a lista ao servidor: a lista volta ordenada e a amizade passa a valer nos dois lados.
@@ -164,7 +168,11 @@ export default function App() {
     const interval = window.setInterval(() => void refreshFriends(), 12_000)
     // A presença chega com o snapshot completo do amigo: atualiza na hora, sem nova consulta.
     const off = controller.onPresenceChanged(device => setFriends(list => upsertFriend(list, device)))
-    return () => { window.clearInterval(interval); off() }
+    // Pedido novo chega na hora; a busca confirma o estado atual no servidor.
+    const offRequest = controller.onFriendRequest(() => {
+      void controller.fetchFriendRequests().then(setRequests).catch(() => undefined)
+    })
+    return () => { window.clearInterval(interval); off(); offRequest() }
   }, [controller, desktopApiAvailable, snapshot.signaling, refreshFriends])
 
   const connectWithName = useCallback(
@@ -303,8 +311,8 @@ export default function App() {
     }
   }, [myFriendCode])
 
-  const handleAddFriend = useCallback(async () => {
-    const code = friendCodeInput.trim().replaceAll('-', '').toUpperCase()
+  const handleAddFriend = useCallback(async (codeArg?: string) => {
+    const code = (codeArg ?? friendCodeInput).trim().replaceAll('-', '').toUpperCase()
     if (!code || code.length !== 6) {
       setFriendError('Digite um código de 6 letras/números (ex.: ABC234).')
       return
@@ -331,12 +339,28 @@ export default function App() {
       window.setTimeout(() => setFriendSuccess(null), 3000)
       const list = await controller.fetchFriends(local.friendCodes)
       setFriends(list)
+      // Aceitar um pedido o torna mútuo: ele sai da pendência.
+      try { setRequests(await controller.fetchFriendRequests()) } catch { /* lista principal já atualizou */ }
     } catch (error) {
       setFriendError(error instanceof Error ? error.message : 'Não foi possível adicionar o amigo.')
     } finally {
       setFriendActionBusy(false)
     }
   }, [controller, desktopApiAvailable, friendCodeInput, friends, myFriendCode])
+
+  const handleDismissRequest = useCallback(async (code: string) => {
+    if (!desktopApiAvailable) return
+    setFriendActionBusy(true)
+    setFriendError(null)
+    try {
+      await controller.dismissFriendRequest(code)
+      setRequests(await controller.fetchFriendRequests())
+    } catch (error) {
+      setFriendError(error instanceof Error ? error.message : 'Não foi possível ignorar o pedido.')
+    } finally {
+      setFriendActionBusy(false)
+    }
+  }, [controller, desktopApiAvailable])
 
   const handleRemoveFriend = useCallback(async (code: string) => {
     if (!desktopApiAvailable) return
@@ -639,6 +663,33 @@ export default function App() {
               {friendSuccess && !addFriendOpen && <p role="status" className="mt-3 text-sm text-[#7FB996]">{friendSuccess}</p>}
 
               {watchError && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{watchError}</p>}
+
+              {requests.length > 0 && (
+                <section aria-labelledby="requests-title" className="mt-5 rounded-xl border border-[#4A4031] bg-[#24221D] p-4">
+                  <div className="flex items-center gap-2">
+                    <h2 id="requests-title" className="flex items-center gap-2 text-sm font-semibold tracking-[-0.02em]">
+                      <UserPlus size={15} aria-hidden="true" className="text-[#D8A85C]" /> Pedidos de amizade
+                    </h2>
+                    <span className="telae-count tnum">{requests.length}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-[#9D9A90]">Essas pessoas te adicionaram. Aceite para assistirem uma à outra.</p>
+                  <ul className="mt-3 grid gap-2">
+                    {requests.map(request => (
+                      <li key={request.deviceId} className="flex flex-wrap items-center gap-3 rounded-xl border border-[#313029] bg-[#141412] px-4 py-3">
+                        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#38362E] bg-[#1C1C19] text-xs font-semibold text-[#9D9A90]">{request.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium leading-none">{request.displayName}</p>
+                          <p className="tnum mt-1 text-xs text-[#6B6860]">· {request.friendCode}</p>
+                        </div>
+                        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+                          <button type="button" onClick={() => void handleAddFriend(request.friendCode)} disabled={friendActionBusy || snapshot.signaling !== 'online'} className="telae-press inline-flex min-h-[36px] items-center rounded-lg bg-[#D8A85C] px-4 text-xs font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50">Adicionar de volta</button>
+                          <button type="button" onClick={() => void handleDismissRequest(request.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[36px] rounded-lg border border-[#313029] px-3 text-xs text-[#B8B4AA] hover:text-[#F1EFE8] disabled:opacity-50">Ignorar</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               {friends.length === 0 ? (
                 <div className="mt-6 rounded-xl border border-dashed border-[#38362E] bg-[#141412] px-6 py-10 text-center">

@@ -31,14 +31,33 @@ public sealed class TelaeHub(
         var friends = registry.GetDevicesByFriendCodes(friendCodes);
         await presence.ReplaceAsync(Context.ConnectionId, friends);
         // Quem deixou de ser amigo (de qualquer um dos lados) sai da transmissão em andamento.
-        foreach (var detachment in registry.DeclareFriends(deviceId, friendCodes))
+        var declared = registry.DeclareFriends(deviceId, friendCodes);
+        foreach (var detachment in declared.Detached)
         {
             await NotifyAsync(detachment.ViewerDeviceId, "SessionEnded", detachment.SessionId);
             await NotifyAsync(detachment.SharerDeviceId, "ViewerLeft",
                 new ViewerLeftEvent(detachment.SessionId, detachment.ViewerDeviceId));
         }
+        // Quem foi adicionado agora fica sabendo na hora (se estiver online).
+        var requester = registry.GetDevice(deviceId);
+        if (requester is not null)
+            foreach (var targetId in declared.NewRequestDeviceIds)
+                await NotifyAsync(targetId, "FriendRequestReceived", requester);
         // Read again after subscribing so changes during group setup are reflected.
         return registry.GetDevicesByFriendCodes(friendCodes);
+    }
+
+    public Task<IReadOnlyList<DeviceSnapshot>> GetFriendRequests()
+    {
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        return Task.FromResult(registry.GetFriendRequests(deviceId));
+    }
+
+    public Task DismissFriendRequest(string friendCode)
+    {
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        registry.DismissFriendRequest(deviceId, friendCode);
+        return Task.CompletedTask;
     }
 
     public async Task<ShareAccessResult> StartShare(StartShareRequest request)

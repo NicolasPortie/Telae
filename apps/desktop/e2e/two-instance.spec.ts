@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { diagnosticSnapshot } from './diagnostics.ts'
-import { befriend, watchFriend } from './friends.ts'
+import { addFriend, befriend, friendCodeOf, watchFriend } from './friends.ts'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
@@ -178,6 +178,31 @@ test.describe('duas instâncias Telae', () => {
     } finally {
       await sharerApp.close()
       await viewerApp.close()
+    }
+  })
+
+  test('pedido de amizade aparece e aceitar torna mútuo', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    try {
+      const ana = await firstWindow(anaApp)
+      const bia = await firstWindow(biaApp)
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+
+      // Só Ana adicionou: Bia vê o pedido sem ter feito nada; Ana não vê pedido nenhum.
+      await addFriend(ana, await friendCodeOf(bia), 'BiaE2E')
+      await expect(bia.getByRole('heading', { name: 'Pedidos de amizade' })).toBeVisible({ timeout: 30_000 })
+      await expect(bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Adicionar de volta' })).toBeVisible()
+      await expect(ana.getByRole('heading', { name: 'Pedidos de amizade' })).toHaveCount(0)
+
+      // Bia aceita: o pedido some e Ana entra na lista dela.
+      await bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Adicionar de volta' }).click()
+      await expect(bia.getByRole('heading', { name: 'Pedidos de amizade' })).toHaveCount(0, { timeout: 30_000 })
+      await expect(bia.getByRole('listitem').filter({ hasText: 'AnaE2E' })).toBeVisible({ timeout: 30_000 })
+    } finally {
+      await anaApp.close()
+      await biaApp.close()
     }
   })
 
