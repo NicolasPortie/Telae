@@ -233,6 +233,19 @@ export class ShareSessionController {
     return this.signaling.on('presenceChanged', listener)
   }
 
+  fetchFriendRequests(): Promise<DeviceSnapshot[]> {
+    return this.requireSignaling().getFriendRequests()
+  }
+
+  dismissFriendRequest(friendCode: string): Promise<void> {
+    return this.requireSignaling().dismissFriendRequest(friendCode).then(() => undefined)
+  }
+
+  onFriendRequest(listener: (device: DeviceSnapshot) => void): () => void {
+    if (!this.signaling) return () => undefined
+    return this.signaling.on('friendRequestReceived', listener)
+  }
+
   async connect(displayName?: string): Promise<DeviceSnapshot> {
     if (typeof window === 'undefined' || typeof window.telae === 'undefined') {
       throw new Error('Abra o Telae pelo Electron para conectar.')

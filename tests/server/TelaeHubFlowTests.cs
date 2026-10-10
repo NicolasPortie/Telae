@@ -733,4 +733,89 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         await viewer.StopAsync();
         await Assert.ThrowsAsync<InvalidOperationException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ABCDEF"));
     }
+
+    [Fact]
+    public async Task Friend_request_appears_for_target_and_accepting_makes_it_mutual()
+    {
+        var requester = await ConnectUnregisteredAsync();
+        var target = await ConnectUnregisteredAsync();
+        var requesterSnapshot = await RegisterAsync(requester, "requester", "Requester");
+        var targetSnapshot = await RegisterAsync(target, "target", "Target");
+        await target.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("target", "auto"));
+
+        Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        var pending = Assert.Single(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+        Assert.Equal("requester", pending.DeviceId);
+        Assert.Equal(requesterSnapshot.FriendCode, pending.FriendCode);
+
+        // Sem reciprocidade, a entrada continua negada mesmo com o pedido visível.
+        var denied = await Assert.ThrowsAsync<HubException>(() => requester.InvokeAsync<ShareAccessResult>("JoinFriendShare", targetSnapshot.FriendCode));
+        Assert.Contains("amigos", denied.Message);
+
+        // Aceitar = declarar de volta: some da pendência e libera a entrada.
+        await target.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { requesterSnapshot.FriendCode });
+        Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+        Assert.Empty(await requester.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+        var access = await requester.InvokeAsync<ShareAccessResult>("JoinFriendShare", targetSnapshot.FriendCode);
+        Assert.Contains("requester", access.Session.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public async Task Friend_request_push_arrives_once_while_target_online()
+    {
+        var requester = await ConnectUnregisteredAsync();
+        var target = await ConnectUnregisteredAsync();
+        var requesterSnapshot = await RegisterAsync(requester, "requester", "Requester");
+        var targetSnapshot = await RegisterAsync(target, "target", "Target");
+        var channel = System.Threading.Channels.Channel.CreateUnbounded<DeviceSnapshot>();
+        target.On<DeviceSnapshot>("FriendRequestReceived", device => channel.Writer.TryWrite(device));
+
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        var first = await channel.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("requester", first.DeviceId);
+        Assert.Equal(requesterSnapshot.FriendCode, first.FriendCode);
+
+        // Re-declarar a mesma lista (poll periódico) não re-notifica.
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => channel.Reader.ReadAsync(timeout.Token).AsTask());
+    }
+
+    [Fact]
+    public async Task Dismissed_request_stays_hidden_until_redeclared()
+    {
+        var requester = await ConnectUnregisteredAsync();
+        var target = await ConnectUnregisteredAsync();
+        var requesterSnapshot = await RegisterAsync(requester, "requester", "Requester");
+        var targetSnapshot = await RegisterAsync(target, "target", "Target");
+
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        Assert.Single(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+
+        var unknown = await Assert.ThrowsAsync<HubException>(() => target.InvokeAsync("DismissFriendRequest", "ZZZZZZ"));
+        Assert.Contains("não encontrado", unknown.Message);
+
+        await target.InvokeAsync("DismissFriendRequest", requesterSnapshot.FriendCode);
+        Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+        // Refresh dos dois lados não ressuscita o pedido dispensado.
+        await target.InvokeAsync<DeviceSnapshot[]>("GetFriends", Array.Empty<string>());
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+
+        // Removeu e readicionou = nova intenção: aparece de novo.
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", Array.Empty<string>());
+        await requester.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { targetSnapshot.FriendCode });
+        Assert.Single(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+    }
+
+    [Fact]
+    public async Task Self_declaration_creates_no_request()
+    {
+        var device = await ConnectUnregisteredAsync();
+        var snapshot = await RegisterAsync(device, "device", "Device");
+        await device.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { snapshot.FriendCode });
+        Assert.Empty(await device.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
+    }
 }
