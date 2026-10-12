@@ -8,6 +8,8 @@ import type {
 } from './types'
 import { PROFILE_CEILINGS } from './quality-controller'
 import { qualityContentMode, qualityFramerate } from './quality-profiles'
+import { JitterTargetController } from './jitter-target'
+import { AUDIO_MAX_BITRATE_BPS, tuneOpusSdp } from './sdp-tuning'
 
 export type PeerOptions = {
   iceServers: IceServerDto[]
@@ -67,6 +69,17 @@ export class WebRtcPeer {
   private lastEncodedFrames = 0
   private lastEncodeTime = 0
   private qualityWarnings = 0
+  private readonly receivers = new Set<RTCRtpReceiver>()
+  private readonly jitterTarget = new JitterTargetController()
+  private lastDecodeReportId: string | null = null
+  private lastDecodedFrames = 0
+  private lastDecodeTime = 0
+  private lastJitterReportId: string | null = null
+  private lastJitterDelay = 0
+  private lastJitterEmitted = 0
+  private lastOutAudioId: string | null = null
+  private lastOutAudioBytes = 0
+  private lastOutAudioAt = 0
 
   constructor(options: PeerOptions) {
     this.sendSignal = options.sendSignal
@@ -101,11 +114,8 @@ export class WebRtcPeer {
 
     this.peer.ontrack = (event) => {
       // Use the same target for audio/video so synchronization does not add a larger buffer.
-      try {
-        if ('jitterBufferTarget' in event.receiver) event.receiver.jitterBufferTarget = 0
-      } catch {
-        // Older runtimes retain their default adaptive buffer.
-      }
+      this.receivers.add(event.receiver)
+      this.setJitterTarget(this.jitterTarget.current)
       // Áudio adicionado numa troca de fonte pode chegar com outro msid.
       // A superfície de playback mantém vídeo e áudio no mesmo stream local.
       this.remoteStream ??= new MediaStream()
@@ -127,7 +137,8 @@ export class WebRtcPeer {
 
   private async createOfferInternal(iceRestart = false) {
     if (this.peer.signalingState === 'have-local-offer') await this.peer.setLocalDescription({ type: 'rollback' })
-    const offer = await this.peer.createOffer(iceRestart ? { iceRestart: true } : { offerToReceiveAudio: false, offerToReceiveVideo: false })
+    const created = await this.peer.createOffer(iceRestart ? { iceRestart: true } : { offerToReceiveAudio: false, offerToReceiveVideo: false })
+    const offer = { type: created.type, sdp: tuneOpusSdp(created.sdp) }
     await this.peer.setLocalDescription(offer)
     await this.applySenderQuality()
     if (this.closed) throw new Error('The peer was closed during negotiation.')
@@ -263,7 +274,8 @@ export class WebRtcPeer {
       if (collision) await this.peer.setLocalDescription({ type: 'rollback' })
       await this.peer.setRemoteDescription({ type: 'offer', sdp: payload.sdp })
       await this.flushCandidates()
-      const answer = await this.peer.createAnswer()
+      const created = await this.peer.createAnswer()
+      const answer = { type: created.type, sdp: tuneOpusSdp(created.sdp) }
       await this.peer.setLocalDescription(answer)
       await this.sendSignal({ kind: 'answer', sdp: answer.sdp })
       return
@@ -304,11 +316,13 @@ export class WebRtcPeer {
     let pair: StatItem | null = null
     let codecName: string | null = null
     let audioReport: StatItem | null = null
+    let outboundAudio: StatItem | null = null
 
     for (const report of reports.values()) {
       const item = report as StatItem
       if ((item.type === 'inbound-rtp' || item.type === 'outbound-rtp') && item.kind === 'video') videoReport = item
       if (item.type === 'inbound-rtp' && item.kind === 'audio') audioReport = item
+      if (item.type === 'outbound-rtp' && item.kind === 'audio') outboundAudio = item
       if (item.type === 'candidate-pair' && item.state === 'succeeded' && (item.nominated === true || item.selected === true)) {
         pair = item
       }
@@ -324,6 +338,17 @@ export class WebRtcPeer {
       this.lastAudioReportId = null
       this.lastAudioBytes = 0
     }
+
+    const outBytes = typeof outboundAudio?.bytesSent === 'number' ? outboundAudio.bytesSent : null
+    if (outboundAudio && outBytes !== null) {
+      const at = Number(outboundAudio.timestamp ?? performance.now())
+      if (this.lastOutAudioId === outboundAudio.id && at > this.lastOutAudioAt && outBytes >= this.lastOutAudioBytes) {
+        empty.audioBitrateKbps = Math.round((outBytes - this.lastOutAudioBytes) * 8 / (at - this.lastOutAudioAt))
+      }
+      this.lastOutAudioId = outboundAudio.id
+      this.lastOutAudioBytes = outBytes
+      this.lastOutAudioAt = at
+    } else this.lastOutAudioId = null
 
     // Prefer the transport used by this RTP stream, then any selected transport.
     const transport = typeof videoReport?.transportId === 'string' ? reports.get(videoReport.transportId) as StatItem | undefined : undefined
@@ -355,6 +380,29 @@ export class WebRtcPeer {
       this.lastEncodedFrames = item.framesEncoded
       this.lastEncodeTime = item.totalEncodeTime
     } else this.lastEncodeReportId = null
+
+    let decodeMs: number | null = null
+    if (item.type === 'inbound-rtp' && typeof item.totalDecodeTime === 'number' && typeof item.framesDecoded === 'number') {
+      if (this.lastDecodeReportId === item.id) {
+        const frames = item.framesDecoded - this.lastDecodedFrames
+        const seconds = item.totalDecodeTime - this.lastDecodeTime
+        if (frames > 0 && seconds >= 0) decodeMs = seconds * 1000 / frames
+      }
+      this.lastDecodeReportId = item.id
+      this.lastDecodedFrames = item.framesDecoded
+      this.lastDecodeTime = item.totalDecodeTime
+    } else this.lastDecodeReportId = null
+    let jitterBufferDelayMs: number | null = null
+    if (item.type === 'inbound-rtp' && typeof item.jitterBufferDelay === 'number' && typeof item.jitterBufferEmittedCount === 'number') {
+      if (this.lastJitterReportId === item.id) {
+        const emitted = item.jitterBufferEmittedCount - this.lastJitterEmitted
+        const delay = item.jitterBufferDelay - this.lastJitterDelay
+        if (emitted > 0 && delay >= 0) jitterBufferDelayMs = delay * 1000 / emitted
+      }
+      this.lastJitterReportId = item.id
+      this.lastJitterDelay = item.jitterBufferDelay
+      this.lastJitterEmitted = item.jitterBufferEmittedCount
+    } else this.lastJitterReportId = null
 
     let lossReport: StatItem | undefined = item.type === 'inbound-rtp' ? item : undefined
     if (item.type === 'outbound-rtp') {
@@ -399,8 +447,16 @@ export class WebRtcPeer {
       else if (localType ?? remoteType) transportPath = 'direct'
     }
 
-    return {
+    const count = (value: unknown) => typeof value === 'number' ? value : null
+    const snapshot: DiagnosticsSnapshot = {
       ...empty,
+      decodeMs,
+      jitterBufferDelayMs,
+      freezeCount: count(item.freezeCount),
+      freezeDurationMs: typeof item.totalFreezesDuration === 'number' ? Math.round(item.totalFreezesDuration * 1000) : null,
+      framesDropped: count(item.framesDropped),
+      pliCount: count(item.pliCount),
+      nackCount: count(item.nackCount),
       bitrateKbps,
       roundTripMs,
       packetLossPercent,
@@ -417,6 +473,18 @@ export class WebRtcPeer {
       captureFramesPerSecond: typeof source?.framesPerSecond === 'number' ? source.framesPerSecond : null,
       framesDecoded: typeof item.framesDecoded === 'number' ? item.framesDecoded : null,
     }
+    if (item.type === 'inbound-rtp') this.setJitterTarget(this.jitterTarget.next(snapshot))
+    return snapshot
+  }
+
+  private setJitterTarget(milliseconds: number) {
+    for (const receiver of this.receivers) {
+      try {
+        if ('jitterBufferTarget' in receiver && receiver.jitterBufferTarget !== milliseconds) receiver.jitterBufferTarget = milliseconds
+      } catch {
+        // Older runtimes retain their default adaptive buffer.
+      }
+    }
   }
 
   close() {
@@ -426,6 +494,7 @@ export class WebRtcPeer {
     this.peer.onicecandidate = null
     this.peer.ontrack = null
     this.peer.onconnectionstatechange = null
+    this.receivers.clear()
     this.peer.close()
   }
 
@@ -445,5 +514,21 @@ export class WebRtcPeer {
       maxFramerate: qualityFramerate(this.qualityProfile, mode), scaleResolutionDownBy: 1,
     }
     await this.queueSenderQuality(this.requestedQuality)
+    await this.applyAudioQuality()
+  }
+
+  private async applyAudioQuality() {
+    const sender = this.localSenders.get('audio')
+    if (!sender || this.closed) return
+    try {
+      const parameters = sender.getParameters()
+      if (!parameters.encodings?.length) parameters.encodings = [{}]
+      const encoding = parameters.encodings[0]
+      if (encoding.maxBitrate === AUDIO_MAX_BITRATE_BPS) return
+      encoding.maxBitrate = AUDIO_MAX_BITRATE_BPS
+      await sender.setParameters(parameters)
+    } catch (error) {
+      if (this.qualityWarnings++ < 3) console.warn('Telae: failed to apply audio quality', error)
+    }
   }
 }

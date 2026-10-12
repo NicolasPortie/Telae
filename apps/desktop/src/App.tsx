@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  Activity,
   ArrowLeft,
   ArrowRight,
   Copy,
   Maximize,
   Minimize,
   RefreshCw,
-  Search,
   Signal,
   Trash2,
   UserPlus,
@@ -20,7 +20,8 @@ import { UpdateNotice } from './components/UpdateNotice'
 import { SharerSession } from './components/SharerSession'
 import { SourceGroup } from './components/SourceGroup'
 import { ShareIllustration } from './components/ShareIllustration'
-import { QUALITY_OPTIONS } from './ui/format'
+import { QualityPicker } from './components/QualityPicker'
+import { StreamStats } from './components/StreamStats'
 import { ShareSessionController } from './services/share-session'
 import { upsertFriend } from './services/friends'
 import { LiveFriendsSwitch } from './components/LiveFriendsSwitch'
@@ -50,6 +51,7 @@ export default function App() {
   const [muted, setMuted] = useState(false)
   const [volume, setVolume] = useState(1)
   const [fitCover, setFitCover] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [switchingSource, setSwitchingSource] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
@@ -496,17 +498,17 @@ export default function App() {
   const windowsList = sources.filter((item) => item.kind === 'window')
 
   return (
-    <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-[#141412] text-[#F1EFE8]`}>
-      <header className="telae-header shrink-0 border-b border-[#313029] bg-[#1A1A17]">
+    <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-canvas text-ink`}>
+      <header className="telae-header shrink-0 border-b border-line bg-[#1A1A17]">
         <div className={`mx-auto flex h-16 items-center gap-3 px-6 ${visibleScreen === 'session' ? 'telae-session-header' : 'max-w-[1120px]'}`}>
-          <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-[#D8A85C]">.</span></p>
+          <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-signal">.</span></p>
           {appVersion && <span aria-label="Versão instalada" title="Versão instalada" className="telae-version tnum">v{appVersion}</span>}
           <button
             type="button"
             onClick={() => setScreen('profile')}
             disabled={sessionActive}
             title={sessionActive ? 'Encerre a transmissão para alterar seu nome.' : undefined}
-            className="telae-press ml-4 flex min-h-[40px] items-center gap-2 rounded-md px-3 text-[13px] text-[#B8B4AA] hover:bg-[#282721] hover:text-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-50"
+            className="telae-press ml-4 flex min-h-[40px] items-center gap-2 rounded-md px-3 text-[13px] text-ink-2 hover:bg-active hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Abrir perfil"
           >
             <UserRound size={16} aria-hidden="true" />
@@ -515,8 +517,8 @@ export default function App() {
         </div>
         <UpdateNotice status={updateStatus} sessionActive={sessionActive} onRetry={() => void window.telae.checkForUpdates()} />
         {connectError && (
-          <div className="border-t border-[#313029]">
-            <p role="alert" className="mx-auto max-w-[1120px] px-5 py-2 text-xs text-[#FF5D5D]">
+          <div className="border-t border-line">
+            <p role="alert" className="mx-auto max-w-[1120px] px-5 py-2 text-xs text-danger">
               {connectError}{' '}
               <button type="button" onClick={() => profile?.displayName && void connectWithName(profile.displayName)} className="underline">
                 Reconectar
@@ -532,19 +534,19 @@ export default function App() {
           {formError ?? snapshot.error ?? sourcesError ?? ''}
         </div>
 
-        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-[#9D9A90]">Abrindo Telae…</p>}
+        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">Abrindo Telae…</p>}
 
         {visibleScreen === 'setup' && (
-          <section aria-labelledby="setup-title" className="mx-auto mt-8 max-w-[480px] rounded-2xl border border-[#313029] bg-[#1C1C19] p-8 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
-            <div aria-hidden="true" className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl border border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]">
+          <section aria-labelledby="setup-title" className="mx-auto mt-8 max-w-[480px] rounded-2xl border border-line bg-surface p-8 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
+            <div aria-hidden="true" className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl border border-signal/35 bg-signal/10 text-signal">
               <UserRound size={23} strokeWidth={1.7} />
             </div>
             <h1 id="setup-title" className="text-[28px] font-semibold leading-tight tracking-tight">
               Como podemos chamar você?
             </h1>
-            <p className="mt-3 text-sm leading-relaxed text-[#B8B4AA]">Seu nome aparecerá para a pessoa com quem você compartilhar a tela.</p>
+            <p className="mt-3 text-sm leading-relaxed text-ink-2">Seu nome aparecerá para a pessoa com quem você compartilhar a tela.</p>
             {!desktopApiAvailable && (
-              <p role="alert" className="mt-4 text-sm text-[#FF5D5D]">
+              <p role="alert" className="mt-4 text-sm text-danger">
                 Abra o aplicativo Telae para continuar.
               </p>
             )}
@@ -555,7 +557,7 @@ export default function App() {
                 void saveName()
               }}
             >
-              <label htmlFor="display-name" className="mb-1 block text-xs text-[#9D9A90]">
+              <label htmlFor="display-name" className="mb-1 block text-xs text-ink-3">
                 Seu nome
               </label>
               <input
@@ -564,18 +566,18 @@ export default function App() {
                 onChange={(event) => setNameInput(event.target.value)}
                 maxLength={32}
                 autoComplete="off"
-                className="h-12 w-full rounded-lg border border-[#4A473E] bg-[#141412] px-4 text-[15px] placeholder:text-[#9D9A90]/60"
+                className="h-12 w-full rounded-lg border border-line-input bg-canvas px-4 text-[15px] placeholder:text-ink-3/60"
                 placeholder="Ex.: Nicolas"
               />
               {formError && (
-                <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
+                <p role="alert" className="mt-2 text-sm text-danger">
                   {formError}
                 </p>
               )}
               <button
                 type="submit"
                 disabled={busy || !desktopApiAvailable}
-                className="telae-press mt-5 min-h-[48px] w-full rounded-lg bg-[#D8A85C] px-5 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
+                className="telae-press mt-5 min-h-[48px] w-full rounded-lg bg-signal px-5 text-[15px] font-semibold text-canvas disabled:opacity-50"
               >
                 {busy ? 'Salvando…' : 'Continuar'}
               </button>
@@ -585,105 +587,101 @@ export default function App() {
 
         {visibleScreen === 'home' && (
           <section aria-labelledby="home-title" className="telae-panel-enter telae-home">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="telae-home-grid">
+              <div className="telae-home-primary">
               <div>
-                <p className="text-sm text-[#B8B4AA]">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
-                <h1 id="home-title" className="mt-3 max-w-[19ch] text-[clamp(34px,4.5vw,52px)] font-semibold leading-[1.08] tracking-[-0.045em]">
+                <p className="text-sm text-ink-2">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
+                <h1 id="home-title" className="mt-2 text-[clamp(30px,3.6vw,42px)] font-semibold leading-[1.1] tracking-[-0.04em]">
                   Compartilhar a tela ficou simples.
                 </h1>
-                <p className="mt-5 max-w-[48ch] text-[15px] leading-relaxed text-[#B8B4AA]">
+                <p className="mt-3 max-w-[48ch] text-[15px] leading-relaxed text-ink-2">
                   Mostre sua tela para seus amigos ou assista a quem estiver ao vivo.
                 </p>
               </div>
-              {myFriendCode && (
-                <div className="telae-my-code flex shrink-0 flex-col items-start gap-2 rounded-xl border border-[#38362E] bg-[#1C1C19] px-4 py-3 sm:items-end">
-                  <span className="text-[11px] font-medium tracking-wide text-[#9D9A90]">Seu código de amigo</span>
-                  <div className="flex items-center gap-2">
-                    <span data-testid="my-friend-code" className="tnum rounded-md border border-[#4A473E] bg-[#141412] px-3 py-1.5 text-sm font-semibold tracking-[0.16em] text-[#F1EFE8]">{myFriendCode}</span>
-                    <button type="button" onClick={() => void copyMyFriendCode()} aria-label="Copiar seu código de amigo" title={myCodeCopied ? 'Copiado!' : 'Copiar código'} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md border border-[#38362E] bg-[#282721] text-[#B8B4AA] hover:text-[#F1EFE8]">{myCodeCopied ? <span className="text-xs font-semibold text-[#7FB996]">✓</span> : <Copy size={14} aria-hidden="true" />}</button>
-                  </div>
-                  <span className="text-[11px] text-[#9D9A90]">Compartilhe para seus amigos te adicionarem.</span>
-                </div>
-              )}
-            </div>
-
-            <div className="telae-home-actions mt-10 grid gap-5 md:grid-cols-[1.35fr_1fr]">
-              <section aria-labelledby="share-title" className="telae-share-card flex flex-col rounded-2xl border border-[#4A4031] bg-[#24221D] p-7">
+                <div className="telae-home-actions mt-8">
+              <section aria-labelledby="share-title" className="telae-share-card flex flex-col rounded-2xl border border-line-warm bg-warm p-7">
                 <ShareIllustration />
                 <h2 id="share-title" className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">Mostrar minha tela</h2>
-                <p className="mt-2 max-w-[35ch] text-sm leading-relaxed text-[#B8B4AA]">
+                <p className="mt-2 max-w-[35ch] text-sm leading-relaxed text-ink-2">
                   Escolha uma tela ou janela. Seus amigos verão que você está ao vivo e poderão assistir em 1 clique.
                 </p>
                 <button
                   type="button"
                   onClick={openPicker}
                   disabled={snapshot.signaling !== 'online'}
-                  className="telae-press telae-primary-action mt-6 flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="telae-press telae-primary-action mt-6 flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Escolher tela <ArrowRight size={17} aria-hidden="true" />
                 </button>
               </section>
-
-              <section aria-labelledby="friends-hint-title" className="telae-join-card flex flex-col justify-center rounded-2xl border border-[#313029] bg-[#1C1C19] p-7">
-                <div aria-hidden="true" className="telae-join-illustration"><div className="telae-friends-ticket"><Users size={24} strokeWidth={1.5} /><span>Amigos</span></div></div>
-                <h2 id="friends-hint-title" className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">Seus amigos ao vivo</h2>
-                <p className="mt-2 text-sm leading-relaxed text-[#B8B4AA]">Adicione amigos pelo código de 6 letras. Quando alguém estiver transmitindo, apareça <span className="font-semibold text-[#D8A85C]">Ao vivo</span> abaixo e assista em 1 clique — sem código.</p>
-                <p className="mt-4 text-xs text-[#9D9A90]">{friends.filter(f => f.isSharing).length > 0 ? `${friends.filter(f => f.isSharing).length} amigo(s) transmitindo agora.` : 'Nenhum amigo transmitindo no momento.'}</p>
-              </section>
+                </div>
+            <div className="telae-home-footer">
+              <p className="text-xs text-ink-3">{updateStatus?.phase === 'current' ? 'Você está na versão mais recente.' : 'As atualizações são instaladas automaticamente pelo app.'}</p>
+              <button type="button" onClick={() => void window.telae.checkForUpdates()} disabled={!desktopApiAvailable || ['checking', 'downloading', 'ready', 'installing'].includes(updateStatus?.phase ?? '')} className="telae-press telae-check-update"><RefreshCw size={14} aria-hidden="true" className={updateStatus?.phase === 'checking' ? 'telae-update-spinner' : ''} />{updateStatus?.phase === 'checking' ? 'Buscando atualização…' : 'Buscar atualização'}</button>
             </div>
-
-            <section aria-labelledby="friends-title" className="telae-friends mt-8 rounded-2xl border border-[#2B2A24] bg-[#1C1C19] p-6">
+              </div>
+            <section aria-labelledby="friends-title" className="telae-friends telae-friends-panel rounded-2xl border border-line bg-surface p-5">
+              {myFriendCode && (
+                <div className="telae-my-code mb-4 flex flex-col items-start gap-2 rounded-xl border border-line-strong bg-canvas px-4 py-3">
+                  <span className="text-[11px] font-medium tracking-wide text-ink-3">Seu código de amigo</span>
+                  <div className="flex items-center gap-2">
+                    <span data-testid="my-friend-code" className="tnum rounded-md border border-line-input bg-canvas px-3 py-1.5 text-sm font-semibold tracking-[0.16em] text-ink">{myFriendCode}</span>
+                    <button type="button" onClick={() => void copyMyFriendCode()} aria-label="Copiar seu código de amigo" title={myCodeCopied ? 'Copiado!' : 'Copiar código'} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md border border-line-strong bg-active text-ink-2 hover:text-ink">{myCodeCopied ? <span className="text-xs font-semibold text-ok">✓</span> : <Copy size={14} aria-hidden="true" />}</button>
+                  </div>
+                  <span className="text-[11px] text-ink-3">Compartilhe para seus amigos te adicionarem.</span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <h2 id="friends-title" className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]"><Users size={16} aria-hidden="true" className="text-[#9D9A90]" /> Seus amigos</h2>
+                  <h2 id="friends-title" className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]"><Users size={16} aria-hidden="true" className="text-ink-3" /> Seus amigos</h2>
                   <span className="telae-count tnum">{friends.length}</span>
-                  {friends.some(f => f.isSharing) && <span className="inline-flex items-center gap-1.5 rounded-full border border-[#D8A85C]/30 bg-[#D8A85C]/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-[#D8A85C]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#D8A85C]" aria-hidden="true" /> {friends.filter(f => f.isSharing).length} ao vivo</span>}
+                  {friends.some(f => f.isSharing) && <span className="inline-flex items-center gap-1.5 rounded-full border border-signal/30 bg-signal/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-signal"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" aria-hidden="true" /> {friends.filter(f => f.isSharing).length} ao vivo</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <div role="group" aria-label="Filtrar amigos" className="flex rounded-lg border border-[#313029] bg-[#141412] p-1">
-                    <button type="button" aria-pressed={friendFilter === 'all'} onClick={() => setFriendFilter('all')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'all' ? 'bg-[#282721] text-[#F1EFE8]' : 'text-[#9D9A90] hover:text-[#F1EFE8]'}`}>Todos</button>
-                    <button type="button" aria-pressed={friendFilter === 'live'} onClick={() => setFriendFilter('live')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'live' ? 'bg-[#282721] text-[#F1EFE8]' : 'text-[#9D9A90] hover:text-[#F1EFE8]'}`}>Ao vivo</button>
+                  <div role="group" aria-label="Filtrar amigos" className="flex rounded-lg border border-line bg-canvas p-1">
+                    <button type="button" aria-pressed={friendFilter === 'all'} onClick={() => setFriendFilter('all')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'all' ? 'bg-active text-ink' : 'text-ink-3 hover:text-ink'}`}>Todos</button>
+                    <button type="button" aria-pressed={friendFilter === 'live'} onClick={() => setFriendFilter('live')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'live' ? 'bg-active text-ink' : 'text-ink-3 hover:text-ink'}`}>Ao vivo</button>
                   </div>
-                  <button type="button" onClick={() => setAddFriendOpen(v => !v)} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[#3A352A] bg-[#24221D] px-3 text-xs font-semibold text-[#D8A85C] hover:bg-[#2E2B22]"><UserPlus size={14} aria-hidden="true" /> Adicionar</button>
+                  <button type="button" onClick={() => setAddFriendOpen(v => !v)} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[#3A352A] bg-warm px-3 text-xs font-semibold text-signal hover:bg-[#2E2B22]"><UserPlus size={14} aria-hidden="true" /> Adicionar</button>
                 </div>
               </div>
 
               {addFriendOpen && (
-                <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-[#38362E] bg-[#141412] p-4">
+                <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-line-strong bg-canvas p-4">
                   <div className="min-w-[180px] flex-1">
-                    <label htmlFor="friend-code" className="mb-1.5 block text-xs font-medium text-[#B8B4AA]">Código do amigo (6 caracteres)</label>
-                    <input id="friend-code" value={friendCodeInput} onChange={event => setFriendCodeInput(event.target.value.replace(/\s/g, '').toUpperCase())} placeholder="Ex.: ABC234" maxLength={6} autoComplete="off" spellCheck={false} className="telae-code-input tnum h-10 w-full rounded-lg border border-[#4A473E] bg-[#1C1C19] px-3 text-sm tracking-[0.14em] placeholder:text-[#9D9A90]" />
+                    <label htmlFor="friend-code" className="mb-1.5 block text-xs font-medium text-ink-2">Código do amigo (6 caracteres)</label>
+                    <input id="friend-code" value={friendCodeInput} onChange={event => setFriendCodeInput(event.target.value.replace(/\s/g, '').toUpperCase())} placeholder="Ex.: ABC234" maxLength={6} autoComplete="off" spellCheck={false} className="telae-code-input tnum h-10 w-full rounded-lg border border-line-input bg-surface px-3 text-sm tracking-[0.14em] placeholder:text-ink-3" />
                   </div>
-                  <button type="button" onClick={() => void handleAddFriend()} disabled={friendActionBusy || friendCodeInput.trim().length !== 6} className="telae-press min-h-[40px] rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50">{friendActionBusy ? 'Adicionando…' : 'Adicionar'}</button>
-                  <button type="button" onClick={() => { setAddFriendOpen(false); setFriendCodeInput(''); setFriendError(null) }} className="telae-press min-h-[40px] rounded-lg border border-[#313029] px-4 text-sm text-[#B8B4AA] hover:text-[#F1EFE8]">Cancelar</button>
-                  {(friendError || friendSuccess) && <p role={friendError ? 'alert' : 'status'} className={`w-full text-sm ${friendError ? 'text-[#FF7676]' : 'text-[#7FB996]'}`}>{friendError ?? friendSuccess}</p>}
+                  <button type="button" onClick={() => void handleAddFriend()} disabled={friendActionBusy || friendCodeInput.trim().length !== 6} className="telae-press min-h-[40px] rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">{friendActionBusy ? 'Adicionando…' : 'Adicionar'}</button>
+                  <button type="button" onClick={() => { setAddFriendOpen(false); setFriendCodeInput(''); setFriendError(null) }} className="telae-press min-h-[40px] rounded-lg border border-line px-4 text-sm text-ink-2 hover:text-ink">Cancelar</button>
+                  {(friendError || friendSuccess) && <p role={friendError ? 'alert' : 'status'} className={`w-full text-sm ${friendError ? 'text-danger-soft' : 'text-ok'}`}>{friendError ?? friendSuccess}</p>}
                 </div>
               )}
-              {friendError && !addFriendOpen && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{friendError}</p>}
-              {friendSuccess && !addFriendOpen && <p role="status" className="mt-3 text-sm text-[#7FB996]">{friendSuccess}</p>}
+              {friendError && !addFriendOpen && <p role="alert" className="mt-3 text-sm text-danger-soft">{friendError}</p>}
+              {friendSuccess && !addFriendOpen && <p role="status" className="mt-3 text-sm text-ok">{friendSuccess}</p>}
 
-              {watchError && <p role="alert" className="mt-3 text-sm text-[#FF7676]">{watchError}</p>}
+              {watchError && <p role="alert" className="mt-3 text-sm text-danger-soft">{watchError}</p>}
 
               {requests.length > 0 && (
-                <section aria-labelledby="requests-title" className="mt-5 rounded-xl border border-[#4A4031] bg-[#24221D] p-4">
+                <section aria-labelledby="requests-title" className="mt-5 rounded-xl border border-line-warm bg-warm p-4">
                   <div className="flex items-center gap-2">
                     <h2 id="requests-title" className="flex items-center gap-2 text-sm font-semibold tracking-[-0.02em]">
-                      <UserPlus size={15} aria-hidden="true" className="text-[#D8A85C]" /> Pedidos de amizade
+                      <UserPlus size={15} aria-hidden="true" className="text-signal" /> Pedidos de amizade
                     </h2>
                     <span className="telae-count tnum">{requests.length}</span>
                   </div>
-                  <p className="mt-1 text-xs leading-relaxed text-[#9D9A90]">Essas pessoas te adicionaram. Aceite para assistirem uma à outra.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-ink-3">Essas pessoas te adicionaram. Aceite para assistirem uma à outra.</p>
                   <ul className="mt-3 grid gap-2">
                     {requests.map(request => (
-                      <li key={request.deviceId} className="flex flex-wrap items-center gap-3 rounded-xl border border-[#313029] bg-[#141412] px-4 py-3">
-                        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#38362E] bg-[#1C1C19] text-xs font-semibold text-[#9D9A90]">{request.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
+                      <li key={request.deviceId} className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas px-4 py-3">
+                        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-surface text-xs font-semibold text-ink-3">{request.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium leading-none">{request.displayName}</p>
-                          <p className="tnum mt-1 text-xs text-[#6B6860]">· {request.friendCode}</p>
+                          <p className="tnum mt-1 text-xs text-ink-4">· {request.friendCode}</p>
                         </div>
                         <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                          <button type="button" onClick={() => void handleAddFriend(request.friendCode)} disabled={friendActionBusy || snapshot.signaling !== 'online'} className="telae-press inline-flex min-h-[36px] items-center rounded-lg bg-[#D8A85C] px-4 text-xs font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50">Adicionar de volta</button>
-                          <button type="button" onClick={() => void handleDismissRequest(request.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[36px] rounded-lg border border-[#313029] px-3 text-xs text-[#B8B4AA] hover:text-[#F1EFE8] disabled:opacity-50">Ignorar</button>
+                          <button type="button" onClick={() => void handleAddFriend(request.friendCode)} disabled={friendActionBusy || snapshot.signaling !== 'online'} className="telae-press inline-flex min-h-[36px] items-center rounded-lg bg-signal px-4 text-xs font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">Adicionar de volta</button>
+                          <button type="button" onClick={() => void handleDismissRequest(request.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[36px] rounded-lg border border-line px-3 text-xs text-ink-2 hover:text-ink disabled:opacity-50">Ignorar</button>
                         </div>
                       </li>
                     ))}
@@ -692,45 +690,43 @@ export default function App() {
               )}
 
               {friends.length === 0 ? (
-                <div className="mt-6 rounded-xl border border-dashed border-[#38362E] bg-[#141412] px-6 py-10 text-center">
-                  <div aria-hidden="true" className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-[#38362E] bg-[#1C1C19] text-[#9D9A90]"><Users size={18} /></div>
-                  <p className="mt-3 text-sm font-medium text-[#F1EFE8]">Nenhum amigo ainda</p>
-                  <p className="mx-auto mt-1 max-w-[32ch] text-xs leading-relaxed text-[#9D9A90]">Adicione pelo código de 6 letras que aparece no topo do app do seu amigo. Quando ele estiver transmitindo, você verá <span className="font-semibold text-[#D8A85C]">Ao vivo</span> aqui e poderá assistir em 1 clique.</p>
-                  <button type="button" onClick={() => setAddFriendOpen(true)} className="telae-press mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412]">Adicionar primeiro amigo</button>
+                <div className="mt-6 rounded-xl border border-dashed border-line-strong bg-canvas px-6 py-10 text-center">
+                  <div aria-hidden="true" className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-surface text-ink-3"><Users size={18} /></div>
+                  <p className="mt-3 text-sm font-medium text-ink">Nenhum amigo ainda</p>
+                  <p className="mx-auto mt-1 max-w-[32ch] text-xs leading-relaxed text-ink-3">Adicione pelo código de 6 letras que aparece no topo do app do seu amigo. Quando ele estiver transmitindo, você verá <span className="font-semibold text-signal">Ao vivo</span> aqui e poderá assistir em 1 clique.</p>
+                  <button type="button" onClick={() => setAddFriendOpen(true)} className="telae-press mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-signal px-5 text-sm font-semibold text-canvas">Adicionar primeiro amigo</button>
                 </div>
               ) : (
                 <ul className="telae-friends-list mt-5 grid gap-2">
                   {(friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).length === 0 && friendFilter === 'live' ? (
-                    <li className="rounded-xl border border-[#313029] bg-[#141412] px-4 py-8 text-center text-sm text-[#9D9A90]">Nenhum amigo transmitindo agora.</li>
+                    <li className="rounded-xl border border-line bg-canvas px-4 py-8 text-center text-sm text-ink-3">Nenhum amigo transmitindo agora.</li>
                   ) : (friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).map(friend => {
                     const live = friend.isSharing
                     return (
-                      <li key={friend.friendCode} className={`group flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${live ? 'border-[#4A4031] bg-[#24221D]' : 'border-[#313029] bg-[#141412]'}`}>
-                        <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold ${live ? 'border-[#D8A85C]/35 bg-[#D8A85C]/10 text-[#D8A85C]' : 'border-[#38362E] bg-[#1C1C19] text-[#9D9A90]'}`}>{friend.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
+                      <li key={friend.friendCode} className={`group flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${live ? 'border-line-warm bg-warm' : 'border-line bg-canvas'}`}>
+                        <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold ${live ? 'border-signal/35 bg-signal/10 text-signal' : 'border-line-strong bg-surface text-ink-3'}`}>{friend.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium leading-none">{friend.displayName}</p>
                           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                            <span className={`inline-flex items-center gap-1.5 ${live ? 'font-semibold text-[#D8A85C]' : friend.status === 'online' ? 'text-[#7FB996]' : 'text-[#9D9A90]'}`}>
-                              <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${live ? 'animate-pulse bg-[#D8A85C]' : friend.status === 'online' ? 'bg-[#7FB996]' : 'bg-[#6B6860]'}`} /> {live ? 'Ao vivo' : friend.status === 'online' ? 'Online' : 'Offline'}
+                            <span className={`inline-flex items-center gap-1.5 ${live ? 'font-semibold text-signal' : friend.status === 'online' ? 'text-ok' : 'text-ink-3'}`}>
+                              <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${live ? 'animate-pulse bg-signal' : friend.status === 'online' ? 'bg-ok' : 'bg-ink-4'}`} /> {live ? 'Ao vivo' : friend.status === 'online' ? 'Online' : 'Offline'}
                             </span>
-                            <span className="tnum text-[#6B6860]">· {friend.friendCode}</span>
-                            {live && friend.activeQualityProfile && <span className="rounded bg-[#141412] px-1.5 py-0.5 text-[11px] text-[#9D9A90]">{friend.activeQualityProfile}</span>}
+                            <span className="tnum text-ink-4">· {friend.friendCode}</span>
+                            {live && friend.activeQualityProfile && <span className="rounded bg-canvas px-1.5 py-0.5 text-[11px] text-ink-3">{friend.activeQualityProfile}</span>}
                           </p>
                         </div>
                         <div className="ml-auto flex items-center gap-1.5">
                           {live ? (
-                            <button type="button" onClick={() => void handleWatchFriend(friend)} disabled={busy || snapshot.signaling !== 'online'} aria-busy={watchingDeviceId === friend.deviceId} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-[#D8A85C] px-4 text-xs font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50">{watchingDeviceId === friend.deviceId ? 'Entrando…' : 'Assistir'}</button>
-                          ) : (
-                            <span className="hidden items-center gap-1 rounded-lg border border-[#313029] bg-[#1C1C19] px-3 py-1.5 text-xs text-[#6B6860] sm:inline-flex"><Search size={12} aria-hidden="true" /> Aguardando transmissão</span>
-                          )}
+                            <button type="button" onClick={() => void handleWatchFriend(friend)} disabled={busy || snapshot.signaling !== 'online'} aria-busy={watchingDeviceId === friend.deviceId} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-signal px-4 text-xs font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">{watchingDeviceId === friend.deviceId ? 'Entrando…' : 'Assistir'}</button>
+                          ) : null}
                           {pendingRemoveCode === friend.friendCode ? (
-                            <span role="group" aria-label={`Confirmar remoção de ${friend.displayName}`} title="Vocês deixam de poder assistir uma à outra." className="inline-flex flex-wrap items-center gap-1.5 text-xs text-[#E8C690]">
+                            <span role="group" aria-label={`Confirmar remoção de ${friend.displayName}`} title="Vocês deixam de poder assistir uma à outra." className="inline-flex flex-wrap items-center gap-1.5 text-xs text-signal-soft">
                               Remover {friend.displayName}?
-                              <button type="button" onClick={() => void handleRemoveFriend(friend.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[32px] rounded-md bg-[#FF5D5D] px-3 font-semibold text-[#141412] disabled:opacity-50">Remover</button>
-                              <button type="button" onClick={() => setPendingRemoveCode(null)} className="telae-press min-h-[32px] rounded-md border border-[#313029] px-3 text-[#B8B4AA] hover:text-[#F1EFE8]">Cancelar</button>
+                              <button type="button" onClick={() => void handleRemoveFriend(friend.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[32px] rounded-md bg-danger px-3 font-semibold text-canvas disabled:opacity-50">Remover</button>
+                              <button type="button" onClick={() => setPendingRemoveCode(null)} className="telae-press min-h-[32px] rounded-md border border-line px-3 text-ink-2 hover:text-ink">Cancelar</button>
                             </span>
                           ) : (
-                            <button type="button" onClick={() => setPendingRemoveCode(friend.friendCode)} disabled={friendActionBusy} title="Remover amigo" aria-label={`Remover ${friend.displayName}`} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-transparent text-[#6B6860] hover:border-[#3A2A22] hover:bg-[#251D19] hover:text-[#FF7676] disabled:opacity-50"><Trash2 size={14} aria-hidden="true" /></button>
+                            <button type="button" onClick={() => setPendingRemoveCode(friend.friendCode)} disabled={friendActionBusy} title="Remover amigo" aria-label={`Remover ${friend.displayName}`} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-transparent text-ink-4 hover:border-[#3A2A22] hover:bg-[#251D19] hover:text-danger-soft disabled:opacity-50"><Trash2 size={14} aria-hidden="true" /></button>
                           )}
                         </div>
                       </li>
@@ -739,10 +735,6 @@ export default function App() {
                 </ul>
               )}
             </section>
-
-            <div className="telae-home-footer">
-              <p className="text-xs text-[#9D9A90]">{updateStatus?.phase === 'current' ? 'Você está na versão mais recente.' : 'As atualizações são instaladas automaticamente pelo app.'}</p>
-              <button type="button" onClick={() => void window.telae.checkForUpdates()} disabled={!desktopApiAvailable || ['checking', 'downloading', 'ready', 'installing'].includes(updateStatus?.phase ?? '')} className="telae-press telae-check-update"><RefreshCw size={14} aria-hidden="true" className={updateStatus?.phase === 'checking' ? 'telae-update-spinner' : ''} />{updateStatus?.phase === 'checking' ? 'Buscando atualização…' : 'Buscar atualização'}</button>
             </div>
           </section>
         )}
@@ -753,25 +745,25 @@ export default function App() {
             <button
               type="button"
               onClick={() => setScreen(switchingSource ? 'session' : 'home')}
-              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-[#9D9A90] hover:text-[#F1EFE8]"
+              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-ink-3 hover:text-ink"
             >
               <ArrowLeft size={16} aria-hidden="true" /> Voltar
             </button>
             <h1 id="picker-title" className="mt-2 text-[28px] font-semibold tracking-[-0.035em]">
               O que você quer compartilhar?
             </h1>
-            <p className="mt-1 text-sm text-[#9D9A90]">{switchingSource ? 'A transmissão continua ativa durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
+            <p className="mt-1 text-sm text-ink-3">{switchingSource ? 'A transmissão continua ativa durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
             </div>
 
-            {sourcesLoading && <p className="mt-6 text-sm text-[#9D9A90]">Listando telas e janelas…</p>}
+            {sourcesLoading && <p className="mt-6 text-sm text-ink-3">Listando telas e janelas…</p>}
 
             {sourcesError && (
-              <div className="mt-6 rounded-md border border-[#313029] bg-[#1C1C19] p-4">
+              <div className="mt-6 rounded-md border border-line bg-surface p-4">
                 <p className="text-sm">{sourcesError}</p>
                 <button
                   type="button"
                   onClick={() => void loadSources()}
-                  className="telae-press mt-3 min-h-[40px] rounded-md border border-[#313029] bg-[#282721] px-4 text-sm font-semibold"
+                  className="telae-press mt-3 min-h-[40px] rounded-md border border-line bg-active px-4 text-sm font-semibold"
                 >
                   Tentar de novo
                 </button>
@@ -785,44 +777,18 @@ export default function App() {
                   <SourceGroup title="Janelas" sources={windowsList} selectedId={selectedId} onSelect={setSelectedId} />
                 </div>
 
-                <div className="telae-picker-actions shrink-0 rounded-xl border border-[#38362E] bg-[#1C1C19] p-4">
+                <div className="telae-picker-actions shrink-0 rounded-xl border border-line-strong bg-surface p-4">
                   <p className="telae-selected-source mb-3 truncate text-sm font-medium" title={sources.find(item => item.id === selectedId)?.name}>
                     {sources.find(item => item.id === selectedId)?.name ?? 'Escolha uma tela ou janela acima'}
                   </p>
                   <div className="telae-picker-action-row">
                   <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                    {!switchingSource && <fieldset>
-                      <legend className="mb-2 text-xs font-medium text-[#9D9A90]">
-                        Qualidade
-                      </legend>
-                      <div role="radiogroup" aria-label="Qualidade da imagem" className="flex flex-wrap gap-2">
-                        {QUALITY_OPTIONS.map((option) => {
-                          const active = quality === option.value
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              role="radio"
-                              aria-checked={active}
-                              title={option.hint}
-                              onClick={() => setQuality(option.value)}
-                              className={`telae-press min-h-[40px] rounded-md border px-3 text-xs font-medium ${
-                                active
-                                  ? 'border-[#D8A85C] bg-[#282721] text-[#F1EFE8]'
-                                  : 'border-[#313029] bg-transparent text-[#9D9A90] hover:text-[#F1EFE8]'
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </fieldset>}
+                    {!switchingSource && <QualityPicker value={quality} onChange={setQuality} />}
 
                   </div>
 
                   {formError && (
-                    <p role="alert" className="mt-4 text-sm text-[#FF5D5D]">
+                    <p role="alert" className="mt-4 text-sm text-danger">
                       {formError}
                     </p>
                   )}
@@ -832,7 +798,7 @@ export default function App() {
                       type="button"
                       onClick={() => void handleStartSharing()}
                       disabled={busy || !selectedId}
-                      className="telae-press telae-primary-action min-h-[48px] w-full rounded-lg bg-[#D8A85C] px-5 text-sm font-semibold text-[#141412] hover:bg-[#E8BB75] disabled:opacity-50"
+                      className="telae-press telae-primary-action min-h-[48px] w-full rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50"
                     >
                       {busy ? 'Preparando…' : switchingSource ? 'Trocar fonte agora' : 'Começar a compartilhar'}
                     </button>
@@ -849,22 +815,22 @@ export default function App() {
             <button
               type="button"
               onClick={() => setScreen(profile?.displayName ? 'home' : 'setup')}
-              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-[#9D9A90] hover:text-[#F1EFE8]"
+              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-ink-3 hover:text-ink"
             >
               <ArrowLeft size={16} aria-hidden="true" /> Voltar
             </button>
             <h1 id="profile-title" className="mt-3 text-[28px] font-semibold tracking-tight">
               Seu perfil
             </h1>
-            <p className="mt-2 text-sm text-[#B8B4AA]">Esse é o nome que aparece para seus amigos.</p>
+            <p className="mt-2 text-sm text-ink-2">Esse é o nome que aparece para seus amigos.</p>
             <form
-              className="mt-7 rounded-2xl border border-[#313029] bg-[#1C1C19] p-6"
+              className="mt-7 rounded-2xl border border-line bg-surface p-6"
               onSubmit={(event) => {
                 event.preventDefault()
                 void saveName()
               }}
             >
-              <label htmlFor="profile-name" className="mb-2 block text-xs text-[#B8B4AA]">
+              <label htmlFor="profile-name" className="mb-2 block text-xs text-ink-2">
                 Seu nome
               </label>
               <input
@@ -873,17 +839,17 @@ export default function App() {
                 onChange={(event) => setNameInput(event.target.value)}
                 maxLength={32}
                 autoComplete="off"
-                className="h-12 w-full rounded-lg border border-[#4A473E] bg-[#141412] px-4 text-[15px]"
+                className="h-12 w-full rounded-lg border border-line-input bg-canvas px-4 text-[15px]"
               />
               {formError && (
-                <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
+                <p role="alert" className="mt-2 text-sm text-danger">
                   {formError}
                 </p>
               )}
               <button
                 type="submit"
                 disabled={busy}
-                className="telae-press mt-5 min-h-[44px] rounded-lg bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412] disabled:opacity-50"
+                className="telae-press mt-5 min-h-[44px] rounded-lg bg-signal px-6 text-[15px] font-semibold text-canvas disabled:opacity-50"
               >
                 {busy ? 'Salvando…' : 'Salvar'}
               </button>
@@ -922,28 +888,29 @@ export default function App() {
               if ((event.target as HTMLElement).closest('input, select, textarea, button, summary')) return
               if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen() }
               if (event.key.toLowerCase() === 'm') { event.preventDefault(); setMuted(previous => !previous) }
+              if (event.key.toLowerCase() === 'i') { event.preventDefault(); setShowStats(previous => !previous) }
             }}
             onFocusCapture={pokeOverlay}
             onBlurCapture={pokeOverlay}
             tabIndex={0}
-            aria-label="Player da transmissão. F para tela cheia, M para silenciar."
+            aria-label="Player da transmissão. F para tela cheia, M para silenciar, I para estatísticas."
             className={`telae-panel-enter telae-viewer-stage ${viewerLive && !overlayVisible ? 'telae-viewer-idle' : ''}`}
           >
             {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
               <div className="mx-auto max-w-[520px] py-16 text-center">
                 <p className="flex items-center justify-center gap-2 text-[15px]">
-                  <Signal size={18} className="text-[#D8A85C]" aria-hidden="true" />
+                  <Signal size={18} className="text-signal" aria-hidden="true" />
                   {stateLabel[snapshot.state]}
                 </p>
                 {snapshot.error && (
-                  <p role="alert" className="mt-2 text-sm text-[#FF5D5D]">
+                  <p role="alert" className="mt-2 text-sm text-danger">
                     {snapshot.error}
                   </p>
                 )}
                 <button
                   type="button"
                   onClick={() => void handleLeave().then(() => setScreen('home'))}
-                  className="telae-press mt-6 min-h-[44px] rounded-md border border-[#313029] bg-[#1C1C19] px-6 text-sm font-semibold"
+                  className="telae-press mt-6 min-h-[44px] rounded-md border border-line bg-surface px-6 text-sm font-semibold"
                 >
                   Cancelar
                 </button>
@@ -962,7 +929,7 @@ export default function App() {
 
             {snapshot.hasRemoteStream && (
               <div className="telae-viewer-playback relative">
-                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-[#313029]">
+                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-line">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -1000,7 +967,7 @@ export default function App() {
                         setMuted(true)
                       }
                     }}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-[#F1EFE8]"
+                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-ink"
                     aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
                     title={muted || volume === 0 ? 'Ativar som (M)' : 'Silenciar (M)'}
                   >
@@ -1017,20 +984,30 @@ export default function App() {
                     }}
                     aria-label="Volume da transmissão"
                     aria-valuetext={`${Math.round(volume * 100)}%`}
-                    className="w-24 accent-[#D8A85C] sm:w-32"
+                    className="w-24 accent-signal sm:w-32"
                   />
                   <button
                     type="button"
                     onClick={() => setFitCover((previous) => !previous)}
-                    className="telae-press min-h-[40px] rounded-md px-3 text-sm text-[#F1EFE8]"
+                    className="telae-press min-h-[40px] rounded-md px-3 text-sm text-ink"
                     aria-pressed={fitCover}
                   >
                     {fitCover ? 'Ajustar' : 'Preencher'}
                   </button>
                   <button
                     type="button"
+                    onClick={() => setShowStats(previous => !previous)}
+                    className={`telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md ${showStats ? 'bg-active text-signal' : 'text-ink'}`}
+                    aria-pressed={showStats}
+                    aria-label="Estatísticas da transmissão"
+                    title="Estatísticas (I)"
+                  >
+                    <Activity size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={toggleFullscreen}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-[#F1EFE8]"
+                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-ink"
                     aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
                     title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia (F)'}
                   >
@@ -1039,12 +1016,13 @@ export default function App() {
                     <button
                     type="button"
                     onClick={() => void handleLeave().then(() => setScreen('home'))}
-                    className="telae-press ml-auto min-h-[40px] rounded-md bg-[#FF5D5D] px-5 text-sm font-semibold text-[#141412]"
+                    className="telae-press ml-auto min-h-[40px] rounded-md bg-danger px-5 text-sm font-semibold text-canvas"
                   >
                     Sair
                   </button>
                 </div>
-                {formError && <p role="alert" className="absolute left-3 top-3 rounded-md bg-[#1C1C19] px-4 py-3 text-sm text-[#FF5D5D]">{formError}</p>}
+                {showStats && <StreamStats diagnostics={snapshot.diagnostics} connection={snapshot.connectionQuality} className="absolute right-3 top-3 w-[300px] max-w-[calc(100%-24px)]" />}
+                {formError && <p role="alert" className="absolute left-3 top-3 rounded-md bg-surface px-4 py-3 text-sm text-danger">{formError}</p>}
               </div>
             )}
 
@@ -1054,14 +1032,14 @@ export default function App() {
         {visibleScreen === 'session' && snapshot.state === 'ended' && (
           <div className="mx-auto max-w-[520px] py-16 text-center">
             <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
-            {snapshot.error && <p className="mt-2 text-sm text-[#9D9A90]">{snapshot.error}</p>}
+            {snapshot.error && <p className="mt-2 text-sm text-ink-3">{snapshot.error}</p>}
             <button
               type="button"
               onClick={() => {
                 controller.resetToIdle()
                 setScreen('home')
               }}
-              className="telae-press mt-6 min-h-[44px] rounded-md bg-[#D8A85C] px-6 text-[15px] font-semibold text-[#141412]"
+              className="telae-press mt-6 min-h-[44px] rounded-md bg-signal px-6 text-[15px] font-semibold text-canvas"
             >
               Voltar ao início
             </button>

@@ -18,7 +18,7 @@ export function SourceGroup({
   if (sources.length === 0) return null
   return (
     <div className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-[#B8B4AA]">{title}<span aria-hidden="true" className="telae-count tnum">{sources.length}</span></h2>
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-2">{title}<span aria-hidden="true" className="telae-count tnum">{sources.length}</span></h2>
       <ul role="radiogroup" aria-label={title} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {sources.map((source, index) => {
           const active = source.id === selectedId
@@ -52,23 +52,23 @@ export function SourceGroup({
                   onSelect(next.id)
                   buttons.current.get(next.id)?.focus()
                 }}
-                className={`telae-press telae-source-card relative block w-full overflow-hidden rounded-xl border bg-[#141412] text-left ${
-                  active ? 'border-[#D8A85C] ring-1 ring-[#D8A85C]/40' : 'border-[#313029] hover:border-[#9D9A90]'
+                className={`telae-press telae-source-card relative block w-full overflow-hidden rounded-xl border bg-canvas text-left ${
+                  active ? 'border-signal ring-1 ring-signal/40' : 'border-line hover:border-ink-3'
                 }`}
               >
                 {source.thumbnailDataUrl ? (
                   <img src={source.thumbnailDataUrl} alt="" aria-hidden="true" draggable={false} className="aspect-video w-full object-contain" />
                 ) : (
-                  <span aria-hidden="true" className="block aspect-video w-full bg-[#1C1C19]" />
+                  <span aria-hidden="true" className="block aspect-video w-full bg-surface" />
                 )}
                 {active && (
-                  <span aria-hidden="true" className="absolute right-2 top-2 flex items-center gap-1 rounded-md border border-[#D8A85C]/50 bg-[#141412]/95 px-2 py-1 text-[11px] font-semibold text-[#E8C690]">
+                  <span aria-hidden="true" className="absolute right-2 top-2 flex items-center gap-1 rounded-md border border-signal/50 bg-canvas/95 px-2 py-1 text-[11px] font-semibold text-signal-soft">
                     <Check size={12} /> Selecionada
                   </span>
                 )}
                 <span
                   className={`block truncate border-t px-3 py-3 text-[13px] ${
-                    active ? 'border-[#D8A85C] bg-[#282721] font-semibold text-[#F1EFE8]' : 'border-[#313029] text-[#9D9A90]'
+                    active ? 'border-signal bg-active font-semibold text-ink' : 'border-line text-ink-3'
                   }`}
                 >
                   {source.name}

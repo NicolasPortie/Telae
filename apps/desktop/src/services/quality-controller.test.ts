@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROFILE_CEILINGS, QualityController } from './quality-controller'
+import { MOTION_SCALE_LADDER, PROFILE_CEILINGS, QualityController } from './quality-controller'
 import type { DiagnosticsSnapshot } from './types'
 
 function stats(overrides: Partial<DiagnosticsSnapshot> = {}): DiagnosticsSnapshot {
@@ -30,21 +30,29 @@ describe('QualityController', () => {
     for (let i = 0; i < 3; i++) controller.decide('1080p60', stats({
       captureFramesPerSecond: 24, framesPerSecond: 12, encodeMs: 60,
     }), 'motion')
-    expect(controller.decide('1080p60', stats(), 'motion').scaleResolutionDownBy).toBe(2)
+    expect(controller.decide('1080p60', stats(), 'motion').scaleResolutionDownBy).toBe(MOTION_SCALE_LADDER[1])
   })
   it.each(['1440p30', '1440p60'] as const)('adapts %s to CPU and network pressure and recovers', (profile) => {
     const controller = new QualityController()
     const fps = profile === '1440p30' ? 30 : 60
     expect(controller.decide(profile, stats(), 'motion').maxFramerate).toBe(fps)
     for (let i = 0; i < 3; i++) controller.decide(profile, stats({ qualityLimitationReason: 'cpu' }), 'motion')
-    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(2)
+    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(MOTION_SCALE_LADDER[1])
     for (let i = 0; i < 5; i++) controller.decide(profile, stats({ encodeMs: 5, qualityLimitationReason: 'none' }), 'motion')
     expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(1)
     for (let i = 0; i < 2; i++) controller.decide(profile, stats({ packetLossPercent: 12 }), 'motion')
-    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(2)
+    expect(controller.decide(profile, stats(), 'motion').scaleResolutionDownBy).toBe(MOTION_SCALE_LADDER[1])
     controller.reset()
     for (let i = 0; i < 3; i++) controller.decide(profile, stats({ qualityLimitationReason: 'cpu' }), 'text')
     expect(controller.decide(profile, stats(), 'text').maxFramerate).toBe(fps / 2)
+  })
+  it('steps motion resolution through finer rungs and never skips one', () => {
+    const controller = new QualityController()
+    const seen: number[] = []
+    for (let i = 0; i < 12; i++) seen.push(controller.decide('1440p60', stats({ packetLossPercent: 12 }), 'motion').scaleResolutionDownBy!)
+    expect([...new Set(seen)]).toEqual([...MOTION_SCALE_LADDER])
+    for (let i = 0; i < 20; i++) controller.decide('1440p60', stats(), 'motion')
+    expect(controller.decide('1440p60', stats(), 'motion').scaleResolutionDownBy).toBe(1)
   })
   it('caps every profile by the viewer budget, including below the auto floor', () => {
     for (const profile of ['auto', '720p60', '1080p30', '1080p60', '1440p30', '1440p60'] as const) {
@@ -61,7 +69,7 @@ describe('QualityController', () => {
     const bad = stats({ packetLossPercent: 12 })
     expect(controller.decide('1080p60', bad, 'motion').scaleResolutionDownBy).toBe(1)
     const decision = controller.decide('1080p60', bad, 'motion')
-    expect(decision.scaleResolutionDownBy).toBe(2)
+    expect(decision.scaleResolutionDownBy).toBe(MOTION_SCALE_LADDER[1])
     expect(decision.maxFramerate).toBe(60)
     expect(decision.degradationPreference).toBe('maintain-framerate')
     expect(decision.maxBitrateBps).toBe(PROFILE_CEILINGS['1080p60'])
@@ -77,7 +85,7 @@ describe('QualityController', () => {
       expect(controller.decide('1080p60', bad, mode).scaleResolutionDownBy).toBe(1)
       const decision = controller.decide('1080p60', bad, mode)
       expect(decision.maxFramerate).toBe(mode === 'text' ? 30 : 60)
-      expect(decision.scaleResolutionDownBy).toBe(mode === 'text' ? 1 : 2)
+      expect(decision.scaleResolutionDownBy).toBe(mode === 'text' ? 1 : MOTION_SCALE_LADDER[1])
       expect(controller.getAutoStep()).toBe(0)
       for (let i = 0; i < 4; i++) controller.decide('1080p60', stats({ qualityLimitationReason: 'none', encodeMs: 5 }), mode)
       expect(controller.decide('1080p60', stats({ qualityLimitationReason: 'none', encodeMs: 5 }), mode).scaleResolutionDownBy).toBe(1)
