@@ -17,14 +17,14 @@ export function UpdateNotice({ status, sessionActive, onRetry }: {
     : waiting ? `Telae ${status.version} pronto. Atualização automática ao encerrar a transmissão.`
     : `Atualizando para Telae ${status.version}… O aplicativo será reaberto automaticamente.`
   return (
-    <div className="shrink-0 border-t border-[#313029] bg-[#282721]">
+    <div className="shrink-0 border-t border-line bg-active">
       <div className="mx-auto max-w-[1120px] px-6 py-3">
-        <div className="flex items-center gap-3 text-xs text-[#F1EFE8]">
-          {waiting ? <Check size={16} aria-hidden="true" className="shrink-0 text-[#D8A85C]" />
-            : <RefreshCw size={16} aria-hidden="true" className={`shrink-0 text-[#D8A85C] ${failed ? '' : 'telae-update-spinner'}`} />}
+        <div className="flex items-center gap-3 text-xs text-ink">
+          {waiting ? <Check size={16} aria-hidden="true" className="shrink-0 text-signal" />
+            : <RefreshCw size={16} aria-hidden="true" className={`shrink-0 text-signal ${failed ? '' : 'telae-update-spinner'}`} />}
           <p role="status" className="min-w-0 flex-1">{message}</p>
           {downloading && <span aria-hidden="true" className="tnum shrink-0">{Math.round(percent)}%</span>}
-          {failed && <button type="button" onClick={onRetry} className="telae-press min-h-[40px] shrink-0 rounded-md px-3 font-semibold text-[#D8A85C] underline">Tentar novamente</button>}
+          {failed && <button type="button" onClick={onRetry} className="telae-press min-h-[40px] shrink-0 rounded-md px-3 font-semibold text-signal underline">Tentar novamente</button>}
         </div>
         {downloading && <progress aria-label="Download da atualização" max={100} value={percent} className="telae-update-progress mt-2 block h-1.5 w-full" />}
       </div>

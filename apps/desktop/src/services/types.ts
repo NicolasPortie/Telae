@@ -71,6 +71,16 @@ export type DiagnosticsSnapshot = {
   audioLevel?: number | null
   audioReceiving?: boolean | null
   framesDecoded?: number | null
+  /** Médias do último intervalo de amostragem, calculadas por deltas. */
+  decodeMs?: number | null
+  jitterBufferDelayMs?: number | null
+  audioBitrateKbps?: number | null
+  /** Contadores acumulados desde o início da transmissão. */
+  freezeCount?: number | null
+  freezeDurationMs?: number | null
+  framesDropped?: number | null
+  pliCount?: number | null
+  nackCount?: number | null
   bitrateKbps: number
   roundTripMs: number | null
   packetLossPercent: number | null
