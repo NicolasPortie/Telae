@@ -449,3 +449,53 @@ it('rejects parent rollback after native replacement rollback closes the peer', 
   await expect(sharer.replaceLocalStream(previous)).rejects.toThrow('closed before source replacement')
   expect(connections[0].close).toHaveBeenCalledOnce()
 })
+
+it('derives decode time, jitter buffer delay, freezes and audio bitrate from deltas', async () => {
+  const { peer: viewer } = peer()
+  const inbound = (framesDecoded: number, decode: number, delay: number, emitted: number) => ({
+    id: 'in', type: 'inbound-rtp', kind: 'video', bytesReceived: 1000, timestamp: 1000, framesDecoded,
+    totalDecodeTime: decode, jitterBufferDelay: delay, jitterBufferEmittedCount: emitted,
+    freezeCount: 2, totalFreezesDuration: 1.5, framesDropped: 4, pliCount: 3, nackCount: 9,
+  })
+  setReports(inbound(100, 0.5, 2, 100))
+  const first = await viewer.getDiagnostics()
+  expect(first.decodeMs).toBeNull()
+  expect(first).toMatchObject({ freezeCount: 2, freezeDurationMs: 1500, framesDropped: 4, pliCount: 3, nackCount: 9 })
+  setReports(inbound(160, 0.8, 2.6, 160))
+  const second = await viewer.getDiagnostics()
+  expect(second.decodeMs).toBeCloseTo(5)
+  expect(second.jitterBufferDelayMs).toBeCloseTo(10)
+
+  const { peer: sharer } = peer(true)
+  setReports({ id: 'audio', type: 'outbound-rtp', kind: 'audio', bytesSent: 0, timestamp: 1000 },
+    { id: 'out', type: 'outbound-rtp', kind: 'video', bytesSent: 0, timestamp: 1000 })
+  await sharer.getDiagnostics()
+  setReports({ id: 'audio', type: 'outbound-rtp', kind: 'audio', bytesSent: 24_000, timestamp: 2000 },
+    { id: 'out', type: 'outbound-rtp', kind: 'video', bytesSent: 1, timestamp: 2000 })
+  expect((await sharer.getDiagnostics()).audioBitrateKbps).toBe(192)
+})
+
+it('raises the receiver buffer on a relayed path and caps the Opus sender bitrate', async () => {
+  const { peer: viewer } = peer()
+  const receiver = { jitterBufferTarget: null as number | null }
+  connections[0].ontrack!({ track: { id: 'video', kind: 'video' }, streams: [], receiver })
+  setReports(
+    { id: 'in', type: 'inbound-rtp', kind: 'video', bytesReceived: 1, timestamp: 1, transportId: 't' },
+    { id: 't', type: 'transport', selectedCandidatePairId: 'p' },
+    { id: 'p', type: 'candidate-pair', state: 'succeeded', localCandidateId: 'l', remoteCandidateId: 'r', currentRoundTripTime: 0.02 },
+    { id: 'l', type: 'local-candidate', candidateType: 'relay' }, { id: 'r', type: 'remote-candidate', candidateType: 'host' },
+  )
+  await viewer.getDiagnostics()
+  expect(receiver.jitterBufferTarget).toBe(80)
+})
+
+it('caps the Opus sender bitrate and tunes the offer', async () => {
+  const sendSignal = vi.fn(async () => undefined)
+  const sharer = new WebRtcPeer({ iceServers: [], qualityProfile: '1080p30', sendSignal, onRemoteStream: vi.fn(), onStatus: vi.fn(),
+    localStream: { getTracks: () => [{ kind: 'audio' }] } as unknown as MediaStream })
+  connections[0].createOffer.mockResolvedValueOnce({ type: 'offer', sdp: ['v=0', 'a=rtpmap:111 opus/48000/2', 'a=fmtp:111 minptime=10', ''].join('\r\n') })
+  await sharer.createOffer()
+  const audio = connections[0].senders[0] as unknown as { setParameters: ReturnType<typeof vi.fn> }
+  expect(audio.setParameters).toHaveBeenCalledWith({ encodings: [{ maxBitrate: 192_000 }] })
+  expect(sendSignal).toHaveBeenCalledWith({ kind: 'offer', sdp: expect.stringContaining('stereo=1') })
+})

@@ -2,7 +2,11 @@
 
 Aplicativo desktop de compartilhamento de tela com sinalização ASP.NET Core/SignalR e transporte WebRTC.
 
-Consulte [as melhorias e resultados de validação](docs/IMPROVEMENTS_2026-10-02.md) e [os requisitos de publicação](docs/RELEASE_VALIDATION.md) para esta revisão local.
+Veja o [CHANGELOG](CHANGELOG.md), a [revisão de qualidade de transmissão de 12/10/2026](docs/STREAMING_QUALITY_2026-10-12.md), [as melhorias anteriores](docs/IMPROVEMENTS_2026-10-02.md) e [os requisitos de publicação](docs/RELEASE_VALIDATION.md).
+
+**Recursos:** compartilhamento de tela ou janela até 1440p60 com áudio do sistema ou do aplicativo escolhido, até 12 espectadores com qualidade adaptada por conexão, lista de amigos com presença, painel de estatísticas em tempo real e atualização automática.
+
+**Requisitos:** Windows 10/11 x64. O filtro de áudio por aplicativo exige Windows build 20348 ou superior.
 
 ## Estrutura
 
