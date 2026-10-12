@@ -27,6 +27,15 @@ export const PROFILE_CEILINGS: Record<QualityProfile, number> = {
   '1440p60': 32_000_000,
 }
 
+/**
+ * Degradação de resolução em passos pequenos (1440p → 1080p → 720p → 480p) em vez de
+ * dobrar a cada etapa, para que a perda de nitidez seja gradual e a recuperação rápida.
+ */
+export const MOTION_SCALE_LADDER = [1, 4 / 3, 2, 3] as const
+const MAX_SCALE_STEP = MOTION_SCALE_LADDER.length - 1
+/** O texto reduz FPS no máximo duas vezes (60 → 30 → 15). */
+const MAX_FPS_STEP = 2
+
 /** Escada do modo Auto: reduz qualidade antes de introduzir buffer longo. */
 const AUTO_LADDER_KBPS = [16_000, 12_000, 10_000, 8000, 6000, 4000, 2500, 1500]
 
@@ -55,7 +64,7 @@ export class QualityController {
 
   decide(profile: QualityProfile, stats: DiagnosticsSnapshot, mode: ContentMode = 'text', uploadBudgetBps?: number): QualityDecision {
     const targetFps = qualityFramerate(profile, mode)
-    const currentFps = mode === 'text' ? Math.max(10, targetFps / 2 ** this.cpuStep) : targetFps
+    const currentFps = mode === 'text' ? Math.max(10, targetFps / 2 ** Math.min(this.cpuStep, MAX_FPS_STEP)) : targetFps
     // A slow capture source cannot feed the requested fps. Measure encoder pressure
     // against its actual input cadence before sacrificing image quality.
     const captureFps = stats.captureFramesPerSecond
@@ -70,7 +79,7 @@ export class QualityController {
       stats.framesPerSecond >= encoderFps * 0.8 && (stats.encodeMs ?? 0) <= 1000 / encoderFps
     this.cpuHealthySamples = cpuHealthy ? this.cpuHealthySamples + 1 : 0
     if (this.cpuSamples >= 3) {
-      this.cpuStep = Math.min(2, this.cpuStep + 1)
+      this.cpuStep = Math.min(mode === 'motion' ? MAX_SCALE_STEP : MAX_FPS_STEP, this.cpuStep + 1)
       this.cpuSamples = 0
     } else if (this.cpuHealthySamples >= 5) {
       this.cpuStep = Math.max(0, this.cpuStep - 1)
@@ -99,7 +108,7 @@ export class QualityController {
     // ceiling even when the bandwidth estimate is limited by our own current cap.
     if (this.congestedSamples >= 2) {
       if (profile === 'auto') this.autoStep = Math.min(AUTO_LADDER_KBPS.length - 1, this.autoStep + 1)
-      this.motionStep = Math.min(2, this.motionStep + 1)
+      this.motionStep = Math.min(MAX_SCALE_STEP, this.motionStep + 1)
       this.congestedSamples = 0
       this.healthySamples = 0
     } else if (this.healthySamples >= 5) {
@@ -113,8 +122,8 @@ export class QualityController {
       maxBitrateBps,
       degradationPreference: mode === 'motion' ? 'maintain-framerate' : 'maintain-resolution',
       effectiveCeilingKbps: Math.round(maxBitrateBps / 1000),
-      maxFramerate: mode === 'text' ? Math.max(10, targetFps / 2 ** this.cpuStep) : targetFps,
-      scaleResolutionDownBy: mode === 'motion' ? 2 ** Math.max(this.cpuStep, this.motionStep) : 1,
+      maxFramerate: mode === 'text' ? Math.max(10, targetFps / 2 ** Math.min(this.cpuStep, MAX_FPS_STEP)) : targetFps,
+      scaleResolutionDownBy: mode === 'motion' ? MOTION_SCALE_LADDER[Math.max(this.cpuStep, this.motionStep)] : 1,
     }
   }
 }

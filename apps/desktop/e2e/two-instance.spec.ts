@@ -104,7 +104,7 @@ test.describe('duas instâncias Telae', () => {
         // Primary actions stay above the fold without scrolling; the friends section may extend below it.
         for (const control of [
           sharer.getByRole('button', { name: /Escolher tela/ }),
-          sharer.getByRole('heading', { name: 'Seus amigos ao vivo' }),
+          sharer.getByRole('heading', { name: 'Seus amigos' }),
         ]) {
           await expect.poll(() => control.evaluate(element => {
             const rect = element.getBoundingClientRect()
