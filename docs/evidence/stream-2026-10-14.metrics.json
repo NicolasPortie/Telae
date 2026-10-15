@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-14",
+  "version": "0.1.25",
+  "environment": "Windows 11 26200; Electron 44/Chromium 152; NVIDIA H.264; local direct; 2560x1440 200 Hz source",
+  "checks": {
+    "build": "passed",
+    "lint": "passed",
+    "unitTestsPassed": 157,
+    "unitTestFiles": 19,
+    "e2eTestsPassed": 6
+  },
+  "avTest": {
+    "durationSeconds": 30,
+    "senderStallMs": 180,
+    "senderMinimized": true,
+    "p95VideoMs": 100,
+    "medianAvOffsetMs": 87,
+    "avOffsetStartMs": 138,
+    "avOffsetEndMs": 76,
+    "audioPulses": 16,
+    "videoPulses": 16,
+    "measurement": "Decoded video pixels and receiver Web Audio graph; positive offset means audio after video; no physical speaker measurement"
+  },
+  "qhdRuns": [
+    {
+      "profile": "1080p60",
+      "outputWidth": 1920,
+      "outputHeight": 1080,
+      "presentedFps": 50.46,
+      "sourceRenderedFps": 200.01
+    },
+    {
+      "profile": "1440p30",
+      "outputWidth": 2560,
+      "outputHeight": 1440,
+      "presentedFps": 28.92,
+      "sourceRenderedFps": 199.93
+    },
+    {
+      "profile": "1440p60",
+      "outputWidth": 2560,
+      "outputHeight": 1440,
+      "presentedFps": 49.26,
+      "sourceRenderedFps": 199.96
+    },
+    {
+      "profile": "1080p60",
+      "outputWidth": 1920,
+      "outputHeight": 1080,
+      "presentedFps": 49.98,
+      "sourceRenderedFps": 200.0
+    },
+    {
+      "profile": "1080p30",
+      "outputWidth": 1920,
+      "outputHeight": 1080,
+      "presentedFps": 29.26,
+      "sourceRenderedFps": 200.01
+    },
+    {
+      "profile": "1440p30",
+      "outputWidth": 2560,
+      "outputHeight": 1440,
+      "presentedFps": 29.24,
+      "sourceRenderedFps": 200.02
+    }
+  ]
+}
