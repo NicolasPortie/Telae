@@ -126,6 +126,30 @@ describe('bounded PCM worklet', () => {
     push([1, 2, 3])
     expect(render(1, 3)).toEqual([[1], [2], [3]])
   })
+  it('returns to live audio after a burst instead of retaining its delay indefinitely', () => {
+    const { processor, push, render } = worklet(48000)
+    // An IPC stall delivers 120 ms together. Subsequent packets arrive normally
+    // every 20 ms, so consuming at exactly the input rate cannot drain the delay.
+    push(new Float32Array(5760 * 2).fill(0.1))
+    for (let packet = 0; packet < 30; packet++) {
+      for (let quantum = 0; quantum < 8; quantum++) render(120)
+      push(new Float32Array(960 * 2).fill(0.2))
+    }
+    expect(processor.queuedFrames).toBeLessThanOrEqual(1920)
+    expect(processor.droppedFrames).toBeGreaterThan(0)
+  })
+  it('does not trim regular 20 ms delivery or a brief delivery burst', () => {
+    const { processor, push, render } = worklet(48000)
+    for (let packet = 0; packet < 30; packet++) {
+      push(new Float32Array(960 * 2))
+      for (let quantum = 0; quantum < 8; quantum++) render(120)
+    }
+    expect(processor.droppedFrames).toBe(0)
+    push(new Float32Array(2880 * 2))
+    for (let quantum = 0; quantum < 24; quantum++) render(120)
+    expect(processor.droppedFrames).toBe(0)
+    expect(processor.queuedFrames).toBe(0)
+  })
 })
 
 function audioBridge() {
