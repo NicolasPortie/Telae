@@ -11,18 +11,22 @@ function fixture(width = 2560, height = 1440) {
   const output = Object.assign(new EventTarget(), { readyState: 'live', contentHint: '', stop: vi.fn(), requestFrame: vi.fn() })
   const source = { getVideoTracks: () => [raw], getTracks: () => [raw] } as unknown as MediaStream
   const stream = { getVideoTracks: () => [output] } as unknown as MediaStream
-  const callbacks = new Map<number, () => void>()
+  const callbacks = new Map<number, (now: number) => void>()
   let id = 0
   const video = {
     style: {}, setAttribute: vi.fn(), videoWidth: width, videoHeight: height, srcObject: null,
     play: vi.fn(async () => undefined), pause: vi.fn(), remove: vi.fn(),
-    requestVideoFrameCallback: (callback: () => void) => { callbacks.set(++id, callback); return id },
+    requestVideoFrameCallback: (callback: (now: number) => void) => { callbacks.set(++id, callback); return id },
     cancelVideoFrameCallback: vi.fn((key: number) => callbacks.delete(key)),
   }
   const context = { drawImage: vi.fn(), imageSmoothingEnabled: false, imageSmoothingQuality: '' }
   const canvas = { width: 0, height: 0, getContext: () => context, captureStream: vi.fn(() => stream) }
   vi.stubGlobal('document', { body: { append: vi.fn() }, createElement: (tag: string) => tag === 'video' ? video : canvas })
-  function frame() { const [key, callback] = [...callbacks][0]; callbacks.delete(key); callback() }
+  let time = 0
+  function frame(now = time + 1000 / 60) {
+    time = now
+    const [key, callback] = [...callbacks][0]; callbacks.delete(key); callback(now)
+  }
   return { raw, output, source, stream, video, canvas, context, frame, callbacks }
 }
 const hd = { width: { max: 1920 }, height: { max: 1080 }, frameRate: { max: 60 } }
@@ -118,6 +122,33 @@ describe('native desktop video scaler', () => {
     const stream = await pending
     expect(f.canvas.width).toBe(1920)
     expect(f.canvas.height).toBe(810)
+    stopScaledCapture(stream)
+  })
+
+  it('limits canvas work to 60 fps even when a 200 Hz display supplies more callbacks', async () => {
+    const f = fixture()
+    const pending = scaleDesktopVideo(f.source, hd)
+    f.frame(0)
+    const stream = await pending
+    for (let time = 5; time < 1000; time += 5) f.frame(time)
+    expect(f.context.drawImage.mock.calls.length).toBeGreaterThanOrEqual(59)
+    expect(f.context.drawImage.mock.calls.length).toBeLessThanOrEqual(61)
+    await applyVideoConstraints(stream, { ...hd, frameRate: { max: 30 } })
+    const before = f.context.drawImage.mock.calls.length
+    for (let time = 1000; time < 2000; time += 5) f.frame(time)
+    expect(f.context.drawImage.mock.calls.length - before).toBeGreaterThanOrEqual(29)
+    expect(f.context.drawImage.mock.calls.length - before).toBeLessThanOrEqual(31)
+    stopScaledCapture(stream)
+  })
+
+  it('resumes with a fresh frame after a stall without a catch-up burst', async () => {
+    const f = fixture()
+    const pending = scaleDesktopVideo(f.source, hd)
+    f.frame(0)
+    const stream = await pending
+    f.frame(500)
+    for (let time = 501; time < 516; time++) f.frame(time)
+    expect(f.output.requestFrame).toHaveBeenCalledTimes(2)
     stopScaledCapture(stream)
   })
 })

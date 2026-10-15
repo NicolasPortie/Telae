@@ -2,6 +2,9 @@ class TelaePcmProcessor extends AudioWorkletProcessor {
   constructor() {
     super()
     this.maxFrames = Math.max(1, Math.floor(sampleRate * 0.12))
+    this.targetFrames = Math.max(1, Math.floor(sampleRate * 0.02))
+    this.backlogLimit = Math.max(1, Math.floor(sampleRate * 0.04))
+    this.recoveryFrames = Math.max(1, Math.floor(sampleRate * 0.25))
     this.meterInterval = Math.max(1, Math.floor(sampleRate * 0.25))
     this.channels = 2
     this.buffer = new Float32Array(this.maxFrames * this.channels)
@@ -26,6 +29,7 @@ class TelaePcmProcessor extends AudioWorkletProcessor {
     this.droppedFrames = 0
     this.underrunFrames = 0
     this.meterFrames = 0
+    this.backlogFrames = 0
   }
 
   report() {
@@ -72,6 +76,17 @@ class TelaePcmProcessor extends AudioWorkletProcessor {
     }
     this.readFrame = (this.readFrame + copyFrames) % this.maxFrames
     this.queuedFrames -= copyFrames
+    // A delivery burst otherwise leaves a permanent offset: the source and the
+    // render clock both advance at sampleRate. Drain only a sustained backlog,
+    // preserving ordinary packet jitter and retaining the newest 20 ms.
+    this.backlogFrames = this.queuedFrames > this.backlogLimit ? this.backlogFrames + frameCount : 0
+    if (this.backlogFrames >= this.recoveryFrames) {
+      const discard = this.queuedFrames - this.targetFrames
+      this.readFrame = (this.readFrame + discard) % this.maxFrames
+      this.queuedFrames -= discard
+      this.droppedFrames += discard
+      this.backlogFrames = 0
+    }
     this.underrunFrames += frameCount - copyFrames
     this.meterFrames += frameCount
     if (this.meterFrames >= this.meterInterval) {

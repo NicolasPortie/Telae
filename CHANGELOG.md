@@ -2,6 +2,14 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/RELEASE_*.md`.
 
+## [0.1.25] - 2026-10-14
+
+### Correções de transmissão
+- A captura recebe quadros nativos diretamente e preserva seus timestamps, sem depender da apresentação de um vídeo oculto. Minimizar o emissor não deve reduzir a transmissão a 1 fps.
+- O redimensionamento preserva a textura nativa, a proporção e os limites reais de 1080p/1440p, sem ampliar fontes menores. Quadros excedentes são descartados antes de processar ou codificar.
+- A fila de áudio recupera o tempo real após pausas na entrega de PCM: um atraso persistente acima de 40 ms por 250 ms é reduzido para os 20 ms mais recentes, mantendo o limite absoluto de memória de 120 ms.
+- Regressões de recuperação de áudio, cadência, timestamps, cancelamento e liberação de quadros. Benchmark de resolução seleciona o monitor da fonte e guarda imagens decodificadas para inspeção de nitidez.
+
 ## [0.1.24] - 2026-10-12
 
 ### Qualidade de transmissão
