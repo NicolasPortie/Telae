@@ -61,15 +61,22 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     await enter(sender, 'QhdSender')
     await enter(receiver, 'QhdReceiver')
     await befriend({ page: sender, name: 'QhdSender' }, { page: receiver, name: 'QhdReceiver' })
+    // Keep the player and controls off the captured monitor on multi-display PCs.
+    for (const app of apps) await app.evaluate(({ BrowserWindow, screen }) => {
+      const other = screen.getAllDisplays().find(display => display.id !== screen.getPrimaryDisplay().id)
+      if (other) BrowserWindow.getAllWindows()[0].setBounds({ x: other.workArea.x + 30, y: other.workArea.y + 30, width: 1220, height: 790 })
+    })
     evidence.push({ displays: await senderApp.evaluate(({ screen }) => screen.getAllDisplays().map(display => ({
       size: display.size, scaleFactor: display.scaleFactor, displayFrequency: display.displayFrequency,
     }))) })
-    evidence.push({ source: await senderApp.evaluate(async ({ BrowserWindow }) => {
+    const testSource = await senderApp.evaluate(async ({ BrowserWindow, screen, desktopCapturer }) => {
+      const primary = screen.getPrimaryDisplay()
       const source = new BrowserWindow({ title: 'Telae QHD Test Pattern', width: 2560, height: 1440,
+        x: primary.bounds.x, y: primary.bounds.y,
         frame: false, webPreferences: { backgroundThrottling: false } })
       // Windows limits normal windows to the work area (excluding the taskbar).
       source.setFullScreen(true)
-      await source.loadURL('data:text/html,' + encodeURIComponent(`<!doctype html><title>Telae QHD Test Pattern</title>
+      await source.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><meta charset="utf-8"><title>Telae QHD Test Pattern</title>
         <style>body{margin:0;background:#111}canvas{display:block;width:100vw;height:100vh}</style>
         <canvas width="2560" height="1440"></canvas><script>
         const c=document.querySelector('canvas'),x=c.getContext('2d');
@@ -77,15 +84,26 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
         function draw(t){window.patternFrames++;x.fillStyle='#16324f';x.fillRect(0,0,2560,1440);
         x.fillStyle='#f7b538';x.fillRect((t/4)%2400,100,160,1200);
         x.fillStyle='white';x.font='80px sans-serif';x.fillText('2560 × 1440 · '+Math.round(t),100,100);
-        for(let i=0;i<1440;i+=40){x.fillRect(0,i,2560,1)}requestAnimationFrame(draw)}requestAnimationFrame(draw);
+        for(let i=0;i<1440;i+=40){x.fillRect(0,i,2560,1)}
+        x.font='32px sans-serif';x.fillText('Nitidez · 1080p e 1440p · texto e linhas finas',320,300);
+        x.font='20px sans-serif';x.fillText('Leitura: ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789',320,350);
+        x.font='16px sans-serif';x.fillText('Detalhes pequenos devem continuar legíveis em Full HD.',320,385);
+        x.fillStyle='#00ffff';x.fillRect(2464,1344,96,96);
+        x.fillStyle='#ff0000';x.fillRect(1080,650,32,32);
+        requestAnimationFrame(draw)}requestAnimationFrame(draw);
         </script>`))
-      return { bounds: source.getContentBounds(), fullscreen: source.isFullScreen() }
-    }) })
+      const display = screen.getDisplayMatching(source.getBounds())
+      const captures = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
+      const capture = captures.find(item => item.display_id === String(display.id))
+      if (!capture) throw new Error('Monitor da fonte de teste ausente')
+      return { bounds: source.getContentBounds(), fullscreen: source.isFullScreen(), captureName: capture.name }
+    })
+    evidence.push({ source: testSource })
     await sender.getByRole('button', { name: /Escolher tela/ }).click()
     await sender.getByRole('radio', { name: '1080p60', exact: true }).click()
     // DWM can trim a fullscreen window by two pixels when focus changes. Capture
     // the display for exact QHD dimensions; isolated window/audio capture has its own E2E.
-    const source = sender.getByRole('radiogroup', { name: 'Telas', exact: true }).getByRole('radio').first()
+    const source = sender.getByRole('radiogroup', { name: 'Telas', exact: true }).getByRole('radio', { name: testSource.captureName, exact: true })
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()
     await sender.getByRole('button', { name: 'Começar a compartilhar' }).click()
@@ -98,6 +116,8 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     const quality = sender.getByRole('combobox', { name: 'Qualidade da transmissão' })
     // Healthy paths preserve resolution in both detail and motion modes.
     for (const profile of ['1080p60', '1440p30', '1440p60', '1080p60', '1080p30', '1440p30'] as const) {
+      await senderApp.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().find(window => window.getTitle() === 'Telae QHD Test Pattern')!.setAlwaysOnTop(false))
       if (await quality.inputValue() !== profile) await quality.selectOption(profile)
       await expect(quality).toHaveValue(profile)
       const width = profile.startsWith('1080p') ? 1920 : 2560
@@ -107,6 +127,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
       // captures the receiver and its own preview recursively instead of the pattern.
       await senderApp.evaluate(({ BrowserWindow }) => {
         const pattern = BrowserWindow.getAllWindows().find(window => window.getTitle() === 'Telae QHD Test Pattern')!
+        pattern.setAlwaysOnTop(true)
         pattern.show()
         pattern.focus()
       })
@@ -114,6 +135,16 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
       await expect.poll(() => video.evaluate(element => ({
         width: (element as HTMLVideoElement).videoWidth, height: (element as HTMLVideoElement).videoHeight,
       })), { timeout: 30_000 }).toEqual({ width, height })
+      // Detect a wrong monitor or recursive capture before collecting evidence.
+      await expect.poll(() => video.evaluate(element => {
+        const video = element as HTMLVideoElement
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')!
+        context.drawImage(video, video.videoWidth * 1096 / 2560, video.videoHeight * 666 / 1440, 1, 1, 0, 0, 1, 1)
+        const [red, green, blue] = context.getImageData(0, 0, 1, 1).data
+        return red > 200 && green < 50 && blue < 50
+      })).toBe(true)
       const start = await video.evaluate(element => ({ time: performance.now(), frames: (element as HTMLVideoElement).getVideoPlaybackQuality().totalVideoFrames }))
       const sourceStart = await senderApp.evaluate(async ({ BrowserWindow }) => {
         const pattern = BrowserWindow.getAllWindows().find(window => window.getTitle() === 'Telae QHD Test Pattern')!
@@ -131,6 +162,17 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
       })
       evidence.push({ profile, sourceRenderedFps: (sourceEnd.frames - sourceStart.frames) * 1000 / (sourceEnd.time - sourceStart.time) })
       evidence.push({ profile, presentedFps: (end.frames - start.frames) * 1000 / (end.time - start.time) })
+      // Save decoded pixels at the actual resolution, independent of player size.
+      const decodedPng = await video.evaluate(element => {
+        const video = element as HTMLVideoElement
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight
+        canvas.getContext('2d')!.drawImage(video, 0, 0)
+        return canvas.toDataURL('image/png').split(',')[1]
+      })
+      const imagePath = test.info().outputPath(`decoded-${profile}.png`)
+      await fs.writeFile(imagePath, Buffer.from(decodedPng, 'base64'))
+      await test.info().attach(`Decoded ${profile}`, { path: imagePath, contentType: 'image/png' })
       if (profile === '1080p60') {
         expect((end.frames - start.frames) * 1000 / (end.time - start.time)).toBeGreaterThan(45)
         await senderApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore())
@@ -143,6 +185,8 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
       expect(settings.height).toBe(height)
       expect((await sample(sender))[0].senders[0].parameters.encodings[0].maxFramerate).toBe(profile.endsWith('60') ? 60 : 30)
     }
+    await senderApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find(window => window.getTitle() === 'Telae QHD Test Pattern')!.hide())
     await sender.getByRole('button', { name: 'Parar transmissão' }).click()
     await expect(receiver.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
   } finally {
