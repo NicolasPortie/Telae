@@ -20,7 +20,7 @@ const defaultDeps: ControllerDeps = {
 }
 
 /**
- * StreamController — deep module do Ticket 01.
+ * StreamController — captura da fonte escolhida e ciclo de vida das faixas de mídia.
  *
  * Interface pequena: start / stop / subscribe / getSnapshot.
  * A UI nunca toca em tracks do MediaStream; ela só recebe o stream

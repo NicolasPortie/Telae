@@ -1,30 +1,81 @@
+<div align="center">
+
+<img src="apps/desktop/public/icon.svg" alt="Telae" width="88" height="88" />
+
 # Telae
 
-Aplicativo desktop de compartilhamento de tela com sinalização ASP.NET Core/SignalR e transporte WebRTC.
+**Compartilhe sua tela com amigos em alta qualidade e baixa latência.**
 
-Veja o [CHANGELOG](CHANGELOG.md), a [revisão de qualidade de transmissão de 12/10/2026](docs/STREAMING_QUALITY_2026-10-12.md), [as melhorias anteriores](docs/IMPROVEMENTS_2026-10-02.md) e [os requisitos de publicação](docs/RELEASE_VALIDATION.md).
+Aplicativo desktop para Windows com vídeo até 1440p60, áudio do sistema ou do aplicativo escolhido e transporte WebRTC peer-to-peer.
 
-**Recursos:** compartilhamento de tela ou janela até 1440p60 com áudio do sistema ou do aplicativo escolhido, até 12 espectadores com qualidade adaptada por conexão, lista de amigos com presença, painel de estatísticas em tempo real e atualização automática.
+![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-SignalR-512BD4?logo=dotnet&logoColor=white)
+![WebRTC](https://img.shields.io/badge/WebRTC-P2P-E0AE5E)
 
-**Requisitos:** Windows 10/11 x64. O filtro de áudio por aplicativo exige Windows build 20348 ou superior.
+</div>
 
-## Estrutura
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Tela inicial do Telae com o cartão de compartilhamento e a lista de amigos" width="860" />
+</p>
 
-- `apps/desktop`: Electron + React + TypeScript.
-- `apps/server`: servidor de sinalização ASP.NET Core/SignalR.
-- `apps/audio-bridge`: bridge de áudio Windows/NAudio.
-- `tests/server`: testes do servidor.
-- `ops`: arquivos usados no deploy do servidor Linux.
+## Visão geral
 
-## Desenvolvimento
+O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e latência baixa. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na lista de amigos e entra com um clique.
 
-Servidor:
+## Recursos
+
+- **Até 1440p60** com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou rede.
+- **Áudio sincronizado** do sistema ou apenas do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
+- **Amigos e presença**: código pessoal de 6 caracteres, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo.
+- **Até 12 espectadores** por transmissão, cada um com qualidade e recuperação independentes.
+- **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
+- **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.
+- **Atualização automática** pelo próprio servidor, instalada em segundo plano.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Tela de quem transmite, com prévia, espectadores e estatísticas" /></td>
+    <td width="50%"><img src="docs/screenshots/viewer.png" alt="Player do espectador com controles e painel de estatísticas" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Quem transmite: prévia, espectadores e telemetria</sub></td>
+    <td align="center"><sub>Quem assiste: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
+  </tr>
+</table>
+
+## Arquitetura
+
+```text
+ Desktop (Electron + React)  ◄── sinalização SignalR ──►  Servidor (ASP.NET Core)
+        │                                                     │
+        └──────────── mídia WebRTC criptografada ─────────────┘
+                 direta (P2P) · relay TURN como alternativa
+```
+
+| Pasta | Descrição |
+| --- | --- |
+| [`apps/desktop`](apps/desktop) | Aplicativo Electron com React, TypeScript e Tailwind. Captura, WebRTC, qualidade adaptativa e interface. |
+| [`apps/server`](apps/server) | Serviço de sinalização ASP.NET Core/SignalR: dispositivos, amigos, sessões, convites e credenciais TURN efêmeras. |
+| [`apps/audio-bridge`](apps/audio-bridge) | Ponte de áudio nativa (.NET/NAudio) para captura por aplicativo no Windows. |
+| [`tests`](tests) | Testes do servidor e regressão de áudio real. |
+| [`ops`](ops) | Scripts e unidades para implantação do servidor Linux e publicação das atualizações. |
+| [`docs`](docs) | Arquitetura, decisões (ADR), validações de qualidade e notas de versão. |
+
+Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e nas [decisões de arquitetura](docs/adr).
+
+## Como executar
+
+**Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET SDK 10. O filtro de áudio por aplicativo exige Windows build 20348 ou superior.
+
+Servidor de sinalização:
 
 ```bash
 dotnet run --project apps/server/Telae.Server.csproj
 ```
 
-Desktop:
+Aplicativo desktop:
 
 ```bash
 cd apps/desktop
@@ -32,36 +83,26 @@ npm ci
 npm run dev
 ```
 
-## Release e deploy
-
-O atualizador verifica novas versões ao abrir, baixa em segundo plano e instala silenciosamente, reabrindo o Telae automaticamente. Se houver sessão ativa, aguarda seu encerramento. A instalação inicial ainda usa o instalador; instalações feitas para todos os usuários podem exigir autorização do Windows na atualização. As mudanças precisam ser distribuídas em uma nova versão para chegar aos aplicativos já instalados.
-
-Os perfis **2K · 1440p** e **2K · 1440p60** capturam até 2560 × 1440 a 30/60 fps. Aqui, 2K é o nome popular de QHD/1440p, não o formato cinema 2048 × 1080. Os tetos iniciais são 20/32 Mbps por espectador, sujeitos ao limite total de upload configurado. A seleção oferece apenas perfis explícitos, com **1080p30 como padrão**; Auto foi removido da interface. O protocolo ainda aceita Auto de versões anteriores para preservar compatibilidade. Fontes menores continuam menores; o perfil não cria detalhes inexistentes. 1440p processa aproximadamente 78% mais pixels que 1080p na mesma taxa de quadros. A adaptação reduz FPS no modo Texto e resolução no modo Movimento quando há pressão de CPU; no modo Movimento também reduz resolução sob congestionamento. Tetos de bitrate são parâmetros iniciais, não requisitos mínimos ou garantia de desempenho. Consulte [o benchmark](docs/BENCHMARK.md) para validar em hardware real.
-
-Para disponibilizar 1440p, atualize o servidor antes de distribuir o desktop: o backend anterior rejeita os novos perfis.
-
-Na versão 0.1.20, compartilhar uma tela inteira exclui automaticamente o áudio do **aplicativo Discord** (incluindo PTB, Canary e Development) usando process loopback do Windows. O filtro acompanha abertura, fechamento e reinício. Discord no navegador não pode ser separado dos outros sons desse navegador. O filtro requer Windows build 20348 ou superior; se não estiver disponível, o vídeo continua sem som, sem voltar à captura geral. Com duas instalações independentes do Discord abertas ao mesmo tempo, o áudio transmitido fica silencioso até restar uma; o Windows permite excluir uma árvore de processos por capturador. Compartilhar uma janela mantém apenas o áudio daquele aplicativo. A detecção de mudanças ocorre a cada 100 ms, além do tempo da consulta de processos.
-
-Regressão com áudio real: `dotnet build tests/audio/Telae.Audio.Tests.csproj -c Release`, seguido de `python tests/audio/verify.py` no Windows com saída de áudio disponível. O teste usa tons discretos de aplicativos separados e valida exclusão de processos filhos, abertura/reinício, preservação do outro aplicativo e silêncio seguro com duas árvores. Os testes de mídia Electron também verificam a interface de transmissão entre 640×560 e 2560×1392.
-
-As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, cria o instalador Windows, publica os três arquivos em um GitHub Release privado e os entrega automaticamente ao servidor de atualizações pelo runner `telae-updates`. O backend continua podendo ser atualizado separadamente pela tag:
-
-Exemplo:
+## Testes e qualidade
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
-ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.1'
+cd apps/desktop
+npm run lint        # oxlint
+npm run typecheck   # tsc
+npm test            # testes unitários (vitest)
+npm run test:e2e    # duas instâncias do Electron + servidor local (Playwright)
 ```
 
-O estado persistente do servidor fica fora da pasta de release e não é versionado.
+```bash
+dotnet test tests/server/Telae.Server.Tests.csproj
+```
 
-A versão 0.1.13 exige credencial por dispositivo e convite para novos espectadores. Consulte [as notas de implantação e migração](docs/RELEASE_0.1.13.md) antes de atualizar o backend: os clientes antigos precisam atualizar para registrar no servidor novo. O aplicativo aceita até 12 espectadores, com qualidade e recuperação independentes por conexão.
+O E2E com captura real de tela e áudio é opt-in (`TELAE_E2E_MEDIA=1`). Veja [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md) e [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-### Atualização automática do desktop
+## Documentação
 
-A partir da versão 0.1.5, o Telae instalado verifica atualizações ao abrir usando o endereço do servidor configurado no aplicativo. O servidor publica os arquivos em `/updates/windows/`. Quando há versão nova, o download começa automaticamente; se houver transmissão ativa, a instalação espera ela terminar. O app reinicia para instalar silenciosamente, sem abrir o assistente. Na versão 0.1.19, a versão instalada aparece no cabeçalho, a tela inicial oferece “Buscar atualização” e o app verifica novidades a cada 15 minutos. O instalador inicial usa instalação com um clique, por usuário. A versão 0.1.4 não possui atualizador e precisa receber uma versão mais recente manualmente. A partir da 0.1.8, o instalador usa `https://telae.nicolasportie.com` por padrão, inclusive ao migrar a configuração antiga `http://localhost:5015`.
-
-O runner de publicação executa com uma conta dedicada no servidor e grava em `/var/lib/telae-updates/windows`. O publicador confere o SHA-512 e troca os arquivos de forma atômica, com `latest.yml` ao final. Confira `http://<servidor>:5015/updates/windows/latest.yml` após a publicação. Caso seja preciso republicar manualmente, execute `pwsh ./ops/publish-desktop-update.ps1` após `npm run dist` em `apps/desktop`, ou após baixar os três arquivos do GitHub Release para `apps/desktop/dist`.
-
-O repositório GitHub é privado e não fornece downloads anônimos aos clientes. O túnel Cloudflare expõe `https://telae.nicolasportie.com` para sinalização e atualizações, inclusive fora da rede local. Quem instalou a versão 0.1.7 pode informar esse endereço em Configurações > Servidor de sinalização para recuperar a conexão e a atualização automática. Os instaladores atuais não possuem assinatura de código Windows.
+- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
+- [Design da interface](docs/DESIGN.md)
+- [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
+- [Qualidade de transmissão](docs/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
+- [Changelog](CHANGELOG.md) · [Glossário](GLOSSARY.md)

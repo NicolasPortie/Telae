@@ -93,9 +93,9 @@ function toUserMessage(error: unknown, fallback: string): string {
 }
 
 /**
- * ShareSessionController — módulo profundo dos Tickets 02–07.
+ * ShareSessionController — orquestra sinalização, captura e transporte de uma Share Session.
  *
-  * Interface pequena: connect / startSharing / joinFriendShare / leave /
+ * Interface pequena: connect / startSharing / joinFriendShare / leave /
  * subscribe / getSnapshot / media getters. A UI renderiza o snapshot;
  * ela nunca coordena captura, SDP, ICE ou qualidade diretamente.
  */

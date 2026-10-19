@@ -23,7 +23,7 @@ function Row({ label, value, warn = false }: { label: string; value: string; war
   return (
     <div className="flex items-baseline justify-between gap-6">
       <dt className="text-ink-3">{label}</dt>
-      <dd className={`tnum text-right ${warn ? 'text-signal-soft' : 'text-ink'}`}>{value}</dd>
+      <dd className={`tnum text-right font-mono text-[11px] ${warn ? 'text-signal-soft' : 'text-ink'}`}>{value}</dd>
     </div>
   )
 }
@@ -41,9 +41,9 @@ export function StreamStats({ diagnostics: d, connection, className = '' }: {
   const loss = d.packetLossPercent == null ? '—' : `${d.packetLossPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
   const frozen = (d.freezeCount ?? 0) > 0
   return (
-    <section aria-label="Estatísticas da transmissão" className={`rounded-xl border border-line-strong bg-canvas/90 p-4 text-xs backdrop-blur ${className}`}>
+    <section aria-label="Estatísticas da transmissão" className={`rounded-2xl border border-line-strong bg-canvas/90 p-4 text-xs shadow-card backdrop-blur ${className}`}>
       <div className="mb-3 flex items-center justify-between gap-6">
-        <h2 className="text-[13px] font-semibold">Estatísticas</h2>
+        <h2 className="eyebrow">Estatísticas</h2>
         <ConnectionBadge quality={connection} />
       </div>
       <dl className="grid gap-1.5">

@@ -1,30 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Activity,
-  ArrowLeft,
-  ArrowRight,
-  Copy,
-  Maximize,
-  Minimize,
-  RefreshCw,
-  Signal,
-  Trash2,
-  UserPlus,
-  UserRound,
-  Users,
-  Volume2,
-  VolumeX,
-} from 'lucide-react'
+import { Activity, Maximize, Minimize, Signal, Volume2, VolumeX } from 'lucide-react'
 import { DiagnosticsHistory } from './services/diagnostics-history'
-import { UpdateNotice } from './components/UpdateNotice'
-import { SharerSession } from './components/SharerSession'
-import { SourceGroup } from './components/SourceGroup'
-import { ShareIllustration } from './components/ShareIllustration'
-import { QualityPicker } from './components/QualityPicker'
-import { StreamStats } from './components/StreamStats'
-import { ShareSessionController } from './services/share-session'
-import { upsertFriend } from './services/friends'
+import { AppHeader } from './components/AppHeader'
+import { FriendsPanel } from './components/FriendsPanel'
+import { HomeScreen } from './components/HomeScreen'
 import { LiveFriendsSwitch } from './components/LiveFriendsSwitch'
+import { ProfileScreen, SetupScreen } from './components/NameForm'
+import { PickerScreen } from './components/PickerScreen'
+import { SharerSession } from './components/SharerSession'
+import { StreamStats } from './components/StreamStats'
+import { useFriends } from './hooks/useFriends'
+import { ShareSessionController } from './services/share-session'
 import type { DeviceSnapshot, QualityProfile } from './services/types'
 import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
@@ -56,19 +42,8 @@ export default function App() {
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
   const [appVersion, setAppVersion] = useState<string | null>(null)
-  const [friends, setFriends] = useState<DeviceSnapshot[]>([])
-  const [friendCodeInput, setFriendCodeInput] = useState('')
-  const [friendFilter, setFriendFilter] = useState<'all' | 'live'>('all')
-  const [addFriendOpen, setAddFriendOpen] = useState(false)
-  const [friendActionBusy, setFriendActionBusy] = useState(false)
-  const [friendError, setFriendError] = useState<string | null>(null)
-  const [friendSuccess, setFriendSuccess] = useState<string | null>(null)
   const [watchingDeviceId, setWatchingDeviceId] = useState<string | null>(null)
   const [watchError, setWatchError] = useState<string | null>(null)
-  const [requests, setRequests] = useState<DeviceSnapshot[]>([])
-  const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null)
-  const [myFriendCode, setMyFriendCode] = useState<string | null>(null)
-  const [myCodeCopied, setMyCodeCopied] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
@@ -82,6 +57,9 @@ export default function App() {
   const sourcePickerForActiveShare = screen === 'picker' && switchingSource && snapshot.role === 'sharer'
   const visibleScreen: Screen = sessionActive && screen !== 'session' && !sourcePickerForActiveShare ? 'session' : screen
   const viewerLive = visibleScreen === 'session' && snapshot.role === 'viewer' && snapshot.state === 'live'
+
+  const online = snapshot.signaling === 'online'
+  const friendsState = useFriends({ controller, desktopApiAvailable, online, setProfile })
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
 
@@ -97,7 +75,7 @@ export default function App() {
     void window.telae.setSessionActive(sessionActive)
   }, [desktopApiAvailable, sessionActive])
 
-  // Ticket 09: término inesperado do renderer interrompe captura e sinalização.
+  // Término inesperado do renderer interrompe captura e sinalização.
   // O servidor encerra o Share Session ao detectar a queda do socket.
   useEffect(() => {
     const onUnload = () => controller.dispose()
@@ -106,29 +84,6 @@ export default function App() {
   }, [controller])
 
   useEffect(() => () => controller.dispose(), [controller])
-
-  const refreshFriends = useCallback(async () => {
-    if (!desktopApiAvailable) return
-    try {
-      const local = await window.telae.getLocalProfile()
-      setProfile(current => (current?.deviceId === local.deviceId && JSON.stringify(current.friendCodes) === JSON.stringify(local.friendCodes) ? current : local))
-      // Meu código independe de ter amigos: precisa aparecer mesmo com a lista vazia.
-      const me = controller.getMyFriendCode()
-      if (me) setMyFriendCode(me)
-      const current = local.friendCodes ?? []
-      if (snapshot.signaling !== 'online') return
-      // Pedidos recebidos (quem me adicionou sem reciprocidade): não bloqueiam a lista.
-      try { setRequests(await controller.fetchFriendRequests()) } catch { /* pedidos não bloqueiam */ }
-      if (current.length === 0) {
-        setFriends([])
-        return
-      }
-      // Declara a lista ao servidor: a lista volta ordenada e a amizade passa a valer nos dois lados.
-      setFriends(await controller.fetchFriends(current))
-    } catch {
-      // lista de amigos não bloqueia a home
-    }
-  }, [controller, desktopApiAvailable, snapshot.signaling])
 
   // Boot: perfil local + ambiente (sincroniza com o main process via IPC).
   useEffect(() => {
@@ -160,22 +115,6 @@ export default function App() {
       cancelled = true
     }
   }, [controller, desktopApiAvailable])
-
-  // Mantém lista de amigos e presença atualizada quando online (poll + push) — também durante viewer live para quick-switch
-  useEffect(() => {
-    if (!desktopApiAvailable || snapshot.signaling !== 'online') return
-    // Sincronização com o servidor (externa ao React): a leitura inicial é assíncrona.
-    // oxlint-disable-next-line react/set-state-in-effect
-    void refreshFriends()
-    const interval = window.setInterval(() => void refreshFriends(), 12_000)
-    // A presença chega com o snapshot completo do amigo: atualiza na hora, sem nova consulta.
-    const off = controller.onPresenceChanged(device => setFriends(list => upsertFriend(list, device)))
-    // Pedido novo chega na hora; a busca confirma o estado atual no servidor.
-    const offRequest = controller.onFriendRequest(() => {
-      void controller.fetchFriendRequests().then(setRequests).catch(() => undefined)
-    })
-    return () => { window.clearInterval(interval); off(); offRequest() }
-  }, [controller, desktopApiAvailable, snapshot.signaling, refreshFriends])
 
   const connectWithName = useCallback(
     async (name: string) => {
@@ -302,85 +241,6 @@ export default function App() {
     setScreen('home')
   }, [controller])
 
-  const copyMyFriendCode = useCallback(async () => {
-    if (!myFriendCode) return
-    try {
-      await navigator.clipboard.writeText(myFriendCode)
-      setMyCodeCopied(true)
-      window.setTimeout(() => setMyCodeCopied(false), 2000)
-    } catch {
-      setFriendError('Não foi possível copiar seu código.')
-    }
-  }, [myFriendCode])
-
-  const handleAddFriend = useCallback(async (codeArg?: string) => {
-    const code = (codeArg ?? friendCodeInput).trim().replaceAll('-', '').toUpperCase()
-    if (!code || code.length !== 6) {
-      setFriendError('Digite um código de 6 letras/números (ex.: ABC234).')
-      return
-    }
-    if (!desktopApiAvailable) {
-      setFriendError('Abra o aplicativo Telae para adicionar amigos.')
-      return
-    }
-    setFriendActionBusy(true)
-    setFriendError(null)
-    setFriendSuccess(null)
-    try {
-      // Valida que o amigo existe antes de persistir
-      const found = await controller.lookupFriend(code)
-      if (!found) throw new Error('Amigo não encontrado. Confira o código e tente novamente.')
-      if (found.friendCode === myFriendCode) throw new Error('Você não pode adicionar a si mesmo.')
-      const already = friends.some(f => f.friendCode === code)
-      if (already) throw new Error('Este amigo já está na sua lista.')
-      const local = await window.telae.addFriendCode(code)
-      setProfile(local)
-      setFriendCodeInput('')
-      setAddFriendOpen(false)
-      setFriendSuccess(`Amigo ${found.displayName} adicionado!`)
-      window.setTimeout(() => setFriendSuccess(null), 3000)
-      const list = await controller.fetchFriends(local.friendCodes)
-      setFriends(list)
-      // Aceitar um pedido o torna mútuo: ele sai da pendência.
-      try { setRequests(await controller.fetchFriendRequests()) } catch { /* lista principal já atualizou */ }
-    } catch (error) {
-      setFriendError(error instanceof Error ? error.message : 'Não foi possível adicionar o amigo.')
-    } finally {
-      setFriendActionBusy(false)
-    }
-  }, [controller, desktopApiAvailable, friendCodeInput, friends, myFriendCode])
-
-  const handleDismissRequest = useCallback(async (code: string) => {
-    if (!desktopApiAvailable) return
-    setFriendActionBusy(true)
-    setFriendError(null)
-    try {
-      await controller.dismissFriendRequest(code)
-      setRequests(await controller.fetchFriendRequests())
-    } catch (error) {
-      setFriendError(error instanceof Error ? error.message : 'Não foi possível ignorar o pedido.')
-    } finally {
-      setFriendActionBusy(false)
-    }
-  }, [controller, desktopApiAvailable])
-
-  const handleRemoveFriend = useCallback(async (code: string) => {
-    if (!desktopApiAvailable) return
-    setPendingRemoveCode(null)
-    setFriendActionBusy(true)
-    setFriendError(null)
-    try {
-      const local = await window.telae.removeFriendCode(code)
-      setProfile(local)
-      const list = await controller.fetchFriends(local.friendCodes)
-      setFriends(list)
-    } catch (error) {
-      setFriendError(error instanceof Error ? error.message : 'Não foi possível remover o amigo.')
-    } finally {
-      setFriendActionBusy(false)
-    }
-  }, [controller, desktopApiAvailable])
-
   const handleWatchFriend = useCallback(async (friend: DeviceSnapshot) => {
     const current = latestSnapshot.current
     const viewing = current.role === 'viewer' && ['joining', 'negotiating', 'live', 'reconnecting'].includes(current.state)
@@ -494,39 +354,19 @@ export default function App() {
     ended: 'Transmissão terminada',
   }
 
-  const screens = sources.filter((item) => item.kind === 'screen')
-  const windowsList = sources.filter((item) => item.kind === 'window')
-
   return (
-    <div className={`${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} bg-canvas text-ink`}>
-      <header className="telae-header shrink-0 border-b border-line bg-[#1A1A17]">
-        <div className={`mx-auto flex h-16 items-center gap-3 px-6 ${visibleScreen === 'session' ? 'telae-session-header' : 'max-w-[1120px]'}`}>
-          <p className="text-[18px] font-semibold tracking-[-0.04em]">Telae<span className="text-signal">.</span></p>
-          {appVersion && <span aria-label="Versão instalada" title="Versão instalada" className="telae-version tnum">v{appVersion}</span>}
-          <button
-            type="button"
-            onClick={() => setScreen('profile')}
-            disabled={sessionActive}
-            title={sessionActive ? 'Encerre a transmissão para alterar seu nome.' : undefined}
-            className="telae-press ml-4 flex min-h-[40px] items-center gap-2 rounded-md px-3 text-[13px] text-ink-2 hover:bg-active hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-            aria-label="Abrir perfil"
-          >
-            <UserRound size={16} aria-hidden="true" />
-            {profile?.displayName && <span className="max-w-[140px] truncate">{profile.displayName}</span>}
-          </button>
-        </div>
-        <UpdateNotice status={updateStatus} sessionActive={sessionActive} onRetry={() => void window.telae.checkForUpdates()} />
-        {connectError && (
-          <div className="border-t border-line">
-            <p role="alert" className="mx-auto max-w-[1120px] px-5 py-2 text-xs text-danger">
-              {connectError}{' '}
-              <button type="button" onClick={() => profile?.displayName && void connectWithName(profile.displayName)} className="underline">
-                Reconectar
-              </button>
-            </p>
-          </div>
-        )}
-      </header>
+    <div className={`telae-shell ${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} text-ink`}>
+      <AppHeader
+        version={appVersion}
+        displayName={profile?.displayName}
+        profileLocked={sessionActive}
+        updateStatus={updateStatus}
+        sessionActive={sessionActive}
+        connectError={connectError}
+        onOpenProfile={() => setScreen('profile')}
+        onRetryUpdate={() => void window.telae.checkForUpdates()}
+        onReconnect={() => profile?.displayName && void connectWithName(profile.displayName)}
+      />
 
       <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full px-6 pb-16 pt-10`}>
         <div aria-live="polite" className="sr-only">
@@ -537,324 +377,57 @@ export default function App() {
         {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">Abrindo Telae…</p>}
 
         {visibleScreen === 'setup' && (
-          <section aria-labelledby="setup-title" className="mx-auto mt-8 max-w-[480px] rounded-2xl border border-line bg-surface p-8 shadow-[0_24px_70px_rgba(0,0,0,0.2)]">
-            <div aria-hidden="true" className="mb-7 flex h-12 w-12 items-center justify-center rounded-xl border border-signal/35 bg-signal/10 text-signal">
-              <UserRound size={23} strokeWidth={1.7} />
-            </div>
-            <h1 id="setup-title" className="text-[28px] font-semibold leading-tight tracking-tight">
-              Como podemos chamar você?
-            </h1>
-            <p className="mt-3 text-sm leading-relaxed text-ink-2">Seu nome aparecerá para a pessoa com quem você compartilhar a tela.</p>
-            {!desktopApiAvailable && (
-              <p role="alert" className="mt-4 text-sm text-danger">
-                Abra o aplicativo Telae para continuar.
-              </p>
-            )}
-            <form
-              className="mt-7"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void saveName()
-              }}
-            >
-              <label htmlFor="display-name" className="mb-1 block text-xs text-ink-3">
-                Seu nome
-              </label>
-              <input
-                id="display-name"
-                value={nameInput}
-                onChange={(event) => setNameInput(event.target.value)}
-                maxLength={32}
-                autoComplete="off"
-                className="h-12 w-full rounded-lg border border-line-input bg-canvas px-4 text-[15px] placeholder:text-ink-3/60"
-                placeholder="Ex.: Nicolas"
-              />
-              {formError && (
-                <p role="alert" className="mt-2 text-sm text-danger">
-                  {formError}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={busy || !desktopApiAvailable}
-                className="telae-press mt-5 min-h-[48px] w-full rounded-lg bg-signal px-5 text-[15px] font-semibold text-canvas disabled:opacity-50"
-              >
-                {busy ? 'Salvando…' : 'Continuar'}
-              </button>
-            </form>
-          </section>
+          <SetupScreen value={nameInput} onChange={setNameInput} onSubmit={() => void saveName()} busy={busy} error={formError} desktopApiAvailable={desktopApiAvailable} />
         )}
 
         {visibleScreen === 'home' && (
-          <section aria-labelledby="home-title" className="telae-panel-enter telae-home">
-            <div className="telae-home-grid">
-              <div className="telae-home-primary">
-              <div>
-                <p className="text-sm text-ink-2">Olá, {profile?.displayName?.split(' ')[0] || 'bem-vindo'}.</p>
-                <h1 id="home-title" className="mt-2 text-[clamp(30px,3.6vw,42px)] font-semibold leading-[1.1] tracking-[-0.04em]">
-                  Compartilhar a tela ficou simples.
-                </h1>
-                <p className="mt-3 max-w-[48ch] text-[15px] leading-relaxed text-ink-2">
-                  Mostre sua tela para seus amigos ou assista a quem estiver ao vivo.
-                </p>
-              </div>
-                <div className="telae-home-actions mt-8">
-              <section aria-labelledby="share-title" className="telae-share-card flex flex-col rounded-2xl border border-line-warm bg-warm p-7">
-                <ShareIllustration />
-                <h2 id="share-title" className="mt-4 text-[24px] font-semibold tracking-[-0.03em]">Mostrar minha tela</h2>
-                <p className="mt-2 max-w-[35ch] text-sm leading-relaxed text-ink-2">
-                  Escolha uma tela ou janela. Seus amigos verão que você está ao vivo e poderão assistir em 1 clique.
-                </p>
-                <button
-                  type="button"
-                  onClick={openPicker}
-                  disabled={snapshot.signaling !== 'online'}
-                  className="telae-press telae-primary-action mt-6 flex min-h-[48px] w-fit items-center gap-3 rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Escolher tela <ArrowRight size={17} aria-hidden="true" />
-                </button>
-              </section>
-                </div>
-            <div className="telae-home-footer">
-              <p className="text-xs text-ink-3">{updateStatus?.phase === 'current' ? 'Você está na versão mais recente.' : 'As atualizações são instaladas automaticamente pelo app.'}</p>
-              <button type="button" onClick={() => void window.telae.checkForUpdates()} disabled={!desktopApiAvailable || ['checking', 'downloading', 'ready', 'installing'].includes(updateStatus?.phase ?? '')} className="telae-press telae-check-update"><RefreshCw size={14} aria-hidden="true" className={updateStatus?.phase === 'checking' ? 'telae-update-spinner' : ''} />{updateStatus?.phase === 'checking' ? 'Buscando atualização…' : 'Buscar atualização'}</button>
-            </div>
-              </div>
-            <section aria-labelledby="friends-title" className="telae-friends telae-friends-panel rounded-2xl border border-line bg-surface p-5">
-              {myFriendCode && (
-                <div className="telae-my-code mb-4 flex flex-col items-start gap-2 rounded-xl border border-line-strong bg-canvas px-4 py-3">
-                  <span className="text-[11px] font-medium tracking-wide text-ink-3">Seu código de amigo</span>
-                  <div className="flex items-center gap-2">
-                    <span data-testid="my-friend-code" className="tnum rounded-md border border-line-input bg-canvas px-3 py-1.5 text-sm font-semibold tracking-[0.16em] text-ink">{myFriendCode}</span>
-                    <button type="button" onClick={() => void copyMyFriendCode()} aria-label="Copiar seu código de amigo" title={myCodeCopied ? 'Copiado!' : 'Copiar código'} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-md border border-line-strong bg-active text-ink-2 hover:text-ink">{myCodeCopied ? <span className="text-xs font-semibold text-ok">✓</span> : <Copy size={14} aria-hidden="true" />}</button>
-                  </div>
-                  <span className="text-[11px] text-ink-3">Compartilhe para seus amigos te adicionarem.</span>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <h2 id="friends-title" className="flex items-center gap-2 text-[15px] font-semibold tracking-[-0.02em]"><Users size={16} aria-hidden="true" className="text-ink-3" /> Seus amigos</h2>
-                  <span className="telae-count tnum">{friends.length}</span>
-                  {friends.some(f => f.isSharing) && <span className="inline-flex items-center gap-1.5 rounded-full border border-signal/30 bg-signal/10 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-signal"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-signal" aria-hidden="true" /> {friends.filter(f => f.isSharing).length} ao vivo</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div role="group" aria-label="Filtrar amigos" className="flex rounded-lg border border-line bg-canvas p-1">
-                    <button type="button" aria-pressed={friendFilter === 'all'} onClick={() => setFriendFilter('all')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'all' ? 'bg-active text-ink' : 'text-ink-3 hover:text-ink'}`}>Todos</button>
-                    <button type="button" aria-pressed={friendFilter === 'live'} onClick={() => setFriendFilter('live')} className={`min-h-[32px] rounded-md px-3 text-xs font-medium ${friendFilter === 'live' ? 'bg-active text-ink' : 'text-ink-3 hover:text-ink'}`}>Ao vivo</button>
-                  </div>
-                  <button type="button" onClick={() => setAddFriendOpen(v => !v)} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-[#3A352A] bg-warm px-3 text-xs font-semibold text-signal hover:bg-[#2E2B22]"><UserPlus size={14} aria-hidden="true" /> Adicionar</button>
-                </div>
-              </div>
-
-              {addFriendOpen && (
-                <div className="mt-4 flex flex-wrap items-end gap-2 rounded-xl border border-line-strong bg-canvas p-4">
-                  <div className="min-w-[180px] flex-1">
-                    <label htmlFor="friend-code" className="mb-1.5 block text-xs font-medium text-ink-2">Código do amigo (6 caracteres)</label>
-                    <input id="friend-code" value={friendCodeInput} onChange={event => setFriendCodeInput(event.target.value.replace(/\s/g, '').toUpperCase())} placeholder="Ex.: ABC234" maxLength={6} autoComplete="off" spellCheck={false} className="telae-code-input tnum h-10 w-full rounded-lg border border-line-input bg-surface px-3 text-sm tracking-[0.14em] placeholder:text-ink-3" />
-                  </div>
-                  <button type="button" onClick={() => void handleAddFriend()} disabled={friendActionBusy || friendCodeInput.trim().length !== 6} className="telae-press min-h-[40px] rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">{friendActionBusy ? 'Adicionando…' : 'Adicionar'}</button>
-                  <button type="button" onClick={() => { setAddFriendOpen(false); setFriendCodeInput(''); setFriendError(null) }} className="telae-press min-h-[40px] rounded-lg border border-line px-4 text-sm text-ink-2 hover:text-ink">Cancelar</button>
-                  {(friendError || friendSuccess) && <p role={friendError ? 'alert' : 'status'} className={`w-full text-sm ${friendError ? 'text-danger-soft' : 'text-ok'}`}>{friendError ?? friendSuccess}</p>}
-                </div>
-              )}
-              {friendError && !addFriendOpen && <p role="alert" className="mt-3 text-sm text-danger-soft">{friendError}</p>}
-              {friendSuccess && !addFriendOpen && <p role="status" className="mt-3 text-sm text-ok">{friendSuccess}</p>}
-
-              {watchError && <p role="alert" className="mt-3 text-sm text-danger-soft">{watchError}</p>}
-
-              {requests.length > 0 && (
-                <section aria-labelledby="requests-title" className="mt-5 rounded-xl border border-line-warm bg-warm p-4">
-                  <div className="flex items-center gap-2">
-                    <h2 id="requests-title" className="flex items-center gap-2 text-sm font-semibold tracking-[-0.02em]">
-                      <UserPlus size={15} aria-hidden="true" className="text-signal" /> Pedidos de amizade
-                    </h2>
-                    <span className="telae-count tnum">{requests.length}</span>
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-ink-3">Essas pessoas te adicionaram. Aceite para assistirem uma à outra.</p>
-                  <ul className="mt-3 grid gap-2">
-                    {requests.map(request => (
-                      <li key={request.deviceId} className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-canvas px-4 py-3">
-                        <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line-strong bg-surface text-xs font-semibold text-ink-3">{request.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium leading-none">{request.displayName}</p>
-                          <p className="tnum mt-1 text-xs text-ink-4">· {request.friendCode}</p>
-                        </div>
-                        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-                          <button type="button" onClick={() => void handleAddFriend(request.friendCode)} disabled={friendActionBusy || snapshot.signaling !== 'online'} className="telae-press inline-flex min-h-[36px] items-center rounded-lg bg-signal px-4 text-xs font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">Adicionar de volta</button>
-                          <button type="button" onClick={() => void handleDismissRequest(request.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[36px] rounded-lg border border-line px-3 text-xs text-ink-2 hover:text-ink disabled:opacity-50">Ignorar</button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {friends.length === 0 ? (
-                <div className="mt-6 rounded-xl border border-dashed border-line-strong bg-canvas px-6 py-10 text-center">
-                  <div aria-hidden="true" className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-surface text-ink-3"><Users size={18} /></div>
-                  <p className="mt-3 text-sm font-medium text-ink">Nenhum amigo ainda</p>
-                  <p className="mx-auto mt-1 max-w-[32ch] text-xs leading-relaxed text-ink-3">Adicione pelo código de 6 letras que aparece no topo do app do seu amigo. Quando ele estiver transmitindo, você verá <span className="font-semibold text-signal">Ao vivo</span> aqui e poderá assistir em 1 clique.</p>
-                  <button type="button" onClick={() => setAddFriendOpen(true)} className="telae-press mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-signal px-5 text-sm font-semibold text-canvas">Adicionar primeiro amigo</button>
-                </div>
-              ) : (
-                <ul className="telae-friends-list mt-5 grid gap-2">
-                  {(friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).length === 0 && friendFilter === 'live' ? (
-                    <li className="rounded-xl border border-line bg-canvas px-4 py-8 text-center text-sm text-ink-3">Nenhum amigo transmitindo agora.</li>
-                  ) : (friendFilter === 'live' ? friends.filter(f => f.isSharing) : friends).map(friend => {
-                    const live = friend.isSharing
-                    return (
-                      <li key={friend.friendCode} className={`group flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${live ? 'border-line-warm bg-warm' : 'border-line bg-canvas'}`}>
-                        <span aria-hidden="true" className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-xs font-semibold ${live ? 'border-signal/35 bg-signal/10 text-signal' : 'border-line-strong bg-surface text-ink-3'}`}>{friend.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR') || '?'}</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium leading-none">{friend.displayName}</p>
-                          <p className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                            <span className={`inline-flex items-center gap-1.5 ${live ? 'font-semibold text-signal' : friend.status === 'online' ? 'text-ok' : 'text-ink-3'}`}>
-                              <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${live ? 'animate-pulse bg-signal' : friend.status === 'online' ? 'bg-ok' : 'bg-ink-4'}`} /> {live ? 'Ao vivo' : friend.status === 'online' ? 'Online' : 'Offline'}
-                            </span>
-                            <span className="tnum text-ink-4">· {friend.friendCode}</span>
-                            {live && friend.activeQualityProfile && <span className="rounded bg-canvas px-1.5 py-0.5 text-[11px] text-ink-3">{friend.activeQualityProfile}</span>}
-                          </p>
-                        </div>
-                        <div className="ml-auto flex items-center gap-1.5">
-                          {live ? (
-                            <button type="button" onClick={() => void handleWatchFriend(friend)} disabled={busy || snapshot.signaling !== 'online'} aria-busy={watchingDeviceId === friend.deviceId} className="telae-press inline-flex min-h-[36px] items-center gap-1.5 rounded-lg bg-signal px-4 text-xs font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50">{watchingDeviceId === friend.deviceId ? 'Entrando…' : 'Assistir'}</button>
-                          ) : null}
-                          {pendingRemoveCode === friend.friendCode ? (
-                            <span role="group" aria-label={`Confirmar remoção de ${friend.displayName}`} title="Vocês deixam de poder assistir uma à outra." className="inline-flex flex-wrap items-center gap-1.5 text-xs text-signal-soft">
-                              Remover {friend.displayName}?
-                              <button type="button" onClick={() => void handleRemoveFriend(friend.friendCode)} disabled={friendActionBusy} className="telae-press min-h-[32px] rounded-md bg-danger px-3 font-semibold text-canvas disabled:opacity-50">Remover</button>
-                              <button type="button" onClick={() => setPendingRemoveCode(null)} className="telae-press min-h-[32px] rounded-md border border-line px-3 text-ink-2 hover:text-ink">Cancelar</button>
-                            </span>
-                          ) : (
-                            <button type="button" onClick={() => setPendingRemoveCode(friend.friendCode)} disabled={friendActionBusy} title="Remover amigo" aria-label={`Remover ${friend.displayName}`} className="telae-press flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg border border-transparent text-ink-4 hover:border-[#3A2A22] hover:bg-[#251D19] hover:text-danger-soft disabled:opacity-50"><Trash2 size={14} aria-hidden="true" /></button>
-                          )}
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </section>
-            </div>
-          </section>
+          <HomeScreen
+            displayName={profile?.displayName}
+            canShare={online}
+            onChooseScreen={openPicker}
+            updateStatus={updateStatus}
+            canCheckUpdate={desktopApiAvailable}
+            onCheckUpdate={() => void window.telae.checkForUpdates()}
+            aside={
+              <FriendsPanel
+                state={friendsState}
+                online={online}
+                canWatch={!busy && online}
+                watchingDeviceId={watchingDeviceId}
+                watchError={watchError}
+                onWatch={friend => void handleWatchFriend(friend)}
+              />
+            }
+          />
         )}
 
         {visibleScreen === 'picker' && (
-          <section aria-labelledby="picker-title" className="telae-panel-enter telae-picker-section">
-            <div className="shrink-0 pb-3 pt-4">
-            <button
-              type="button"
-              onClick={() => setScreen(switchingSource ? 'session' : 'home')}
-              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-ink-3 hover:text-ink"
-            >
-              <ArrowLeft size={16} aria-hidden="true" /> Voltar
-            </button>
-            <h1 id="picker-title" className="mt-2 text-[28px] font-semibold tracking-[-0.035em]">
-              O que você quer compartilhar?
-            </h1>
-            <p className="mt-1 text-sm text-ink-3">{switchingSource ? 'A transmissão continua ativa durante a troca.' : 'A captura só começa depois da sua confirmação.'} O som de uma janela vem apenas do aplicativo escolhido.</p>
-            </div>
-
-            {sourcesLoading && <p className="mt-6 text-sm text-ink-3">Listando telas e janelas…</p>}
-
-            {sourcesError && (
-              <div className="mt-6 rounded-md border border-line bg-surface p-4">
-                <p className="text-sm">{sourcesError}</p>
-                <button
-                  type="button"
-                  onClick={() => void loadSources()}
-                  className="telae-press mt-3 min-h-[40px] rounded-md border border-line bg-active px-4 text-sm font-semibold"
-                >
-                  Tentar de novo
-                </button>
-              </div>
-            )}
-
-            {!sourcesLoading && !sourcesError && (
-              <>
-                <div role="region" aria-label="Fontes disponíveis" tabIndex={0} className="telae-picker-sources min-h-0 flex-1 overflow-y-auto px-1 pb-4">
-                  <SourceGroup title="Telas" sources={screens} selectedId={selectedId} onSelect={setSelectedId} />
-                  <SourceGroup title="Janelas" sources={windowsList} selectedId={selectedId} onSelect={setSelectedId} />
-                </div>
-
-                <div className="telae-picker-actions shrink-0 rounded-xl border border-line-strong bg-surface p-4">
-                  <p className="telae-selected-source mb-3 truncate text-sm font-medium" title={sources.find(item => item.id === selectedId)?.name}>
-                    {sources.find(item => item.id === selectedId)?.name ?? 'Escolha uma tela ou janela acima'}
-                  </p>
-                  <div className="telae-picker-action-row">
-                  <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
-                    {!switchingSource && <QualityPicker value={quality} onChange={setQuality} />}
-
-                  </div>
-
-                  {formError && (
-                    <p role="alert" className="mt-4 text-sm text-danger">
-                      {formError}
-                    </p>
-                  )}
-
-                  <div className="telae-picker-submit">
-                    <button
-                      type="button"
-                      onClick={() => void handleStartSharing()}
-                      disabled={busy || !selectedId}
-                      className="telae-press telae-primary-action min-h-[48px] w-full rounded-lg bg-signal px-5 text-sm font-semibold text-canvas hover:bg-signal-hover disabled:opacity-50"
-                    >
-                      {busy ? 'Preparando…' : switchingSource ? 'Trocar fonte agora' : 'Começar a compartilhar'}
-                    </button>
-                  </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
+          <PickerScreen
+            sources={sources}
+            loading={sourcesLoading}
+            error={sourcesError}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            quality={quality}
+            onQuality={setQuality}
+            switching={switchingSource}
+            busy={busy}
+            formError={formError}
+            onBack={() => setScreen(switchingSource ? 'session' : 'home')}
+            onReload={() => void loadSources()}
+            onStart={() => void handleStartSharing()}
+          />
         )}
 
         {visibleScreen === 'profile' && (
-          <section aria-labelledby="profile-title" className="max-w-[520px]">
-            <button
-              type="button"
-              onClick={() => setScreen(profile?.displayName ? 'home' : 'setup')}
-              className="telae-press flex min-h-[40px] items-center gap-2 rounded-md px-2 text-sm text-ink-3 hover:text-ink"
-            >
-              <ArrowLeft size={16} aria-hidden="true" /> Voltar
-            </button>
-            <h1 id="profile-title" className="mt-3 text-[28px] font-semibold tracking-tight">
-              Seu perfil
-            </h1>
-            <p className="mt-2 text-sm text-ink-2">Esse é o nome que aparece para seus amigos.</p>
-            <form
-              className="mt-7 rounded-2xl border border-line bg-surface p-6"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void saveName()
-              }}
-            >
-              <label htmlFor="profile-name" className="mb-2 block text-xs text-ink-2">
-                Seu nome
-              </label>
-              <input
-                id="profile-name"
-                value={nameInput}
-                onChange={(event) => setNameInput(event.target.value)}
-                maxLength={32}
-                autoComplete="off"
-                className="h-12 w-full rounded-lg border border-line-input bg-canvas px-4 text-[15px]"
-              />
-              {formError && (
-                <p role="alert" className="mt-2 text-sm text-danger">
-                  {formError}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={busy}
-                className="telae-press mt-5 min-h-[44px] rounded-lg bg-signal px-6 text-[15px] font-semibold text-canvas disabled:opacity-50"
-              >
-                {busy ? 'Salvando…' : 'Salvar'}
-              </button>
-            </form>
-          </section>
+          <ProfileScreen
+            value={nameInput}
+            onChange={setNameInput}
+            onSubmit={() => void saveName()}
+            busy={busy}
+            error={formError}
+            onBack={() => setScreen(profile?.displayName ? 'home' : 'setup')}
+          />
         )}
 
         {visibleScreen === 'session' && snapshot.role === 'sharer' && snapshot.state !== 'ended' && (
@@ -898,25 +471,17 @@ export default function App() {
           >
             {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
               <div className="mx-auto max-w-[520px] py-16 text-center">
-                <p className="flex items-center justify-center gap-2 text-[15px]">
+                <p className="flex items-center justify-center gap-2.5 text-[15px]">
                   <Signal size={18} className="text-signal" aria-hidden="true" />
                   {stateLabel[snapshot.state]}
                 </p>
-                {snapshot.error && (
-                  <p role="alert" className="mt-2 text-sm text-danger">
-                    {snapshot.error}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void handleLeave().then(() => setScreen('home'))}
-                  className="telae-press mt-6 min-h-[44px] rounded-md border border-line bg-surface px-6 text-sm font-semibold"
-                >
+                {snapshot.error && <p role="alert" className="mt-2 text-sm text-danger-soft">{snapshot.error}</p>}
+                <button type="button" onClick={() => void handleLeave().then(() => setScreen('home'))} className="telae-press btn btn-secondary btn-lg mt-6">
                   Cancelar
                 </button>
                 <div className="mt-6 flex justify-center">
                   <LiveFriendsSwitch
-                    friends={friends}
+                    friends={friendsState.friends}
                     currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
                     pendingDeviceId={watchingDeviceId}
                     disabled={busy || watchingDeviceId !== null}
@@ -929,7 +494,7 @@ export default function App() {
 
             {snapshot.hasRemoteStream && (
               <div className="telae-viewer-playback relative">
-                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-[10px] border border-line">
+                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-xl border border-line">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -945,12 +510,12 @@ export default function App() {
                   role="group"
                   onMouseEnter={pokeOverlay}
                   onMouseLeave={pokeOverlay}
-                  className={`telae-viewer-controls absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-[10px] bg-black/70 px-4 py-3 transition-opacity duration-200 ${
+                  className={`telae-viewer-controls absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-xl px-4 py-3 transition-opacity duration-200 ${
                     overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
                   }`}
                 >
                   <LiveFriendsSwitch
-                    friends={friends}
+                    friends={friendsState.friends}
                     currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
                     pendingDeviceId={watchingDeviceId}
                     disabled={busy || watchingDeviceId !== null}
@@ -967,7 +532,7 @@ export default function App() {
                         setMuted(true)
                       }
                     }}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-ink"
+                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
                     aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
                     title={muted || volume === 0 ? 'Ativar som (M)' : 'Silenciar (M)'}
                   >
@@ -989,7 +554,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setFitCover((previous) => !previous)}
-                    className="telae-press min-h-[40px] rounded-md px-3 text-sm text-ink"
+                    className="telae-press min-h-[40px] rounded-lg px-3 text-sm text-ink"
                     aria-pressed={fitCover}
                   >
                     {fitCover ? 'Ajustar' : 'Preencher'}
@@ -997,7 +562,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowStats(previous => !previous)}
-                    className={`telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md ${showStats ? 'bg-active text-signal' : 'text-ink'}`}
+                    className={`telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg ${showStats ? 'bg-active text-signal' : 'text-ink'}`}
                     aria-pressed={showStats}
                     aria-label="Estatísticas da transmissão"
                     title="Estatísticas (I)"
@@ -1007,31 +572,30 @@ export default function App() {
                   <button
                     type="button"
                     onClick={toggleFullscreen}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-md text-ink"
+                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
                     aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
                     title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia (F)'}
                   >
                     {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
                   </button>
-                    <button
+                  <button
                     type="button"
                     onClick={() => void handleLeave().then(() => setScreen('home'))}
-                    className="telae-press ml-auto min-h-[40px] rounded-md bg-danger px-5 text-sm font-semibold text-canvas"
+                    className="telae-press ml-auto min-h-[40px] rounded-lg px-5 text-sm font-semibold"
                   >
                     Sair
                   </button>
                 </div>
                 {showStats && <StreamStats diagnostics={snapshot.diagnostics} connection={snapshot.connectionQuality} className="absolute right-3 top-3 w-[300px] max-w-[calc(100%-24px)]" />}
-                {formError && <p role="alert" className="absolute left-3 top-3 rounded-md bg-surface px-4 py-3 text-sm text-danger">{formError}</p>}
+                {formError && <p role="alert" className="absolute left-3 top-3 rounded-lg border border-line-strong bg-surface px-4 py-3 text-sm text-danger-soft">{formError}</p>}
               </div>
             )}
-
-
           </div>
         )}
+
         {visibleScreen === 'session' && snapshot.state === 'ended' && (
-          <div className="mx-auto max-w-[520px] py-16 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Transmissão terminada</h1>
+          <div className="telae-panel-enter mx-auto max-w-[520px] py-16 text-center">
+            <h1 className="text-[26px] font-semibold tracking-[-0.03em]">Transmissão terminada</h1>
             {snapshot.error && <p className="mt-2 text-sm text-ink-3">{snapshot.error}</p>}
             <button
               type="button"
@@ -1039,13 +603,13 @@ export default function App() {
                 controller.resetToIdle()
                 setScreen('home')
               }}
-              className="telae-press mt-6 min-h-[44px] rounded-md bg-signal px-6 text-[15px] font-semibold text-canvas"
+              className="telae-press btn btn-primary btn-lg mt-6"
             >
               Voltar ao início
             </button>
             <div className="mt-8 flex justify-center">
               <LiveFriendsSwitch
-                friends={friends}
+                friends={friendsState.friends}
                 currentSharerDeviceId={null}
                 pendingDeviceId={watchingDeviceId}
                 disabled={busy || watchingDeviceId !== null}
@@ -1055,7 +619,6 @@ export default function App() {
             </div>
           </div>
         )}
-
       </main>
     </div>
   )

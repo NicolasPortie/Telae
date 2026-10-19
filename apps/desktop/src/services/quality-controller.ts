@@ -2,13 +2,13 @@ import type { ContentMode, DiagnosticsSnapshot, QualityProfile } from './types'
 import { qualityFramerate } from './quality-profiles'
 
 /**
- * QualityController — deep module do Ticket 05.
+ * QualityController — adaptação de qualidade da transmissão.
  *
  * Traduz Quality Profile + estatísticas ao vivo em parâmetros do
  * RTCRtpSender. A UI nunca entende WebRTC; ela só escolhe o perfil.
  *
  * Tetos iniciais para ajuste em laboratório (ARCHITECTURE.md) —
- * o benchmark (Ticket 10) substitui por evidência medida.
+ * o benchmark de release substitui por evidência medida.
  */
 export type QualityDecision = {
   maxBitrateBps: number

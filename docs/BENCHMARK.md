@@ -1,4 +1,4 @@
-# Telae — Release Benchmark (Ticket 10)
+# Telae — Release Benchmark
 
 Protocolo repetível para validar os Quality Targets do `PROJECT_SPEC.md` no release candidate.
 
