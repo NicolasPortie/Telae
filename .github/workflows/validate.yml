@@ -22,7 +22,7 @@ jobs:
       TELAE_E2E_RELAY: '0'
       Profiles__Path: ${{ github.workspace }}/.telae-validation-profiles.json
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
