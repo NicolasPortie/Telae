@@ -8,6 +8,8 @@
 
 Aplicativo desktop para Windows com vídeo até 1440p60, áudio do sistema ou do aplicativo escolhido e transporte WebRTC peer-to-peer.
 
+[![CI](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml/badge.svg)](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml)
+![License](https://img.shields.io/badge/license-MIT-green)
 ![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
@@ -32,7 +34,8 @@ O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assisti
 - **Até 12 espectadores** por transmissão, cada um com qualidade e recuperação independentes.
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
 - **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.
-- **Atualização automática** pelo próprio servidor, instalada em segundo plano.
+- **Avisos do Windows** quando um amigo começa a transmitir, início automático opcional e atualização automática em segundo plano.
+- **Sem conta nem senha**: cada instalação tem uma identidade criptográfica própria ([ADR 0003](docs/adr/0003-device-identity.md)).
 
 <table>
   <tr>
@@ -83,13 +86,23 @@ npm ci
 npm run dev
 ```
 
+## Self-hosting
+
+O servidor de sinalização roda em um container:
+
+```bash
+docker compose up -d
+```
+
+Depois, no app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor persiste perfis em um volume e expõe `GET /health`. Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)).
+
 ## Testes e qualidade
 
 ```bash
 cd apps/desktop
 npm run lint        # oxlint
 npm run typecheck   # tsc
-npm test            # testes unitários (vitest)
+npm test            # testes unitários e de componentes (vitest)
 npm run test:e2e    # duas instâncias do Electron + servidor local (Playwright)
 ```
 
@@ -104,5 +117,6 @@ O E2E com captura real de tela e áudio é opt-in (`TELAE_E2E_MEDIA=1`). Veja [d
 - [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
 - [Design da interface](docs/DESIGN.md)
 - [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
-- [Qualidade de transmissão](docs/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
+- [Contribuindo](CONTRIBUTING.md) · [Segurança](SECURITY.md) · [Licença MIT](LICENSE)
+- [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
 - [Changelog](CHANGELOG.md) · [Glossário](GLOSSARY.md)

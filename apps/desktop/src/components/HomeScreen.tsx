@@ -5,6 +5,12 @@ import { ShareIllustration } from './ShareIllustration'
 
 const UPDATE_BUSY_PHASES = ['checking', 'downloading', 'ready', 'installing']
 
+const STEPS = [
+  { title: 'Escolha o que mostrar', text: 'Uma tela inteira ou só uma janela, com a qualidade que preferir.' },
+  { title: 'Seus amigos veem "Ao vivo"', text: 'Quem está na sua lista é avisado na hora, sem enviar link nem código.' },
+  { title: 'Assistem com 1 clique', text: 'Imagem nítida e som sincronizado, direto entre os computadores.' },
+]
+
 const HIGHLIGHTS = [
   { icon: Monitor, label: 'Até 1440p60' },
   { icon: Volume2, label: 'Áudio do sistema' },
@@ -55,6 +61,16 @@ export function HomeScreen({ displayName, canShare, onChooseScreen, updateStatus
               </ul>
             </section>
           </div>
+
+          <ol className="telae-steps" aria-label="Como funciona">
+            {STEPS.map((step, index) => (
+              <li key={step.title}>
+                <span aria-hidden="true" className="telae-step-number tnum">{index + 1}</span>
+                <p className="mt-3 text-[13px] font-medium">{step.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-3">{step.text}</p>
+              </li>
+            ))}
+          </ol>
 
           <div className="telae-home-footer">
             <p className="text-xs text-ink-3">{updateStatus?.phase === 'current' ? 'Você está na versão mais recente.' : 'As atualizações são instaladas automaticamente pelo app.'}</p>

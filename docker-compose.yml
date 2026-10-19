@@ -1,0 +1,26 @@
+# Servidor de sinalização do Telae para uso próprio (self-hosting).
+#   docker compose up -d
+# O app desktop aponta para ele em Configurações > Servidor de sinalização.
+services:
+  telae-server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5015:5015"
+    environment:
+      # Atrás de um proxy reverso (Cloudflare, Caddy, nginx), informe o IP do proxy
+      # e o cabeçalho que carrega o IP do cliente.
+      # ClientAddress__KnownProxies__0: "172.18.0.1"
+      # ClientAddress__HeaderName: "X-Forwarded-For"
+      #
+      # TURN é opcional, mas necessário para redes restritivas. Veja ops/turnserver.conf.example.
+      # Turn__Secret: "${TELAE_TURN_SECRET}"
+      # Turn__Urls__0: "turn:turn.seudominio.com:3478?transport=udp"
+      Ice__Servers__0__Urls__0: "stun:stun.l.google.com:19302"
+    volumes:
+      - telae-data:/data
+
+volumes:
+  telae-data:
