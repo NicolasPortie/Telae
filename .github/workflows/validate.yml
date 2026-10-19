@@ -23,7 +23,7 @@ jobs:
       Profiles__Path: ${{ github.workspace }}/.telae-validation-profiles.json
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
