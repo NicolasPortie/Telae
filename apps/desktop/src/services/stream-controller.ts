@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { captureDesktopSource, stopMediaStream } from './capture'
 import type { QualityProfile } from './types'
 
@@ -68,7 +69,7 @@ export class StreamController {
   }
 
   async start(sourceId: string, quality: QualityProfile): Promise<MediaStream> {
-    if (!sourceId.trim()) throw new Error('Escolha uma tela ou janela antes de iniciar.')
+    if (!sourceId.trim()) throw new Error(t('Escolha uma tela ou janela antes de iniciar.'))
     const token = ++this.startToken
     this.cancelPendingCaptures()
     this.teardownStream()
@@ -78,30 +79,30 @@ export class StreamController {
       const stream = await this.captureSource(sourceId, quality)
       if (token !== this.startToken) {
         this.deps.release(stream)
-        throw new Error('Captura substituída por uma nova seleção.')
+        throw new Error(t('Captura substituída por uma nova seleção.'))
       }
       this.stream = stream
       this.observeEnded(stream)
-      if (token !== this.startToken) throw new Error('A fonte escolhida foi encerrada.')
+      if (token !== this.startToken) throw new Error(t('A fonte escolhida foi encerrada.'))
       this.setState('live')
       return stream
     } catch (error) {
       if (token !== this.startToken) throw error instanceof Error ? error : new Error(String(error))
       this.teardownStream()
-      const message = error instanceof Error ? error.message : 'Não foi possível iniciar a captura.'
+      const message = error instanceof Error ? error.message : t('Não foi possível iniciar a captura.')
       this.setState('idle', message)
       throw new Error(message)
     }
   }
 
   async prepareSwitch(sourceId: string, quality: QualityProfile) {
-    if (!this.stream) throw new Error('Inicie a transmissão antes de trocar a fonte.')
+    if (!this.stream) throw new Error(t('Inicie a transmissão antes de trocar a fonte.'))
     const token = this.startToken
     const previous = this.stream
     const current = await this.captureSource(sourceId, quality)
     if (token !== this.startToken || this.stream !== previous) {
       this.deps.release(current)
-      throw new Error('A transmissão foi encerrada durante a troca de fonte.')
+      throw new Error(t('A transmissão foi encerrada durante a troca de fonte.'))
     }
     this.preparedStreams.add(current)
     const rollback = () => {
@@ -112,7 +113,7 @@ export class StreamController {
       commit: () => {
         if (token !== this.startToken || this.stream !== previous || !this.preparedStreams.has(current) || current.getVideoTracks?.()[0]?.readyState === 'ended') {
           rollback()
-          throw new Error('A fonte ou a transmissão foi encerrada durante a troca.')
+          throw new Error(t('A fonte ou a transmissão foi encerrada durante a troca.'))
         }
         this.preparedStreams.delete(current)
         this.stream = current

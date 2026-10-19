@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { Check } from 'lucide-react'
+import { t } from '../i18n'
 import type { CaptureSource } from '../shared/contracts'
 
 export function SourceGroup({
@@ -63,7 +64,7 @@ export function SourceGroup({
                 )}
                 {active && (
                   <span aria-hidden="true" className="absolute right-2 top-2 flex items-center gap-1 rounded-full border border-signal/50 bg-canvas/90 px-2.5 py-1 text-[11px] font-semibold text-signal-soft backdrop-blur">
-                    <Check size={12} /> Selecionada
+                    <Check size={12} /> {t('Selecionada')}
                   </span>
                 )}
                 <span

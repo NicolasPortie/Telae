@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { getLocale, resolveLocale, setLocale, subscribeLocale, t } from './i18n'
 import { DiagnosticsHistory } from './services/diagnostics-history'
 import { AppHeader } from './components/AppHeader'
 import { FriendsPanel } from './components/FriendsPanel'
@@ -18,6 +19,10 @@ type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'profile'
 
 export default function App() {
   const [controller] = useState(() => new ShareSessionController())
+  // Fica depois do controller porque os testes E2E localizam o App pelo primeiro hook.
+  // Re-renderiza a árvore quando o idioma muda; os componentes leem o texto com t().
+  const locale = useSyncExternalStore(subscribeLocale, getLocale)
+  useEffect(() => { document.documentElement.lang = locale }, [locale])
   const [snapshot, setSnapshot] = useState(() => controller.getSnapshot())
   const [screen, setScreen] = useState<Screen>('boot')
   const [profile, setProfile] = useState<LocalProfile | null>(null)
@@ -77,6 +82,12 @@ export default function App() {
 
   useEffect(() => () => controller.dispose(), [controller])
 
+  // Idioma salvo (ou o do Windows) antes de desenhar a primeira tela.
+  useEffect(() => {
+    if (!desktopApiAvailable) return
+    void window.telae.getSettings().then(settings => setLocale(resolveLocale(settings.language, navigator.language))).catch(() => undefined)
+  }, [desktopApiAvailable])
+
   // Boot: perfil local + ambiente (sincroniza com o main process via IPC).
   useEffect(() => {
     let cancelled = false
@@ -96,7 +107,7 @@ export default function App() {
           try {
             await controller.connect(local.displayName)
           } catch (error) {
-            if (!cancelled) setConnectError(error instanceof Error ? error.message : 'Falha ao conectar.')
+            if (!cancelled) setConnectError(error instanceof Error ? error.message : t('Falha ao conectar.'))
           }
         }
       } catch {
@@ -119,7 +130,7 @@ export default function App() {
         setConnectError(null)
         setScreen('home')
       } catch (error) {
-        setConnectError(error instanceof Error ? error.message : 'Não foi possível conectar ao Telae.')
+        setConnectError(error instanceof Error ? error.message : t('Não foi possível conectar ao Telae.'))
       } finally {
         setBusy(false)
       }
@@ -129,7 +140,7 @@ export default function App() {
 
   const saveName = useCallback(async () => {
     if (!desktopApiAvailable) {
-      setFormError('Abra o aplicativo Telae para continuar.')
+      setFormError(t('Abra o aplicativo Telae para continuar.'))
       return
     }
 
@@ -144,11 +155,11 @@ export default function App() {
         await controller.connect(local.displayName)
         setConnectError(null)
       } catch (error) {
-        setConnectError(error instanceof Error ? error.message : 'Seu nome foi salvo, mas não foi possível conectar.')
+        setConnectError(error instanceof Error ? error.message : t('Seu nome foi salvo, mas não foi possível conectar.'))
       }
       setScreen('home')
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Não foi possível salvar seu nome.')
+      setFormError(error instanceof Error ? error.message : t('Não foi possível salvar seu nome.'))
     } finally {
       setBusy(false)
     }
@@ -156,7 +167,7 @@ export default function App() {
 
   const loadSources = useCallback(async () => {
     if (!desktopApiAvailable) {
-      setSourcesError('Abra o Telae pelo Electron para listar telas e janelas.')
+      setSourcesError(t('Abra o Telae pelo Electron para listar telas e janelas.'))
       return
     }
     setSourcesLoading(true)
@@ -168,9 +179,9 @@ export default function App() {
         if (previous && list.some((item) => item.id === previous)) return previous
         return list[0]?.id ?? ''
       })
-      if (list.length === 0) setSourcesError('Nenhuma tela ou janela encontrada para compartilhar.')
+      if (list.length === 0) setSourcesError(t('Nenhuma tela ou janela encontrada para compartilhar.'))
     } catch (error) {
-      setSourcesError(error instanceof Error ? error.message : 'Não foi possível listar suas telas e janelas.')
+      setSourcesError(error instanceof Error ? error.message : t('Não foi possível listar suas telas e janelas.'))
     } finally {
       setSourcesLoading(false)
     }
@@ -208,7 +219,7 @@ export default function App() {
 
   const handleStartSharing = useCallback(async () => {
     if (!selectedId) {
-      setFormError('Escolha uma tela ou janela antes de iniciar.')
+      setFormError(t('Escolha uma tela ou janela antes de iniciar.'))
       return
     }
     setBusy(true)
@@ -221,7 +232,7 @@ export default function App() {
       setSwitchingSource(false)
       setScreen('session')
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Não foi possível iniciar.')
+      setFormError(error instanceof Error ? error.message : t('Não foi possível iniciar.'))
     } finally {
       setBusy(false)
     }
@@ -244,7 +255,7 @@ export default function App() {
       setScreen('session')
     } catch (error) {
       // Na troca, a transmissão atual continua e o erro aparece no player; fora dela, volta à lista.
-      setWatchError(error instanceof Error ? error.message : 'Não foi possível entrar na transmissão do amigo.')
+      setWatchError(error instanceof Error ? error.message : t('Não foi possível entrar na transmissão do amigo.'))
       if (!viewing) setScreen('home')
     } finally {
       setBusy(false)
@@ -289,19 +300,19 @@ export default function App() {
     setBusy(true)
     setFormError(null)
     try { await action() }
-    catch (error) { setFormError(error instanceof Error ? error.message : 'Não foi possível concluir a alteração.') }
+    catch (error) { setFormError(error instanceof Error ? error.message : t('Não foi possível concluir a alteração.')) }
     finally { setBusy(false) }
   }, [])
 
   const stateLabel: Record<string, string> = {
-    idle: 'Pronto',
-    preparing: 'Preparando captura…',
-    'waiting-for-peer': 'Aguardando seu amigo…',
-    joining: 'Localizando transmissão…',
-    negotiating: 'Negociando conexão…',
-    live: snapshot.role === 'viewer' ? 'Assistindo' : 'Ao vivo',
-    reconnecting: 'Reconectando…',
-    ended: 'Transmissão terminada',
+    idle: t('Pronto'),
+    preparing: t('Preparando captura…'),
+    'waiting-for-peer': t('Aguardando seu amigo…'),
+    joining: t('Localizando transmissão…'),
+    negotiating: t('Negociando conexão…'),
+    live: snapshot.role === 'viewer' ? t('Assistindo') : t('Ao vivo'),
+    reconnecting: t('Reconectando…'),
+    ended: t('Transmissão terminada'),
   }
 
   return (
@@ -325,7 +336,7 @@ export default function App() {
           {formError ?? snapshot.error ?? sourcesError ?? ''}
         </div>
 
-        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">Abrindo Telae…</p>}
+        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">{t('Abrindo Telae…')}</p>}
 
         {visibleScreen === 'setup' && (
           <SetupScreen value={nameInput} onChange={setNameInput} onSubmit={() => void saveName()} busy={busy} error={formError} desktopApiAvailable={desktopApiAvailable} />
@@ -415,7 +426,7 @@ export default function App() {
 
         {visibleScreen === 'session' && snapshot.state === 'ended' && (
           <div className="telae-panel-enter mx-auto max-w-[520px] py-16 text-center">
-            <h1 className="text-[26px] font-semibold tracking-[-0.03em]">Transmissão terminada</h1>
+            <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{t('Transmissão terminada')}</h1>
             {snapshot.error && <p className="mt-2 text-sm text-ink-3">{snapshot.error}</p>}
             <button
               type="button"
@@ -425,7 +436,7 @@ export default function App() {
               }}
               className="telae-press btn btn-primary btn-lg mt-6"
             >
-              Voltar ao início
+              {t('Voltar ao início')}
             </button>
             <div className="mt-8 flex justify-center">
               <LiveFriendsSwitch

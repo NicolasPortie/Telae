@@ -98,7 +98,7 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-load-'))
     const env = Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== undefined)) as Record<string, string>
     if (process.env.TELAE_E2E_SIGNALING_URL) env.TELAE_SIGNALING_URL = process.env.TELAE_E2E_SIGNALING_URL
-    const app = await electron.launch({ args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])], env })
+    const app = await electron.launch({ args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])], env })
     const page = await app.firstWindow()
     instances.push({ app, page, directory })
     await page.getByLabel('Seu nome').fill(name)

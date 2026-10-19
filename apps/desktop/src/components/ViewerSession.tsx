@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { Activity, Maximize, Minimize, Signal, Volume2, VolumeX } from 'lucide-react'
+import { t } from '../i18n'
 import type { ShareSessionController } from '../services/share-session'
 import type { DeviceSnapshot } from '../services/types'
 import { LiveFriendsSwitch } from './LiveFriendsSwitch'
@@ -70,7 +71,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
 
   const toggleFullscreen = useCallback(() => {
     const change = document.fullscreenElement ? document.exitFullscreen() : stageRef.current?.requestFullscreen()
-    void change?.catch(() => setError('Não foi possível abrir a tela cheia. Tente novamente.'))
+    void change?.catch(() => setError(t('Não foi possível abrir a tela cheia. Tente novamente.')))
   }, [])
 
   return (
@@ -94,7 +95,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
         onFocusCapture={pokeOverlay}
         onBlurCapture={pokeOverlay}
         tabIndex={0}
-        aria-label="Player da transmissão. F para tela cheia, M para silenciar, I para estatísticas."
+        aria-label={t('Player da transmissão. F para tela cheia, M para silenciar, I para estatísticas.')}
         className={`telae-panel-enter telae-viewer-stage ${live && !overlayVisible ? 'telae-viewer-idle' : ''}`}
       >
         {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
@@ -105,7 +106,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
             </p>
             {snapshot.error && <p role="alert" className="mt-2 text-sm text-danger-soft">{snapshot.error}</p>}
             <button type="button" onClick={onLeave} className="telae-press btn btn-secondary btn-lg mt-6">
-              Cancelar
+              {t('Cancelar')}
             </button>
             <div className="mt-6 flex justify-center">
               <LiveFriendsSwitch
@@ -130,11 +131,11 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 muted={muted}
                 onDoubleClick={toggleFullscreen}
                 className={`telae-viewer-video ${fitCover ? 'object-cover' : 'object-contain'}`}
-                aria-label="Transmissão do seu amigo"
+                aria-label={t('Transmissão do seu amigo')}
               />
             </div>
             <div
-              aria-label="Controles da transmissão"
+              aria-label={t('Controles da transmissão')}
               role="group"
               onMouseEnter={pokeOverlay}
               onMouseLeave={pokeOverlay}
@@ -161,8 +162,8 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                   }
                 }}
                 className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
-                aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
-                title={muted || volume === 0 ? 'Ativar som (M)' : 'Silenciar (M)'}
+                aria-label={muted || volume === 0 ? t('Ativar som') : t('Silenciar')}
+                title={muted || volume === 0 ? t('Ativar som (M)') : t('Silenciar (M)')}
               >
                 {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
               </button>
@@ -175,7 +176,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                   setVolume(Number(event.target.value) / 100)
                   if (muted) setMuted(false)
                 }}
-                aria-label="Volume da transmissão"
+                aria-label={t('Volume da transmissão')}
                 aria-valuetext={`${Math.round(volume * 100)}%`}
                 className="w-24 accent-signal sm:w-32"
               />
@@ -185,15 +186,15 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 className="telae-press min-h-[40px] rounded-lg px-3 text-sm text-ink"
                 aria-pressed={fitCover}
               >
-                {fitCover ? 'Ajustar' : 'Preencher'}
+                {fitCover ? t('Ajustar') : t('Preencher')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowStats(previous => !previous)}
                 className={`telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg ${showStats ? 'bg-active text-signal' : 'text-ink'}`}
                 aria-pressed={showStats}
-                aria-label="Estatísticas da transmissão"
-                title="Estatísticas (I)"
+                aria-label={t('Estatísticas da transmissão')}
+                title={t('Estatísticas (I)')}
               >
                 <Activity size={18} aria-hidden="true" />
               </button>
@@ -201,8 +202,8 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 type="button"
                 onClick={toggleFullscreen}
                 className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
-                aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-                title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia (F)'}
+                aria-label={fullscreen ? t('Sair da tela cheia') : t('Tela cheia')}
+                title={fullscreen ? t('Sair da tela cheia (Esc)') : t('Tela cheia (F)')}
               >
                 {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
               </button>
@@ -211,7 +212,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 onClick={onLeave}
                 className="telae-press ml-auto min-h-[40px] rounded-lg px-5 text-sm font-semibold"
               >
-                Sair
+                {t('Sair')}
               </button>
             </div>
             {showStats && <StreamStats diagnostics={snapshot.diagnostics} connection={snapshot.connectionQuality} className="absolute right-3 top-3 w-[300px] max-w-[calc(100%-24px)]" />}

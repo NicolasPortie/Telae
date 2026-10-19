@@ -26,7 +26,7 @@ async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> 
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([, value]) => value !== undefined),
   ) as Record<string, string>
-  const args = [APP_DIR, '--no-sandbox', `--user-data-dir=${userDataDir}`]
+  const args = [APP_DIR, '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${userDataDir}`]
   if (muteAudioOutput) args.push('--mute-audio')
   const app = await electron.launch({
     args,

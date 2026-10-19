@@ -35,3 +35,7 @@ Classes em `apps/desktop/src/index.css`: `.btn` (`-primary`, `-secondary`, `-gho
 ## Responsividade
 
 A janela mínima é 640 × 560. A tela inicial mantém a ação principal e a lista de amigos acima da dobra a partir de 980 × 650; abaixo disso as colunas empilham. A ilustração do cartão principal aparece apenas em janelas largas.
+
+## Idiomas
+
+O texto-fonte do código é pt-BR e é traduzido em tempo de execução por `t()` (`src/i18n`); o inglês vive em `src/i18n/en.ts`. Frases com número usam `{count}` e `tn()`. O teste `i18n.test.ts` falha se algum texto usado no código (ou mensagem de erro do servidor) não tiver tradução, ou se sobrar tradução sem uso. Para adicionar um idioma, inclua o catálogo e a opção em `LANGUAGES`.
