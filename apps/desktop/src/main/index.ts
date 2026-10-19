@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
-import { app, BrowserWindow, desktopCapturer, ipcMain, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session } from 'electron'
 import type {
   AudioBridgeState,
   AudioProcess,
@@ -15,7 +15,7 @@ import type {
   LocalProfile,
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
-import { readLocalProfile, writeJsonAtomically } from './profile-store.ts'
+import { readLocalProfile, writeJsonAtomically, writeLocalProfile, type SecretCipher } from './profile-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
 
 // Sharing remains active when the main window is minimized or covered.
@@ -130,12 +130,26 @@ function persistSignalingUrl(value: string): string {
   return signalingUrl
 }
 
+const SECRET_PREFIX = 'safe:'
+
+/** Cofre do sistema para a credencial; sem ele (ex.: Linux sem keyring) o perfil segue em arquivo local. */
+function profileCipher(): SecretCipher | undefined {
+  if (!safeStorage.isEncryptionAvailable()) return undefined
+  return {
+    encrypt: plain => SECRET_PREFIX + safeStorage.encryptString(plain).toString('base64'),
+    decrypt: encoded => {
+      if (!encoded.startsWith(SECRET_PREFIX)) return null
+      try { return safeStorage.decryptString(Buffer.from(encoded.slice(SECRET_PREFIX.length), 'base64')) } catch { return null }
+    },
+  }
+}
+
 function readProfile(): LocalProfile {
-  return readLocalProfile(profilePath())
+  return readLocalProfile(profilePath(), profileCipher())
 }
 
 function persistProfile(profile: LocalProfile): LocalProfile {
-  writeJsonAtomically(profilePath(), profile)
+  writeLocalProfile(profilePath(), profile, profileCipher())
   return profile
 }
 
