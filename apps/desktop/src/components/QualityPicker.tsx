@@ -1,14 +1,15 @@
-import { QUALITY_OPTIONS } from '../ui/format'
+import { t } from '../i18n'
+import { qualityOptions } from '../ui/format'
 import type { QualityProfile } from '../services/types'
 
 /** Perfis de qualidade como cartões: resolução e FPS sempre visíveis, e a explicação do escolhido. */
 export function QualityPicker({ value, onChange }: { value: QualityProfile; onChange: (profile: QualityProfile) => void }) {
-  const active = QUALITY_OPTIONS.find(option => option.value === value)
+  const active = qualityOptions().find(option => option.value === value)
   return (
     <fieldset className="min-w-0">
-      <legend className="eyebrow mb-2.5">Qualidade</legend>
-      <div role="radiogroup" aria-label="Qualidade da imagem" aria-describedby="quality-detail" className="flex flex-wrap gap-2">
-        {QUALITY_OPTIONS.map(option => {
+      <legend className="eyebrow mb-2.5">{t('Qualidade')}</legend>
+      <div role="radiogroup" aria-label={t('Qualidade da imagem')} aria-describedby="quality-detail" className="flex flex-wrap gap-2">
+        {qualityOptions().map(option => {
           const selected = option.value === value
           return (
             <button

@@ -17,7 +17,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - Texto terciário com contraste mínimo de 4,5:1 e botão de configurações no lugar do botão de perfil.
 - O player do espectador virou o componente `ViewerSession`; `App.tsx` caiu de mais de 1000 para cerca de 450 linhas.
 
+- **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações. Os textos usam `t()` com o pt-BR como texto-fonte; um teste garante que todo texto tem tradução (inclusive as mensagens do servidor).
+- A credencial do dispositivo passa a ser guardada cifrada com o cofre do sistema (DPAPI); perfis antigos são migrados sem trocar a identidade.
+
 ### Projeto
+- README em inglês (`README.md`) e português (`README.pt-BR.md`), com novas capturas de tela.
+- `TelaeRegistry` dividido em arquivos parciais por responsabilidade (dispositivos, sessões, amigos, convites, conexões e persistência).
 - Licença MIT, `CONTRIBUTING.md`, `SECURITY.md`, `.editorconfig`, Dependabot e modelos de issue e PR.
 - Dockerfile e `docker-compose.yml` para hospedar o servidor.
 - ADR 0003 documenta a identidade por dispositivo (sem contas).

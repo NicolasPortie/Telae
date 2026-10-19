@@ -1,12 +1,14 @@
 <div align="center">
 
+**English** · [Português](README.pt-BR.md)
+
 <img src="apps/desktop/public/icon.svg" alt="Telae" width="88" height="88" />
 
 # Telae
 
-**Compartilhe sua tela com amigos em alta qualidade e baixa latência.**
+**Share your screen with friends in high quality and low latency.**
 
-Aplicativo desktop para Windows com vídeo até 1440p60, áudio do sistema ou do aplicativo escolhido e transporte WebRTC peer-to-peer.
+A Windows desktop app (English and Portuguese UI) with video up to 1440p60, system or per-application audio, and peer-to-peer WebRTC transport.
 
 [![CI](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml/badge.svg)](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -19,66 +21,67 @@ Aplicativo desktop para Windows com vídeo até 1440p60, áudio do sistema ou do
 </div>
 
 <p align="center">
-  <img src="docs/screenshots/home.png" alt="Tela inicial do Telae com o cartão de compartilhamento e a lista de amigos" width="860" />
+  <img src="docs/screenshots/home.png" alt="Telae home screen with the share card and the friends panel" width="860" />
 </p>
 
-## Visão geral
+## Overview
 
-O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e latência baixa. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na lista de amigos e entra com um clique.
+Telae does one thing well: pick a screen or window and let a friend watch it with a sharp picture, synced sound and low latency. There are no rooms, calls or channels. Whoever is streaming shows up as **Live** in your friends list, and you join with one click.
 
-## Recursos
+## Features
 
-- **Até 1440p60** com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou rede.
-- **Áudio sincronizado** do sistema ou apenas do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
-- **Amigos e presença**: código pessoal de 6 caracteres, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo.
-- **Até 12 espectadores** por transmissão, cada um com qualidade e recuperação independentes.
-- **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
-- **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.
-- **Avisos do Windows** quando um amigo começa a transmitir, início automático opcional e atualização automática em segundo plano.
-- **Sem conta nem senha**: cada instalação tem uma identidade criptográfica própria ([ADR 0003](docs/adr/0003-device-identity.md)).
+- **Up to 1440p60** with explicit profiles (720p60, 1080p30, 1080p60, 1440p30, 1440p60) and automatic adaptation under CPU or network pressure.
+- **Synced audio** from the whole system or only the chosen application, captured by a native bridge using Windows process loopback. Discord's audio is excluded automatically when sharing a full screen.
+- **Friends and presence**: a personal 6-character code, mutual friendship, friend requests and quick switching between live streams.
+- **Up to 12 viewers** per stream, each with independent quality and recovery.
+- **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
+- **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.
+- **Windows notifications** when a friend goes live, optional launch at startup and background auto-updates.
+- **No account, no password**: each installation has its own cryptographic identity ([ADR 0003](docs/adr/0003-device-identity.md)), stored with the OS keystore.
+- **English and Portuguese** interface, following the Windows language or chosen in Settings.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Tela de quem transmite, com prévia, espectadores e estatísticas" /></td>
-    <td width="50%"><img src="docs/screenshots/viewer.png" alt="Player do espectador com controles e painel de estatísticas" /></td>
+    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Sharer screen with preview, viewers and statistics" /></td>
+    <td width="50%"><img src="docs/screenshots/viewer.png" alt="Viewer player with controls and the statistics panel" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Quem transmite: prévia, espectadores e telemetria</sub></td>
-    <td align="center"><sub>Quem assiste: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
+    <td align="center"><sub>Sharer: preview, viewers and telemetry</sub></td>
+    <td align="center"><sub>Viewer: player with controls and statistics (key <code>I</code>)</sub></td>
   </tr>
 </table>
 
-## Arquitetura
+## Architecture
 
 ```text
- Desktop (Electron + React)  ◄── sinalização SignalR ──►  Servidor (ASP.NET Core)
+ Desktop (Electron + React)  ◄── SignalR signaling ──►  Server (ASP.NET Core)
         │                                                     │
-        └──────────── mídia WebRTC criptografada ─────────────┘
-                 direta (P2P) · relay TURN como alternativa
+        └──────────── encrypted WebRTC media ─────────────────┘
+                  direct (P2P) · TURN relay as fallback
 ```
 
-| Pasta | Descrição |
+| Folder | Description |
 | --- | --- |
-| [`apps/desktop`](apps/desktop) | Aplicativo Electron com React, TypeScript e Tailwind. Captura, WebRTC, qualidade adaptativa e interface. |
-| [`apps/server`](apps/server) | Serviço de sinalização ASP.NET Core/SignalR: dispositivos, amigos, sessões, convites e credenciais TURN efêmeras. |
-| [`apps/audio-bridge`](apps/audio-bridge) | Ponte de áudio nativa (.NET/NAudio) para captura por aplicativo no Windows. |
-| [`tests`](tests) | Testes do servidor e regressão de áudio real. |
-| [`ops`](ops) | Scripts e unidades para implantação do servidor Linux e publicação das atualizações. |
-| [`docs`](docs) | Arquitetura, decisões (ADR), validações de qualidade e notas de versão. |
+| [`apps/desktop`](apps/desktop) | Electron app with React, TypeScript and Tailwind: capture, WebRTC, adaptive quality and UI. |
+| [`apps/server`](apps/server) | ASP.NET Core/SignalR signaling service: devices, friends, sessions, invites and ephemeral TURN credentials. |
+| [`apps/audio-bridge`](apps/audio-bridge) | Native audio bridge (.NET/NAudio) for per-application capture on Windows. |
+| [`tests`](tests) | Server tests and a real-audio regression test. |
+| [`ops`](ops) | Scripts and units to deploy the Linux server and publish updates. |
+| [`docs`](docs) | Architecture, decision records (ADR), quality validations and release notes (mostly in Portuguese). |
 
-Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e nas [decisões de arquitetura](docs/adr).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the [decision records](docs/adr).
 
-## Como executar
+## Getting started
 
-**Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET SDK 10. O filtro de áudio por aplicativo exige Windows build 20348 ou superior.
+**Requirements:** Windows 10/11 x64, Node.js 22+ and the .NET 10 SDK. Per-application audio filtering needs Windows build 20348 or later.
 
-Servidor de sinalização:
+Signaling server:
 
 ```bash
 dotnet run --project apps/server/Telae.Server.csproj
 ```
 
-Aplicativo desktop:
+Desktop app:
 
 ```bash
 cd apps/desktop
@@ -88,35 +91,35 @@ npm run dev
 
 ## Self-hosting
 
-O servidor de sinalização roda em um container:
+The signaling server runs in a container:
 
 ```bash
 docker compose up -d
 ```
 
-Depois, no app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor persiste perfis em um volume e expõe `GET /health`. Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)).
+Then, in the app, open **Settings > Signaling server** and enter its address (for example `http://localhost:5015`). The server keeps profiles in a volume and exposes `GET /health`. For restrictive networks, configure a TURN server (see [`ops/turnserver.conf.example`](ops/turnserver.conf.example) and the comments in [`docker-compose.yml`](docker-compose.yml)).
 
-## Testes e qualidade
+## Tests and quality
 
 ```bash
 cd apps/desktop
 npm run lint        # oxlint
 npm run typecheck   # tsc
-npm test            # testes unitários e de componentes (vitest)
-npm run test:e2e    # duas instâncias do Electron + servidor local (Playwright)
+npm test            # unit and component tests (vitest)
+npm run test:e2e    # two Electron instances + local server (Playwright)
 ```
 
 ```bash
 dotnet test tests/server/Telae.Server.Tests.csproj
 ```
 
-O E2E com captura real de tela e áudio é opt-in (`TELAE_E2E_MEDIA=1`). Veja [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md) e [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The end-to-end suite with real screen and audio capture is opt-in (`TELAE_E2E_MEDIA=1`). See [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md) and [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
-## Documentação
+## Documentation
 
-- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
-- [Design da interface](docs/DESIGN.md)
-- [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
-- [Contribuindo](CONTRIBUTING.md) · [Segurança](SECURITY.md) · [Licença MIT](LICENSE)
-- [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
-- [Changelog](CHANGELOG.md) · [Glossário](GLOSSARY.md)
+- [Architecture](docs/ARCHITECTURE.md) and [project spec](docs/PROJECT_SPEC.md)
+- [UI design](docs/DESIGN.md)
+- [Operations: release, deploy and updates](docs/OPERATIONS.md)
+- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE)
+- [Streaming quality](docs/validation/STREAMING_QUALITY_2026-10-12.md) and [benchmark](docs/BENCHMARK.md)
+- [Changelog](CHANGELOG.md) · [Glossary](GLOSSARY.md)

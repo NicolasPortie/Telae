@@ -1,3 +1,4 @@
+import { resolveLocale, setLocale, t } from '../i18n/index.ts'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
@@ -50,20 +51,20 @@ const DEFAULT_SIGNALING_URL = app.isPackaged ? PUBLIC_SIGNALING_URL : LOCAL_SIGN
 
 function normalizeSignalingUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
-  if (!trimmed) throw new Error('Informe o endereço do servidor de sinalização.')
+  if (!trimmed) throw new Error(t('Informe o endereço do servidor de sinalização.'))
 
   let parsed: URL
   try {
     parsed = new URL(trimmed)
   } catch {
-    throw new Error('Informe uma URL válida, como https://telae.seudominio.com.')
+    throw new Error(t('Informe uma URL válida, como https://telae.seudominio.com.'))
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('O servidor de sinalização deve usar http:// ou https://.')
+    throw new Error(t('O servidor de sinalização deve usar http:// ou https://.'))
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error('Use somente o endereço base do servidor, sem credenciais, parâmetros ou fragmentos.')
+    throw new Error(t('Use somente o endereço base do servidor, sem credenciais, parâmetros ou fragmentos.'))
   }
 
   return trimmed
@@ -93,7 +94,7 @@ function readSignalingUrl(): string {
   return DEFAULT_SIGNALING_URL
 }
 
-const DEFAULT_SETTINGS: AppSettings = { notifyFriendLive: true, launchAtLogin: false }
+const DEFAULT_SETTINGS: AppSettings = { language: 'auto', notifyFriendLive: true, launchAtLogin: false }
 
 type StoredSettings = Partial<AppSettings> & { signalingUrl?: string }
 
@@ -109,6 +110,7 @@ function readStoredSettings(): StoredSettings {
 function readSettings(): AppSettings {
   const stored = readStoredSettings()
   return {
+    language: stored.language === 'pt-BR' || stored.language === 'en' ? stored.language : DEFAULT_SETTINGS.language,
     notifyFriendLive: typeof stored.notifyFriendLive === 'boolean' ? stored.notifyFriendLive : DEFAULT_SETTINGS.notifyFriendLive,
     launchAtLogin: typeof stored.launchAtLogin === 'boolean' ? stored.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
   }
@@ -116,10 +118,12 @@ function readSettings(): AppSettings {
 
 function persistSettings(patch: Partial<AppSettings>): AppSettings {
   const next: AppSettings = { ...readSettings() }
+  if (patch.language === 'auto' || patch.language === 'pt-BR' || patch.language === 'en') next.language = patch.language
   if (typeof patch.notifyFriendLive === 'boolean') next.notifyFriendLive = patch.notifyFriendLive
   if (typeof patch.launchAtLogin === 'boolean') next.launchAtLogin = patch.launchAtLogin
   writeJsonAtomically(settingsPath(), { ...readStoredSettings(), ...next })
   // Só instalações empacotadas registram a inicialização; o modo de desenvolvimento não deve alterar o Windows.
+  setLocale(resolveLocale(next.language, app.getLocale()))
   if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: next.launchAtLogin, args: next.launchAtLogin ? ['--hidden'] : [] })
   return next
 }
@@ -180,14 +184,14 @@ function registerIpc() {
   ipcMain.handle('profile:get', () => persistProfile(readProfile()))
   ipcMain.handle('profile:set-name', (_event, displayName: string) => {
     const normalized = displayName.trim().slice(0, 32)
-    if (!normalized) throw new Error('Informe seu nome.')
+    if (!normalized) throw new Error(t('Informe seu nome.'))
     const profile = readProfile()
     profile.displayName = normalized
     return persistProfile(profile)
   })
   ipcMain.handle('profile:add-friend', (_event, friendCode: string) => {
     const code = normalizeFriendCode(friendCode)
-    if (!/^[A-Z2-9]{6}$/.test(code)) throw new Error('Código de amigo inválido.')
+    if (!/^[A-Z2-9]{6}$/.test(code)) throw new Error(t('Código de amigo inválido.'))
     const profile = readProfile()
     if (!profile.friendCodes.includes(code)) profile.friendCodes.push(code)
     return persistProfile(profile)
@@ -213,27 +217,27 @@ function registerIpc() {
   })
 
   ipcMain.handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
-    if (!sourceId?.trim()) throw new Error('Escolha uma Capture Source antes de iniciar.')
+    if (!sourceId?.trim()) throw new Error(t('Escolha uma Capture Source antes de iniciar.'))
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 0, height: 0 },
       fetchWindowIcons: false,
     })
     if (!sources.some((source) => source.id === sourceId)) {
-      throw new Error('A Capture Source escolhida não está mais disponível.')
+      throw new Error(t('A Capture Source escolhida não está mais disponível.'))
     }
     selectedCaptureSourceId = sourceId
   })
 
   ipcMain.handle('capture:resolve-window-audio', async (_event, sourceId: string): Promise<number> => {
     if (sourceId !== selectedCaptureSourceId || !sourceId.startsWith('window:'))
-      throw new Error('Selecione uma janela válida para capturar seu áudio.')
+      throw new Error(t('Selecione uma janela válida para capturar seu áudio.'))
     const match = /^window:(\d+):/.exec(sourceId)
-    if (!match) throw new Error('Não foi possível identificar esta janela.')
+    if (!match) throw new Error(t('Não foi possível identificar esta janela.'))
     const result = await execFileAsync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     const processId = Number(result.stdout.trim())
     if (!Number.isInteger(processId) || processId <= 0)
-      throw new Error('Não foi possível identificar o áudio deste aplicativo.')
+      throw new Error(t('Não foi possível identificar o áudio deste aplicativo.'))
     return processId
   })
 
@@ -244,7 +248,7 @@ function registerIpc() {
   })
 
   const startAudioBridge = (processId: number, captureId: string, screen = false) => {
-    if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error('Captura de áudio inválida.')
+    if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error(t('Captura de áudio inválida.'))
     stopAudioBridge()
     const executable = findAudioBridge()
     sendAudioState({ status: 'starting', processId, captureId })
@@ -283,7 +287,7 @@ function registerIpc() {
       audioBridge = null
       audioBridgeCaptureId = null
       if (code && code !== 0 && audioState.status !== 'error') {
-        sendAudioState({ status: 'error', message: `O capturador de áudio encerrou com código ${code}.`, captureId })
+        sendAudioState({ status: 'error', message: t('O capturador de áudio encerrou com código {code}.', { code: String(code) }), captureId })
       } else if (audioState.status !== 'error') {
         sendAudioState({ status: 'idle', captureId })
       }
@@ -291,11 +295,11 @@ function registerIpc() {
   }
 
   ipcMain.handle('audio:start', (_event, processId: number, captureId: string) => {
-    if (!Number.isInteger(processId) || processId <= 0) throw new Error('Processo de áudio inválido.')
+    if (!Number.isInteger(processId) || processId <= 0) throw new Error(t('Processo de áudio inválido.'))
     startAudioBridge(processId, captureId)
   })
   ipcMain.handle('audio:start-screen', (_event, captureId: string) => {
-    if (!selectedCaptureSourceId?.startsWith('screen:')) throw new Error('Selecione uma tela para capturar o áudio.')
+    if (!selectedCaptureSourceId?.startsWith('screen:')) throw new Error(t('Selecione uma tela para capturar o áudio.'))
     startAudioBridge(0, captureId, true)
   })
 
@@ -397,6 +401,7 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.telae.desktop')
+    setLocale(resolveLocale(readSettings().language, app.getLocale()))
     registerIpc()
     registerDisplayMediaHandler()
     await createWindow()

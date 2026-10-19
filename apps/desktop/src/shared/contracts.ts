@@ -35,6 +35,8 @@ export type AudioBridgeState = { captureId?: string } & (
 export type AudioChunk = { captureId: string; data: Uint8Array }
 
 export type AppSettings = {
+  /** Idioma da interface; `auto` segue o idioma do Windows. */
+  language: 'auto' | 'pt-BR' | 'en'
   /** Avisa quando um amigo começa a transmitir e o Telae não está em foco. */
   notifyFriendLive: boolean
   /** Abre o Telae minimizado ao iniciar o Windows. */

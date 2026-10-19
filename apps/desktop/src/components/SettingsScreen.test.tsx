@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AppSettings, TelaeDesktopApi } from '../shared/contracts'
 import { SettingsScreen } from './SettingsScreen'
 
-const settings: AppSettings = { notifyFriendLive: true, launchAtLogin: false }
+const settings: AppSettings = { language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false }
 let api: Pick<TelaeDesktopApi, 'getSettings' | 'updateSettings' | 'getEnvironment' | 'setSignalingUrl'>
 
 beforeEach(() => {

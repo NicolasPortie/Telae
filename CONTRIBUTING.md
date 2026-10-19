@@ -27,4 +27,5 @@ O E2E com captura real de tela e áudio é opcional (`TELAE_E2E_MEDIA=1`) e exig
 - Commits no formato [Conventional Commits](https://www.conventionalcommits.org/pt-br/) (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `ci:`).
 - Cores e espaçamentos vêm dos tokens em `apps/desktop/tailwind.config.cjs`; veja [docs/DESIGN.md](docs/DESIGN.md).
 - Lógica de WebRTC, captura e sinalização fica em `src/services` (sem React) e precisa de teste unitário.
+- Todo texto visível passa por `t('texto em pt-BR')` e precisa de tradução em `apps/desktop/src/i18n/en.ts` (o teste de i18n avisa o que falta).
 - Mudanças visíveis ao usuário entram no [CHANGELOG](CHANGELOG.md).

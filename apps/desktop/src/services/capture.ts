@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { QualityProfile } from './types'
 import { qualityConstraints } from './quality-profiles'
 import { scaleDesktopVideo, stopScaledCapture } from './video-scaler'
@@ -18,7 +19,7 @@ export async function captureDesktopSource(
   try {
     await window.telae.selectCaptureSource(sourceId)
   } catch {
-    throw new Error('A tela ou janela escolhida não está mais disponível.')
+    throw new Error(t('A tela ou janela escolhida não está mais disponível.'))
   }
 
   const isWindow = sourceId.startsWith('window:')
@@ -32,9 +33,9 @@ export async function captureDesktopSource(
     })
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
-      throw new Error('A captura foi cancelada. Escolha novamente a tela ou janela.')
+      throw new Error(t('A captura foi cancelada. Escolha novamente a tela ou janela.'))
     }
-    throw new Error('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.')
+    throw new Error(t('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.'))
   }
 
   const onAbort = () => stopMediaStream(stream)
@@ -44,7 +45,7 @@ export async function captureDesktopSource(
     const track = stream.getVideoTracks()[0]
     if (!track) {
       stopMediaStream(stream)
-      throw new Error('A fonte escolhida não retornou vídeo.')
+      throw new Error(t('A fonte escolhida não retornou vídeo.'))
     }
     track.contentHint = quality === 'auto' || quality === '1080p30' || quality === '1440p30' ? 'detail' : 'motion'
     stream = await scaleDesktopVideo(stream, qualityConstraints(quality), signal)
