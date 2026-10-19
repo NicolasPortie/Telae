@@ -1,10 +1,23 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
-import { upsertFriend } from '../services/friends'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { startedSharing, upsertFriend } from '../services/friends'
 import type { ShareSessionController } from '../services/share-session'
 import type { DeviceSnapshot } from '../services/types'
 import type { LocalProfile } from '../shared/contracts'
 
 const REFRESH_INTERVAL_MS = 12_000
+
+/** Aviso do Windows quando um amigo começa a transmitir e o app não está em foco. */
+function notifyFriendLive(friend: DeviceSnapshot) {
+  if (document.hasFocus() || typeof Notification === 'undefined') return
+  void window.telae.getSettings().then(settings => {
+    if (!settings.notifyFriendLive) return
+    const notification = new Notification(`${friend.displayName} está ao vivo`, {
+      body: 'Abra o Telae para assistir.',
+      silent: true,
+    })
+    notification.onclick = () => window.focus()
+  }).catch(() => undefined)
+}
 
 export type FriendFilter = 'all' | 'live'
 
@@ -28,6 +41,8 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null)
+  const friendsRef = useRef(friends)
+  useEffect(() => { friendsRef.current = friends }, [friends])
 
   const refresh = useCallback(async () => {
     if (!desktopApiAvailable) return
@@ -60,7 +75,11 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
     void refresh()
     const interval = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
     // A presença chega com o snapshot completo do amigo: atualiza na hora, sem nova consulta.
-    const offPresence = controller.onPresenceChanged(device => setFriends(list => upsertFriend(list, device)))
+    const offPresence = controller.onPresenceChanged(device => {
+      const known = friendsRef.current
+      if (startedSharing(known, device)) notifyFriendLive(device)
+      setFriends(list => upsertFriend(list, device))
+    })
     // Pedido novo chega na hora; a busca confirma o estado atual no servidor.
     const offRequest = controller.onFriendRequest(() => {
       void controller.fetchFriendRequests().then(setRequests).catch(() => undefined)

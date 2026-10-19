@@ -34,6 +34,13 @@ export type AudioBridgeState = { captureId?: string } & (
 
 export type AudioChunk = { captureId: string; data: Uint8Array }
 
+export type AppSettings = {
+  /** Avisa quando um amigo começa a transmitir e o Telae não está em foco. */
+  notifyFriendLive: boolean
+  /** Abre o Telae minimizado ao iniciar o Windows. */
+  launchAtLogin: boolean
+}
+
 export type DesktopEnvironment = {
   version: string
   platform: NodeJS.Platform
@@ -62,6 +69,8 @@ export type TelaeDesktopApi = {
   stopAudioCapture(captureId: string): Promise<void>
   getEnvironment(): Promise<DesktopEnvironment>
   setSignalingUrl(signalingUrl: string): Promise<DesktopEnvironment>
+  getSettings(): Promise<AppSettings>
+  updateSettings(patch: Partial<AppSettings>): Promise<AppSettings>
   getUpdateStatus(): Promise<UpdateStatus>
   checkForUpdates(): Promise<void>
   setSessionActive(active: boolean): Promise<void>

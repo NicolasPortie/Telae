@@ -1,11 +1,18 @@
-import { UserRound } from 'lucide-react'
+import { Settings } from 'lucide-react'
 import type { UpdateStatus } from '../shared/contracts'
 import { UpdateNotice } from './UpdateNotice'
 
+const CONNECTION = {
+  online: { label: 'Conectado ao servidor', className: 'is-online' },
+  connecting: { label: 'Conectando ao servidor…', className: 'is-connecting' },
+  offline: { label: 'Sem conexão com o servidor', className: 'is-offline' },
+} as const
+
 /** Barra de título do app: marca, versão instalada e perfil. Os controles da janela ficam à direita (área reservada). */
-export function AppHeader({ version, displayName, profileLocked, updateStatus, sessionActive, connectError, onOpenProfile, onRetryUpdate, onReconnect }: {
+export function AppHeader({ version, displayName, connection, profileLocked, updateStatus, sessionActive, connectError, onOpenProfile, onRetryUpdate, onReconnect }: {
   version: string | null
   displayName: string | undefined
+  connection: 'online' | 'connecting' | 'offline'
   profileLocked: boolean
   updateStatus: UpdateStatus | null
   sessionActive: boolean
@@ -20,18 +27,24 @@ export function AppHeader({ version, displayName, profileLocked, updateStatus, s
         <span aria-hidden="true" className="telae-mark" />
         <p className="text-[16px] font-semibold tracking-[-0.03em]">Telae</p>
         {version && <span aria-label="Versão instalada" title="Versão instalada" className="telae-version tnum">v{version}</span>}
+        <span className="ml-auto" />
+        <span
+          role="img"
+          aria-label={CONNECTION[connection].label}
+          title={CONNECTION[connection].label}
+          className={`telae-connection ${CONNECTION[connection].className}`}
+        />
         <button
           type="button"
           onClick={onOpenProfile}
           disabled={profileLocked}
-          title={profileLocked ? 'Encerre a transmissão para alterar seu nome.' : undefined}
-          className="telae-press telae-profile-chip ml-auto"
-          aria-label="Abrir perfil"
+          title={profileLocked ? 'Encerre a transmissão para abrir as configurações.' : 'Configurações'}
+          className="telae-press telae-profile-chip"
+          aria-label="Abrir configurações"
         >
-          {displayName
-            ? <span aria-hidden="true" className="avatar avatar-live h-6 w-6 text-[11px]">{displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR')}</span>
-            : <UserRound size={16} aria-hidden="true" className="ml-2" />}
+          {displayName && <span aria-hidden="true" className="avatar avatar-live h-6 w-6 text-[11px]">{displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR')}</span>}
           {displayName && <span className="max-w-[140px] truncate">{displayName}</span>}
+          <Settings size={14} aria-hidden="true" className={displayName ? 'text-ink-4' : 'ml-2'} />
         </button>
       </div>
       <UpdateNotice status={updateStatus} sessionActive={sessionActive} onRetry={onRetryUpdate} />

@@ -38,7 +38,7 @@ git push origin v0.1.1
 ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.1'
 ```
 
-O estado persistente do servidor fica fora da pasta de release e não é versionado. Antes de atualizar o backend a partir da 0.1.13, leia as [notas de migração](RELEASE_0.1.13.md): a versão passou a exigir credencial por dispositivo e convite para novos espectadores.
+O estado persistente do servidor fica fora da pasta de release e não é versionado. Antes de atualizar o backend a partir da 0.1.13, leia as [notas de migração](releases/RELEASE_0.1.13.md): a versão passou a exigir credencial por dispositivo e convite para novos espectadores.
 
 ## Atualização automática do desktop
 

@@ -173,7 +173,17 @@ export function FriendsPanel({ state, online, canWatch, watchingDeviceId, watchE
         </section>
       )}
 
-      {friends.length === 0 ? (
+      {friends.length === 0 && !online ? (
+        <div role="status" className="mt-5 grid gap-2" aria-label="Conectando ao servidor">
+          {[0, 1, 2].map(index => (
+            <div key={index} className="flex items-center gap-3 rounded-xl border border-line bg-canvas/60 px-3 py-2.5">
+              <span className="skeleton h-9 w-9 rounded-full" />
+              <div className="grid flex-1 gap-2"><span className="skeleton h-3 w-24" /><span className="skeleton h-2.5 w-16" /></div>
+            </div>
+          ))}
+          <p className="mt-1 text-center text-xs text-ink-3">Conectando ao servidor…</p>
+        </div>
+      ) : friends.length === 0 ? (
         <div className="mt-5 rounded-xl border border-dashed border-line-strong px-6 py-9 text-center">
           <div aria-hidden="true" className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl border border-line-strong bg-raised text-ink-3"><Users size={19} /></div>
           <p className="mt-3 text-sm font-medium text-ink">Nenhum amigo ainda</p>

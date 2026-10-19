@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Activity, Maximize, Minimize, Signal, Volume2, VolumeX } from 'lucide-react'
 import { DiagnosticsHistory } from './services/diagnostics-history'
 import { AppHeader } from './components/AppHeader'
 import { FriendsPanel } from './components/FriendsPanel'
 import { HomeScreen } from './components/HomeScreen'
 import { LiveFriendsSwitch } from './components/LiveFriendsSwitch'
-import { ProfileScreen, SetupScreen } from './components/NameForm'
+import { SetupScreen } from './components/NameForm'
+import { SettingsScreen } from './components/SettingsScreen'
 import { PickerScreen } from './components/PickerScreen'
 import { SharerSession } from './components/SharerSession'
-import { StreamStats } from './components/StreamStats'
+import { ViewerSession } from './components/ViewerSession'
 import { useFriends } from './hooks/useFriends'
 import { ShareSessionController } from './services/share-session'
 import type { DeviceSnapshot, QualityProfile } from './services/types'
@@ -32,12 +32,6 @@ export default function App() {
   const [formError, setFormError] = useState<string | null>(null)
   const [nameInput, setNameInput] = useState('')
   const [elapsed, setElapsed] = useState(0)
-  const [overlayVisible, setOverlayVisible] = useState(true)
-  const [fullscreen, setFullscreen] = useState(false)
-  const [muted, setMuted] = useState(false)
-  const [volume, setVolume] = useState(1)
-  const [fitCover, setFitCover] = useState(false)
-  const [showStats, setShowStats] = useState(false)
   const [switchingSource, setSwitchingSource] = useState(false)
   const [connectError, setConnectError] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null)
@@ -46,8 +40,6 @@ export default function App() {
   const [watchError, setWatchError] = useState<string | null>(null)
 
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const stageRef = useRef<HTMLDivElement | null>(null)
-  const overlayTimer = useRef<number | null>(null)
   const historyRef = useRef(new DiagnosticsHistory())
   const latestSnapshot = useRef(snapshot)
   useEffect(() => { latestSnapshot.current = snapshot; historyRef.current.recordEvent(snapshot) }, [snapshot])
@@ -236,7 +228,6 @@ export default function App() {
   }, [controller, selectedId, quality, switchingSource])
 
   const handleLeave = useCallback(async () => {
-    setOverlayVisible(true)
     await controller.leave()
     setScreen('home')
   }, [controller])
@@ -302,47 +293,6 @@ export default function App() {
     finally { setBusy(false) }
   }, [])
 
-  // Overlay do Viewer: visível ao entrar no live; esconde 3s após o último
-  // movimento de ponteiro (pokeOverlay é chamado pelos handlers, não por effect).
-  const pokeOverlay = useCallback(() => {
-    setOverlayVisible(true)
-    if (overlayTimer.current !== null) window.clearTimeout(overlayTimer.current)
-    overlayTimer.current = window.setTimeout(() => {
-      const interacting = stageRef.current?.querySelector('.telae-viewer-controls:hover, :focus-visible, details[open]')
-      if (!interacting) setOverlayVisible(false)
-    }, 3000)
-  }, [])
-
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      setFullscreen(document.fullscreenElement === stageRef.current && stageRef.current !== null)
-      pokeOverlay()
-    }
-    document.addEventListener('fullscreenchange', onFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
-  }, [pokeOverlay])
-
-  useEffect(() => {
-    if (!viewerLive) return
-    const frame = window.requestAnimationFrame(pokeOverlay)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      if (overlayTimer.current !== null) window.clearTimeout(overlayTimer.current)
-      overlayTimer.current = null
-    }
-  }, [viewerLive, pokeOverlay])
-
-  useEffect(() => {
-    if (!videoRef.current) return
-    videoRef.current.muted = snapshot.role === 'sharer' ? true : muted
-    videoRef.current.volume = volume
-  }, [muted, volume, snapshot.role, visibleScreen])
-
-  const toggleFullscreen = useCallback(() => {
-    const change = document.fullscreenElement ? document.exitFullscreen() : stageRef.current?.requestFullscreen()
-    void change?.catch(() => setFormError('Não foi possível abrir a tela cheia. Tente novamente.'))
-  }, [])
-
   const stateLabel: Record<string, string> = {
     idle: 'Pronto',
     preparing: 'Preparando captura…',
@@ -359,6 +309,7 @@ export default function App() {
       <AppHeader
         version={appVersion}
         displayName={profile?.displayName}
+        connection={snapshot.signaling === 'online' ? 'online' : snapshot.signaling === 'offline' ? 'offline' : 'connecting'}
         profileLocked={sessionActive}
         updateStatus={updateStatus}
         sessionActive={sessionActive}
@@ -420,12 +371,14 @@ export default function App() {
         )}
 
         {visibleScreen === 'profile' && (
-          <ProfileScreen
-            value={nameInput}
-            onChange={setNameInput}
-            onSubmit={() => void saveName()}
-            busy={busy}
-            error={formError}
+          <SettingsScreen
+            name={nameInput}
+            onNameChange={setNameInput}
+            onSaveName={() => void saveName()}
+            nameBusy={busy}
+            nameError={formError}
+            version={appVersion}
+            deviceId={profile?.deviceId}
             onBack={() => setScreen(profile?.displayName ? 'home' : 'setup')}
           />
         )}
@@ -446,151 +399,18 @@ export default function App() {
         )}
 
         {visibleScreen === 'session' && snapshot.role === 'viewer' && (
-          <div
-            ref={stageRef}
-            onMouseMove={pokeOverlay}
-            onTouchStart={pokeOverlay}
-            onKeyDown={(event) => {
-              pokeOverlay()
-              if (event.key === 'Escape' && document.fullscreenElement) {
-                event.preventDefault()
-                void document.exitFullscreen().catch(() => undefined)
-                return
-              }
-              if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return
-              if ((event.target as HTMLElement).closest('input, select, textarea, button, summary')) return
-              if (event.key.toLowerCase() === 'f') { event.preventDefault(); toggleFullscreen() }
-              if (event.key.toLowerCase() === 'm') { event.preventDefault(); setMuted(previous => !previous) }
-              if (event.key.toLowerCase() === 'i') { event.preventDefault(); setShowStats(previous => !previous) }
-            }}
-            onFocusCapture={pokeOverlay}
-            onBlurCapture={pokeOverlay}
-            tabIndex={0}
-            aria-label="Player da transmissão. F para tela cheia, M para silenciar, I para estatísticas."
-            className={`telae-panel-enter telae-viewer-stage ${viewerLive && !overlayVisible ? 'telae-viewer-idle' : ''}`}
-          >
-            {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
-              <div className="mx-auto max-w-[520px] py-16 text-center">
-                <p className="flex items-center justify-center gap-2.5 text-[15px]">
-                  <Signal size={18} className="text-signal" aria-hidden="true" />
-                  {stateLabel[snapshot.state]}
-                </p>
-                {snapshot.error && <p role="alert" className="mt-2 text-sm text-danger-soft">{snapshot.error}</p>}
-                <button type="button" onClick={() => void handleLeave().then(() => setScreen('home'))} className="telae-press btn btn-secondary btn-lg mt-6">
-                  Cancelar
-                </button>
-                <div className="mt-6 flex justify-center">
-                  <LiveFriendsSwitch
-                    friends={friendsState.friends}
-                    currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
-                    pendingDeviceId={watchingDeviceId}
-                    disabled={busy || watchingDeviceId !== null}
-                    error={watchError}
-                    onWatch={(friend) => void handleWatchFriend(friend)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {snapshot.hasRemoteStream && (
-              <div className="telae-viewer-playback relative">
-                <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-xl border border-line">
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted={muted}
-                    onDoubleClick={toggleFullscreen}
-                    className={`telae-viewer-video ${fitCover ? 'object-cover' : 'object-contain'}`}
-                    aria-label="Transmissão do seu amigo"
-                  />
-                </div>
-                <div
-                  aria-label="Controles da transmissão"
-                  role="group"
-                  onMouseEnter={pokeOverlay}
-                  onMouseLeave={pokeOverlay}
-                  className={`telae-viewer-controls absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-xl px-4 py-3 transition-opacity duration-200 ${
-                    overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
-                  }`}
-                >
-                  <LiveFriendsSwitch
-                    friends={friendsState.friends}
-                    currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
-                    pendingDeviceId={watchingDeviceId}
-                    disabled={busy || watchingDeviceId !== null}
-                    error={watchError}
-                    onWatch={(friend) => void handleWatchFriend(friend)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (muted || volume === 0) {
-                        if (volume === 0) setVolume(0.5)
-                        setMuted(false)
-                      } else {
-                        setMuted(true)
-                      }
-                    }}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
-                    aria-label={muted || volume === 0 ? 'Ativar som' : 'Silenciar'}
-                    title={muted || volume === 0 ? 'Ativar som (M)' : 'Silenciar (M)'}
-                  >
-                    {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
-                  </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={Math.round(volume * 100)}
-                    onChange={(event) => {
-                      setVolume(Number(event.target.value) / 100)
-                      if (muted) setMuted(false)
-                    }}
-                    aria-label="Volume da transmissão"
-                    aria-valuetext={`${Math.round(volume * 100)}%`}
-                    className="w-24 accent-signal sm:w-32"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setFitCover((previous) => !previous)}
-                    className="telae-press min-h-[40px] rounded-lg px-3 text-sm text-ink"
-                    aria-pressed={fitCover}
-                  >
-                    {fitCover ? 'Ajustar' : 'Preencher'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowStats(previous => !previous)}
-                    className={`telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg ${showStats ? 'bg-active text-signal' : 'text-ink'}`}
-                    aria-pressed={showStats}
-                    aria-label="Estatísticas da transmissão"
-                    title="Estatísticas (I)"
-                  >
-                    <Activity size={18} aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={toggleFullscreen}
-                    className="telae-press flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-ink"
-                    aria-label={fullscreen ? 'Sair da tela cheia' : 'Tela cheia'}
-                    title={fullscreen ? 'Sair da tela cheia (Esc)' : 'Tela cheia (F)'}
-                  >
-                    {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleLeave().then(() => setScreen('home'))}
-                    className="telae-press ml-auto min-h-[40px] rounded-lg px-5 text-sm font-semibold"
-                  >
-                    Sair
-                  </button>
-                </div>
-                {showStats && <StreamStats diagnostics={snapshot.diagnostics} connection={snapshot.connectionQuality} className="absolute right-3 top-3 w-[300px] max-w-[calc(100%-24px)]" />}
-                {formError && <p role="alert" className="absolute left-3 top-3 rounded-lg border border-line-strong bg-surface px-4 py-3 text-sm text-danger-soft">{formError}</p>}
-              </div>
-            )}
-          </div>
+          <ViewerSession
+            snapshot={snapshot}
+            videoRef={videoRef}
+            friends={friendsState.friends}
+            stateLabel={stateLabel}
+            busy={busy}
+            watchingDeviceId={watchingDeviceId}
+            watchError={watchError}
+            live={viewerLive}
+            onWatch={friend => void handleWatchFriend(friend)}
+            onLeave={() => void handleLeave()}
+          />
         )}
 
         {visibleScreen === 'session' && snapshot.state === 'ended' && (

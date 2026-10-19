@@ -12,7 +12,7 @@ module.exports = {
         raised: '#19191D',
         warm: '#1A1712',
         active: '#222227',
-        ink: { DEFAULT: '#F4F3EF', 2: '#B6B5AF', 3: '#8E8D88', 4: '#5F5E5A' },
+        ink: { DEFAULT: '#F4F3EF', 2: '#B6B5AF', 3: '#8E8D88', 4: '#82817B' },
         line: { DEFAULT: '#222226', strong: '#2D2D33', input: '#3B3B43', warm: '#3D3220' },
         signal: { DEFAULT: '#E0AE5E', hover: '#EBC079', soft: '#EFCE9B' },
         danger: { DEFAULT: '#F0615D', soft: '#F58581' },

@@ -10,6 +10,7 @@ import type {
   AudioBridgeState,
   AudioProcess,
   AudioStreamMetadata,
+  AppSettings,
   CaptureSource,
   LocalProfile,
 } from '../shared/contracts.ts'
@@ -92,9 +93,40 @@ function readSignalingUrl(): string {
   return DEFAULT_SIGNALING_URL
 }
 
+const DEFAULT_SETTINGS: AppSettings = { notifyFriendLive: true, launchAtLogin: false }
+
+type StoredSettings = Partial<AppSettings> & { signalingUrl?: string }
+
+function readStoredSettings(): StoredSettings {
+  try {
+    const parsed = JSON.parse(readFileSync(settingsPath(), 'utf8')) as unknown
+    return parsed && typeof parsed === 'object' ? parsed as StoredSettings : {}
+  } catch {
+    return {}
+  }
+}
+
+function readSettings(): AppSettings {
+  const stored = readStoredSettings()
+  return {
+    notifyFriendLive: typeof stored.notifyFriendLive === 'boolean' ? stored.notifyFriendLive : DEFAULT_SETTINGS.notifyFriendLive,
+    launchAtLogin: typeof stored.launchAtLogin === 'boolean' ? stored.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
+  }
+}
+
+function persistSettings(patch: Partial<AppSettings>): AppSettings {
+  const next: AppSettings = { ...readSettings() }
+  if (typeof patch.notifyFriendLive === 'boolean') next.notifyFriendLive = patch.notifyFriendLive
+  if (typeof patch.launchAtLogin === 'boolean') next.launchAtLogin = patch.launchAtLogin
+  writeJsonAtomically(settingsPath(), { ...readStoredSettings(), ...next })
+  // Só instalações empacotadas registram a inicialização; o modo de desenvolvimento não deve alterar o Windows.
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: next.launchAtLogin, args: next.launchAtLogin ? ['--hidden'] : [] })
+  return next
+}
+
 function persistSignalingUrl(value: string): string {
   const signalingUrl = normalizeSignalingUrl(value)
-  writeJsonAtomically(settingsPath(), { signalingUrl })
+  writeJsonAtomically(settingsPath(), { ...readStoredSettings(), signalingUrl })
   return signalingUrl
 }
 
@@ -268,6 +300,8 @@ function registerIpc() {
     void updates.check(saved)
     return { version: app.getVersion(), platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
   })
+  ipcMain.handle('settings:get', () => readSettings())
+  ipcMain.handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
   ipcMain.handle('update:status', () => updates.getStatus())
   ipcMain.handle('update:check', () => updates.check(readSignalingUrl()))
   ipcMain.handle('update:session-active', (_event, active: boolean) => updates.setSessionActive(active === true))
@@ -307,6 +341,7 @@ async function createWindow() {
     minHeight: 560,
     backgroundColor: '#0b0b0d',
     title: 'Telae',
+    ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../public/icon.png') }),
     autoHideMenuBar: true,
     // Barra de título integrada: a interface desenha o cabeçalho e o Windows mantém os controles da janela.
     titleBarStyle: 'hidden',
@@ -320,6 +355,9 @@ async function createWindow() {
       backgroundThrottling: false,
     },
   })
+
+  // Início automático com o Windows: abre minimizado, sem roubar o foco.
+  if (process.argv.includes('--hidden')) mainWindow.minimize()
 
   mainWindow.webContents.on('will-navigate', event => event.preventDefault())
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

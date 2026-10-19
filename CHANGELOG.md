@@ -11,7 +11,19 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - Seletor de fontes, seletor de qualidade, tela de quem transmite, player e painel de estatísticas atualizados para o mesmo sistema de design (botões, cartões, campos e selos reutilizáveis em `index.css`).
 - A navegação foi dividida em componentes (`HomeScreen`, `FriendsPanel`, `PickerScreen`, `AppHeader`, `NameForm`) e o estado de amigos foi isolado no hook `useFriends`, sem mudança de comportamento.
 
+- **Configurações:** perfil, avisos, início com o Windows, endereço do servidor de sinalização e informações da instalação.
+- **Aviso do Windows** quando um amigo começa a transmitir e o Telae não está em foco.
+- Indicador de conexão no cabeçalho, esqueleto de carregamento na lista de amigos e passos de "Como funciona" na tela inicial.
+- Texto terciário com contraste mínimo de 4,5:1 e botão de configurações no lugar do botão de perfil.
+- O player do espectador virou o componente `ViewerSession`; `App.tsx` caiu de mais de 1000 para cerca de 450 linhas.
+
 ### Projeto
+- Licença MIT, `CONTRIBUTING.md`, `SECURITY.md`, `.editorconfig`, Dependabot e modelos de issue e PR.
+- Dockerfile e `docker-compose.yml` para hospedar o servidor.
+- ADR 0003 documenta a identidade por dispositivo (sem contas).
+- Servidor e testes compilam com avisos tratados como erro; atualizado o cliente SignalR dos testes por vulnerabilidade conhecida.
+- Testes de componentes (Testing Library) para o painel de amigos e as configurações.
+- Notas de versão e validações movidas para `docs/releases` e `docs/validation`.
 - Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
 - Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
 
@@ -43,4 +55,4 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## 0.1.23 e anteriores
 
-Consulte `docs/RELEASE_0.1.12.md` a `docs/RELEASE_0.1.17.md`, `docs/DEPLOYMENT_0.1.16.md` e as tags do repositório.
+Consulte `docs/releases/` e as tags do repositório.

@@ -19,7 +19,7 @@ Definidos em `apps/desktop/tailwind.config.cjs`. Componentes usam apenas nomes s
 | `canvas` | `#0B0B0D` | Fundo do app e campos de entrada |
 | `surface` / `raised` | `#131316` / `#19191D` | Cartões e controles elevados |
 | `active` | `#222227` | Estado ativo e hover |
-| `ink` 1–4 | `#F4F3EF` → `#5F5E5A` | Texto primário a desabilitado |
+| `ink` 1–4 | `#F4F3EF` → `#82817B` | Texto primário a terciário (mínimo 4,5:1) |
 | `line` | `#222226`, `#2D2D33`, `#3B3B43` | Divisores e bordas |
 | `signal` | `#E0AE5E` | Acento, ações primárias e "ao vivo" |
 | `danger` / `ok` | `#F0615D` / `#5FC98A` | Parar e erro / online |
