@@ -8,6 +8,10 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    # Saltos de versão maior (Tailwind 4, Vite 8, Electron...) exigem migração e ficam para decisão manual.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: nuget
     directory: /
     schedule:
