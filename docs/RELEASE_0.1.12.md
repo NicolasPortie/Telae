@@ -31,7 +31,7 @@ git push origin v0.1.12
 O workflow da tag valida servidor e desktop, gera o instalador, publica o GitHub Release e entrega a atualização Windows ao runner `telae-updates`. A implantação do backend continua sendo a etapa explícita já existente:
 
 ```powershell
-ssh nicolas@192.168.15.3 '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.12'
+ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.12'
 ```
 
 Faça a troca do backend depois que a atualização Windows 0.1.12 estiver disponível, em uma janela de manutenção que permita reiniciar as sessões. Preserve o arquivo de perfis e as configurações de TURN; não apague dados para realizar a migração. Confirme `/health`, a versão `0.1.12` em `/updates/windows/latest.yml`, registro dos clientes atualizados e entrada por convite. Teste também a recusa de entrada por ID sem convite.

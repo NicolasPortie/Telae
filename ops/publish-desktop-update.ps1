@@ -1,9 +1,10 @@
 param(
-    [string]$Server = 'nicolas@192.168.15.3',
+    [string]$Server = $env:TELAE_UPDATE_SERVER,
     [string]$DistDir = (Join-Path $PSScriptRoot '..\apps\desktop\dist')
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $Server) { throw 'Informe -Server ou defina TELAE_UPDATE_SERVER (usuario@host).' }
 $manifest = Join-Path $DistDir 'latest.yml'
 if (-not (Test-Path -LiteralPath $manifest)) { throw "Arquivo ausente: $manifest" }
 $version = [regex]::Match((Get-Content -Raw -LiteralPath $manifest), '(?m)^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$').Groups[1].Value

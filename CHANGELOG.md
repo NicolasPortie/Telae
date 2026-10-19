@@ -2,6 +2,19 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/RELEASE_*.md`.
 
+## [Não lançado]
+
+### Interface
+- **Nova identidade visual:** paleta neutra com acento âmbar, tipografia Geist (e Geist Mono para códigos e telemetria) empacotada com o app, e novo ícone do aplicativo.
+- **Barra de título integrada** com marca, versão e perfil; os controles da janela do Windows são preservados.
+- **Tela inicial refeita:** cartão de compartilhamento com ilustração e recursos, painel de amigos com avatares, filtro e remoção ao passar o mouse, e código pessoal em destaque.
+- Seletor de fontes, seletor de qualidade, tela de quem transmite, player e painel de estatísticas atualizados para o mesmo sistema de design (botões, cartões, campos e selos reutilizáveis em `index.css`).
+- A navegação foi dividida em componentes (`HomeScreen`, `FriendsPanel`, `PickerScreen`, `AppHeader`, `NameForm`) e o estado de amigos foi isolado no hook `useFriends`, sem mudança de comportamento.
+
+### Projeto
+- Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
+- Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
+
 ## [0.1.25] - 2026-10-14
 
 ### Correções de transmissão

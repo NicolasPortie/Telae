@@ -40,10 +40,10 @@ describe('DesktopUpdates', () => {
 
   it('checks the update feed on the configured signaling server', async () => {
     const updates = new DesktopUpdates(vi.fn())
-    await updates.check('http://192.168.15.3:5015/')
+    await updates.check('http://192.168.0.10:5015/')
     expect(updaterInstances[0].feed).toEqual({
       provider: 'generic',
-      url: 'http://192.168.15.3:5015/updates/windows/',
+      url: 'http://192.168.0.10:5015/updates/windows/',
     })
     expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
   })

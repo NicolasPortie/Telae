@@ -305,9 +305,12 @@ async function createWindow() {
     height: 790,
     minWidth: 640,
     minHeight: 560,
-    backgroundColor: '#0b0b0c',
+    backgroundColor: '#0b0b0d',
     title: 'Telae',
     autoHideMenuBar: true,
+    // Barra de título integrada: a interface desenha o cabeçalho e o Windows mantém os controles da janela.
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#0e0e11', symbolColor: '#b6b5af', height: 48 },
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

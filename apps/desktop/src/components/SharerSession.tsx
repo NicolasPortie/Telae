@@ -31,8 +31,8 @@ export function SharerSession({
     <section aria-labelledby="sharer-title" className="telae-panel-enter telae-session">
       <div className="telae-session-heading">
         <div>
-          <p className="telae-eyebrow">Sua transmissão</p>
-          <h1 id="sharer-title" className="mt-2 text-[clamp(24px,3vw,32px)] font-semibold leading-tight tracking-[-0.035em]">
+          <p className="eyebrow">Sua transmissão</p>
+          <h1 id="sharer-title" className="mt-2.5 text-[clamp(24px,3vw,32px)] font-semibold leading-tight tracking-[-0.04em]">
             {snapshot.state === 'preparing' ? 'Preparando transmissão' : 'Você está compartilhando'}
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-2">
@@ -40,10 +40,10 @@ export function SharerSession({
               <span aria-hidden="true" className={`telae-status-dot ${snapshot.state === 'live' ? 'is-live' : ''}`} />
               {status}
             </p>
-            {snapshot.liveSinceMs !== null && <span aria-label="Tempo decorrido" className="tnum border-l border-line pl-3">{formatElapsed(elapsed)}</span>}
+            {snapshot.liveSinceMs !== null && <span aria-label="Tempo decorrido" className="tnum border-l border-line pl-3 font-mono">{formatElapsed(elapsed)}</span>}
           </div>
         </div>
-        <button type="button" onClick={onStop} className="telae-press telae-stop-button">
+        <button type="button" onClick={onStop} className="telae-press btn btn-danger btn-lg">
           <Square size={14} aria-hidden="true" /> Parar transmissão
         </button>
       </div>
@@ -78,14 +78,14 @@ export function SharerSession({
           )}
           <p role="status" aria-live="polite" className="mt-3 text-xs text-signal-soft">{busy ? 'Aplicando alterações…' : ''}</p>
           {snapshot.state === 'live' && (snapshot.diagnostics.qualityLimitationReason === 'cpu' || snapshot.diagnostics.qualityLimitationReason === 'bandwidth') && (
-            <p role="status" className="telae-inline-notice mt-3">
+            <p role="status" className="notice mt-3">
               {snapshot.diagnostics.qualityLimitationReason === 'cpu'
                 ? 'A qualidade foi reduzida automaticamente para aliviar o processador. Um perfil mais leve pode manter a imagem mais estável.'
                 : 'A qualidade foi reduzida automaticamente pela capacidade da rede. Um perfil mais leve pode manter a imagem mais estável.'}
             </p>
           )}
           {snapshot.hasLocalStream && !snapshot.includeAudio && snapshot.state !== 'ended' && (
-            <p role="status" className="telae-inline-notice mt-3">
+            <p role="status" className="notice mt-3">
               {snapshot.audioBuffer?.error ? 'O som foi interrompido. Sua tela continua sendo compartilhada.' : 'Esta fonte está sendo compartilhada sem som.'} Para compartilhar com som, troque a fonte.
             </p>
           )}
@@ -97,7 +97,7 @@ export function SharerSession({
           {snapshot.state !== 'ended' && (
             <section className="telae-live-card" aria-labelledby="live-title">
               <div className="flex items-center gap-2 text-signal">
-                <Users size={16} aria-hidden="true" /><h2 id="live-title" className="text-sm font-medium">Ao vivo para seus amigos</h2>
+                <Users size={16} aria-hidden="true" /><h2 id="live-title" className="text-sm font-semibold">Ao vivo para seus amigos</h2>
               </div>
               <p className="mt-3 text-[13px] leading-relaxed text-ink-2">Seus amigos veem <span className="font-semibold text-signal">Ao vivo</span> na lista e entram em 1 clique — sem código.</p>
               <p className="mt-3 text-center text-xs text-ink-3">Até 12 amigos ao mesmo tempo</p>
@@ -105,7 +105,7 @@ export function SharerSession({
           )}
 
           <section aria-label="Espectadores" className="telae-audience">
-            <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">Espectadores</h2><span className="telae-count tnum">{snapshot.viewers.length}</span></div>
+            <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">Espectadores</h2><span className="count tnum">{snapshot.viewers.length}</span></div>
             {snapshot.viewers.length === 0 ? (
               <div className="telae-audience-empty">
                 <span aria-hidden="true" className="telae-empty-icon"><Users size={22} strokeWidth={1.5} /></span>
@@ -118,7 +118,7 @@ export function SharerSession({
                 <ul className="telae-audience-list">
                   {snapshot.viewers.map(viewer => (
                     <li key={viewer.deviceId} className="telae-audience-person">
-                      <span aria-hidden="true" className="telae-avatar">{viewer.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR')}</span>
+                      <span aria-hidden="true" className="avatar h-9 w-9">{viewer.displayName.trim().slice(0, 1).toLocaleUpperCase('pt-BR')}</span>
                       <div className="min-w-0 flex-1"><p title={viewer.displayName} className="truncate text-sm font-medium">{viewer.displayName}</p><p className="mt-1 text-xs text-ink-3">{viewer.state === 'connected' ? 'Assistindo' : viewer.state === 'failed' || viewer.state === 'disconnected' ? 'Reconectando…' : 'Entrando…'}</p></div>
                       <button type="button" disabled={busy} aria-label={`Remover ${viewer.displayName}`} title={`Remover ${viewer.displayName}`} onClick={() => onRemove(viewer.deviceId)} className="telae-press telae-remove-button"><X size={16} aria-hidden="true" /></button>
                     </li>
