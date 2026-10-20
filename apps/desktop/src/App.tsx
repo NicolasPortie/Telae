@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { getLocale, resolveLocale, setLocale, subscribeLocale, t } from './i18n'
 import { DiagnosticsHistory } from './services/diagnostics-history'
 import { AppHeader } from './components/AppHeader'
-import { FriendsPanel } from './components/FriendsPanel'
 import { HomeScreen } from './components/HomeScreen'
 import { LiveFriendsSwitch } from './components/LiveFriendsSwitch'
 import { AuthScreen } from './components/AuthScreen'
@@ -97,7 +96,7 @@ export default function App() {
     try {
       await controller.connect()
     } catch (error) {
-      setConnectError(error instanceof Error ? error.message : t('Não foi possível conectar ao Telae.'))
+      setConnectError(error instanceof Error ? error.message : t('Não deu pra conectar ao Telae.'))
     }
   }, [controller])
 
@@ -149,7 +148,7 @@ export default function App() {
       controller.signOut()
       setAccount(null)
       setProfile(current => (current ? { ...current, displayName: '' } : current))
-      setAuthNotice(explicitSignOut.current ? null : t('Sua sessão expirou. Entre novamente.'))
+      setAuthNotice(explicitSignOut.current ? null : t('Sua sessão acabou. Entra de novo.'))
       explicitSignOut.current = false
       setScreen('auth')
     })
@@ -189,7 +188,7 @@ export default function App() {
       await connectToServer()
       setScreen('home')
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : t('Não foi possível salvar seu nome.'))
+      setFormError(error instanceof Error ? error.message : t('Não deu pra salvar seu nome.'))
     } finally {
       setBusy(false)
     }
@@ -209,9 +208,9 @@ export default function App() {
         if (previous && list.some((item) => item.id === previous)) return previous
         return list[0]?.id ?? ''
       })
-      if (list.length === 0) setSourcesError(t('Nenhuma tela ou janela encontrada para compartilhar.'))
+      if (list.length === 0) setSourcesError(t('Não achei nenhuma tela ou janela pra mostrar.'))
     } catch (error) {
-      setSourcesError(error instanceof Error ? error.message : t('Não foi possível listar suas telas e janelas.'))
+      setSourcesError(error instanceof Error ? error.message : t('Não deu pra listar suas telas e janelas.'))
     } finally {
       setSourcesLoading(false)
     }
@@ -249,7 +248,7 @@ export default function App() {
 
   const handleStartSharing = useCallback(async () => {
     if (!selectedId) {
-      setFormError(t('Escolha uma tela ou janela antes de iniciar.'))
+      setFormError(t('Escolha uma tela ou janela antes de começar.'))
       return
     }
     setBusy(true)
@@ -262,7 +261,7 @@ export default function App() {
       setSwitchingSource(false)
       setScreen('session')
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : t('Não foi possível iniciar.'))
+      setFormError(error instanceof Error ? error.message : t('Não deu pra iniciar.'))
     } finally {
       setBusy(false)
     }
@@ -285,7 +284,7 @@ export default function App() {
       setScreen('session')
     } catch (error) {
       // Na troca, a transmissão atual continua e o erro aparece no player; fora dela, volta à lista.
-      setWatchError(error instanceof Error ? error.message : t('Não foi possível entrar na transmissão do amigo.'))
+      setWatchError(error instanceof Error ? error.message : t('Não deu pra entrar na transmissão.'))
       if (!viewing) setScreen('home')
     } finally {
       setBusy(false)
@@ -330,26 +329,27 @@ export default function App() {
     setBusy(true)
     setFormError(null)
     try { await action() }
-    catch (error) { setFormError(error instanceof Error ? error.message : t('Não foi possível concluir a alteração.')) }
+    catch (error) { setFormError(error instanceof Error ? error.message : t('Não deu pra concluir a alteração.')) }
     finally { setBusy(false) }
   }, [])
 
   const stateLabel: Record<string, string> = {
     idle: t('Pronto'),
     preparing: t('Preparando captura…'),
-    'waiting-for-peer': t('Aguardando seu amigo…'),
-    joining: t('Localizando transmissão…'),
-    negotiating: t('Negociando conexão…'),
+    'waiting-for-peer': t('Esperando alguém entrar…'),
+    joining: t('Procurando a transmissão…'),
+    negotiating: t('Conectando…'),
     live: snapshot.role === 'viewer' ? t('Assistindo') : t('Ao vivo'),
     reconnecting: t('Reconectando…'),
-    ended: t('Transmissão terminada'),
+    ended: t('A transmissão acabou.'),
   }
 
   return (
-    <div className={`telae-shell ${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} text-ink`}>
+    <div className={`telae-shell ${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : visibleScreen === 'home' ? 'telae-home-layout' : 'min-h-full'} text-ink`}>
       <AppHeader
         version={appVersion}
         displayName={account?.displayName}
+        signedIn={account !== null}
         connection={snapshot.signaling === 'online' ? 'online' : snapshot.signaling === 'offline' ? 'offline' : 'connecting'}
         profileLocked={sessionActive}
         updateStatus={updateStatus}
@@ -360,7 +360,7 @@ export default function App() {
         onReconnect={() => void connectToServer()}
       />
 
-      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full px-6 pb-16 pt-10`}>
+      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : visibleScreen === 'home' ? 'telae-home-main' : visibleScreen === 'auth' ? 'w-full' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} mx-auto w-full px-6 pb-16 pt-10`}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -375,21 +375,16 @@ export default function App() {
         {visibleScreen === 'home' && (
           <HomeScreen
             displayName={account?.displayName}
-            canShare={online}
+            friendsState={friendsState}
+            online={online}
+            canWatch={!busy && online}
+            watchingDeviceId={watchingDeviceId}
+            watchError={watchError}
+            onWatch={friend => void handleWatchFriend(friend)}
             onChooseScreen={openPicker}
             updateStatus={updateStatus}
             canCheckUpdate={desktopApiAvailable}
             onCheckUpdate={() => void window.telae.checkForUpdates()}
-            aside={
-              <FriendsPanel
-                state={friendsState}
-                online={online}
-                canWatch={!busy && online}
-                watchingDeviceId={watchingDeviceId}
-                watchError={watchError}
-                onWatch={friend => void handleWatchFriend(friend)}
-              />
-            }
           />
         )}
 
@@ -456,8 +451,8 @@ export default function App() {
         )}
 
         {visibleScreen === 'session' && snapshot.state === 'ended' && (
-          <div className="telae-panel-enter mx-auto max-w-[520px] py-16 text-center">
-            <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{t('Transmissão terminada')}</h1>
+          <div className="telae-panel-enter mx-auto max-w-[520px] py-20 text-center">
+            <h1 className="display text-[44px]">{t('A transmissão acabou.')}</h1>
             {snapshot.error && <p className="mt-2 text-sm text-ink-3">{snapshot.error}</p>}
             <button
               type="button"

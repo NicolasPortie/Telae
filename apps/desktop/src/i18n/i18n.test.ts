@@ -86,8 +86,8 @@ describe('i18n', () => {
 
   it('picks singular or plural', () => {
     setLocale('en')
-    expect(tn('{count} pessoa conectada', '{count} pessoas conectadas', 1)).toBe('1 person connected')
-    expect(tn('{count} pessoa conectada', '{count} pessoas conectadas', 3)).toBe('3 people connected')
+    expect(tn('{count} pessoa assistindo', '{count} pessoas assistindo', 1)).toBe('1 person watching')
+    expect(tn('{count} pessoa assistindo', '{count} pessoas assistindo', 3)).toBe('3 people watching')
   })
 
   it('resolves the automatic language from the system locale', () => {

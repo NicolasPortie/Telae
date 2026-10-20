@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Telae.Server.Accounts;
 
@@ -19,23 +20,28 @@ public static class AuthEndpoints
     private const string Strict = "auth-strict";
     private const string Standard = "auth";
 
-    public static IServiceCollection AddAuthRateLimits(this IServiceCollection services) =>
-        services.AddRateLimiter(limiter =>
+    public static IServiceCollection AddAuthRateLimits(this IServiceCollection services)
+    {
+        services.AddRateLimiter(_ => { });
+        // Os limites vêm de Auth:*, então são lidos pelo contêiner depois da configuração.
+        services.AddOptions<RateLimiterOptions>().Configure<IOptions<AuthOptions>>((limiter, auth) =>
         {
             limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             // Ações que enviam e-mail ou criam contas: poucas por minuto por endereço.
             limiter.AddPolicy(Strict, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 6, Window = TimeSpan.FromMinutes(1) }));
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.Value.StrictRequestsPerMinute, Window = TimeSpan.FromMinutes(1) }));
             limiter.AddPolicy(Standard, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = auth.Value.RequestsPerMinute, Window = TimeSpan.FromMinutes(1) }));
             limiter.OnRejected = async (context, token) =>
             {
                 context.HttpContext.Response.ContentType = "application/json";
                 await context.HttpContext.Response.WriteAsync("{\"code\":\"rate_limited\"}", token);
             };
         });
+        return services;
+    }
 
     public static void MapAuth(this IEndpointRouteBuilder app)
     {

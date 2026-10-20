@@ -55,20 +55,20 @@ const DEFAULT_SIGNALING_URL = app.isPackaged ? PUBLIC_SIGNALING_URL : LOCAL_SIGN
 
 function normalizeSignalingUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
-  if (!trimmed) throw new Error(t('Informe o endereço do servidor de sinalização.'))
+  if (!trimmed) throw new Error(t('Falta o endereço do servidor.'))
 
   let parsed: URL
   try {
     parsed = new URL(trimmed)
   } catch {
-    throw new Error(t('Informe uma URL válida, como https://telae.seudominio.com.'))
+    throw new Error(t('Esse endereço não parece válido. Use algo como https://telae.seudominio.com.'))
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(t('O servidor de sinalização deve usar http:// ou https://.'))
+    throw new Error(t('O endereço precisa começar com http:// ou https://.'))
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error(t('Use somente o endereço base do servidor, sem credenciais, parâmetros ou fragmentos.'))
+    throw new Error(t('Use só o endereço do servidor, sem usuário nem senha.'))
   }
 
   return trimmed
@@ -212,7 +212,7 @@ function registerIpc() {
   ipcMain.handle('profile:get', () => persistProfile(readProfile()))
   ipcMain.handle('profile:set-name', (_event, displayName: string) => {
     const normalized = displayName.trim().slice(0, 32)
-    if (!normalized) throw new Error(t('Informe seu nome.'))
+    if (!normalized) throw new Error(t('Escreva seu nome.'))
     const profile = readProfile()
     profile.displayName = normalized
     return persistProfile(profile)
@@ -245,14 +245,14 @@ function registerIpc() {
   })
 
   ipcMain.handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
-    if (!sourceId?.trim()) throw new Error(t('Escolha uma Capture Source antes de iniciar.'))
+    if (!sourceId?.trim()) throw new Error(t('Escolha uma tela ou janela antes de começar.'))
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 0, height: 0 },
       fetchWindowIcons: false,
     })
     if (!sources.some((source) => source.id === sourceId)) {
-      throw new Error(t('A Capture Source escolhida não está mais disponível.'))
+      throw new Error(t('Essa tela ou janela não está mais disponível.'))
     }
     selectedCaptureSourceId = sourceId
   })
@@ -261,11 +261,11 @@ function registerIpc() {
     if (sourceId !== selectedCaptureSourceId || !sourceId.startsWith('window:'))
       throw new Error(t('Selecione uma janela válida para capturar seu áudio.'))
     const match = /^window:(\d+):/.exec(sourceId)
-    if (!match) throw new Error(t('Não foi possível identificar esta janela.'))
+    if (!match) throw new Error(t('Não consegui identificar essa janela.'))
     const result = await execFileAsync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     const processId = Number(result.stdout.trim())
     if (!Number.isInteger(processId) || processId <= 0)
-      throw new Error(t('Não foi possível identificar o áudio deste aplicativo.'))
+      throw new Error(t('Não consegui identificar o áudio desse app.'))
     return processId
   })
 
@@ -402,13 +402,13 @@ async function createWindow() {
     height: 790,
     minWidth: 640,
     minHeight: 560,
-    backgroundColor: '#0b0b0d',
+    backgroundColor: '#0a0908',
     title: 'Telae',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../public/icon.png') }),
     autoHideMenuBar: true,
     // Barra de título integrada: a interface desenha o cabeçalho e o Windows mantém os controles da janela.
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0e0e11', symbolColor: '#b6b5af', height: 48 },
+    titleBarOverlay: { color: '#0d0c0a', symbolColor: '#bdb6aa', height: 40 },
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

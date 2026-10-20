@@ -11,6 +11,9 @@ public sealed class AuthOptions
     public int CodeMinutes { get; set; } = 15;
     public int MaxCodeAttempts { get; set; } = 5;
     public int MaxFailedLogins { get; set; } = 5;
+    /// <summary>Limites por endereço IP e por minuto: cadastro, reenvio de código e recuperação de senha (rígido) e demais chamadas de conta.</summary>
+    public int StrictRequestsPerMinute { get; set; } = 6;
+    public int RequestsPerMinute { get; set; } = 30;
     public int LockoutMinutes { get; set; } = 15;
     /// <summary>Aceita clientes anteriores à 0.2 que se identificam só pela credencial do dispositivo.</summary>
     public bool AllowLegacyDevices { get; set; } = true;

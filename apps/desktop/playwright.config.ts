@@ -32,7 +32,7 @@ export default defineConfig({
         url: 'http://localhost:5015/health',
         reuseExistingServer: !process.env.CI,
         // Banco SQLite local e cadastro sem código por e-mail: só para testes automatizados.
-        env: { ASPNETCORE_ENVIRONMENT: 'Development', Auth__RequireEmailVerification: 'false' },
+        env: { ASPNETCORE_ENVIRONMENT: 'Development', Auth__RequireEmailVerification: 'false', Auth__StrictRequestsPerMinute: '1000', Auth__RequestsPerMinute: '1000' },
         timeout: 120_000,
       },
 })

@@ -92,7 +92,7 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
   signal?.addEventListener('abort', onAbort, { once: true })
   try {
     signal?.throwIfAborted()
-    if (sourceTrack.readyState === 'ended') throw new Error('A fonte escolhida foi encerrada.')
+    if (sourceTrack.readyState === 'ended') throw new Error('Essa fonte foi fechada.')
     resize()
     capture = canvas.captureStream(0)
     outputTrack = capture.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack
@@ -127,7 +127,7 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
       }
       callbackId = video.requestVideoFrameCallback(draw)
     })
-    const timeout = setTimeout(() => rejectFirst?.(new Error(t('A fonte não entregou quadros de vídeo.'))), 10_000)
+    const timeout = setTimeout(() => rejectFirst?.(new Error(t('A fonte não mandou nenhuma imagem.'))), 10_000)
     try { await Promise.all([video.play(), firstFrame]) }
     finally { clearTimeout(timeout) }
     signal?.throwIfAborted()
@@ -155,7 +155,7 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
 async function scaleVideoFrames(source: MediaStream, initialConstraints: MediaTrackConstraints, signal?: AbortSignal): Promise<MediaStream> {
   signal?.throwIfAborted()
   const sourceTrack = source.getVideoTracks()[0]
-  if (sourceTrack.readyState === 'ended') throw new Error('A fonte escolhida foi encerrada.')
+  if (sourceTrack.readyState === 'ended') throw new Error('Essa fonte foi fechada.')
   const processor = new frameApi.MediaStreamTrackProcessor!({ track: sourceTrack, maxBufferSize: 1 })
   const outputTrack = new frameApi.MediaStreamTrackGenerator!({ kind: 'video' })
   outputTrack.contentHint = sourceTrack.contentHint
@@ -223,7 +223,7 @@ async function scaleVideoFrames(source: MediaStream, initialConstraints: MediaTr
       stop(true)
     }
   })()
-  const timeout = setTimeout(() => rejectFirst(new Error(t('A fonte não entregou quadros de vídeo.'))), 10_000)
+  const timeout = setTimeout(() => rejectFirst(new Error(t('A fonte não mandou nenhuma imagem.'))), 10_000)
   try {
     await firstFrame
     signal?.throwIfAborted()

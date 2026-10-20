@@ -148,7 +148,7 @@ public sealed class AccountHubTests : IAsyncLifetime
         await connection.StartAsync();
         var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("x", "x", "")));
-        Assert.Contains("sessão expirou", error.Message);
+        Assert.Contains("sessão acabou", error.Message);
     }
 
     [Fact]

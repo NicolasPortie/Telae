@@ -19,12 +19,12 @@ export async function signUp(page: Page, displayName: string): Promise<{ usernam
   await page.getByLabel('Nome de usuário').fill(username)
   await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)
   await page.getByRole('button', { name: 'Criar conta' }).click()
-  await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 30_000 })
 
   // O nome de exibição começa igual ao usuário; os testes usam nomes legíveis.
   await page.getByRole('button', { name: 'Abrir configurações' }).click()
   await page.getByLabel('Nome de exibição').fill(displayName)
   await page.getByRole('button', { name: 'Salvar', exact: true }).first().click()
-  await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 30_000 })
   return { username, password: PASSWORD }
 }

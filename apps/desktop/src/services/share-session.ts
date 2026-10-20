@@ -256,7 +256,7 @@ export class ShareSessionController {
     }
     this.detachSignaling()
     const account = await window.telae.auth.getSession()
-    if (!account) throw new Error(t('Entre na sua conta para continuar.'))
+    if (!account) throw new Error(t('Entre na sua conta pra continuar.'))
     const saved = await window.telae.getLocalProfile()
     this.deviceId = account.id
 
@@ -287,12 +287,12 @@ export class ShareSessionController {
       } catch { /* presença e amizade são restauradas na próxima conexão */ }
       return device
     } catch (error) {
-      throw new Error(toUserMessage(error, t('Não foi possível conectar ao Telae. Verifique sua internet e tente novamente.')))
+      throw new Error(toUserMessage(error, t('Não deu pra conectar ao Telae. Confere sua internet e tenta de novo.')))
     }
   }
 
   async startSharing(sourceId: string, quality: QualityProfile): Promise<void> {
-    if (this.startInFlight || this.joiningInFlight) throw new Error(t('Aguarde a operação atual terminar.'))
+    if (this.startInFlight || this.joiningInFlight) throw new Error(t('Um segundo, ainda tem outra coisa em andamento.'))
     this.startInFlight = true
     try { await this.startSharingInternal(sourceId, quality) }
     finally { this.startInFlight = false }
@@ -301,7 +301,7 @@ export class ShareSessionController {
   private async startSharingInternal(sourceId: string, quality: QualityProfile): Promise<void> {
     const signaling = this.requireSignaling()
     if (this.role === 'viewer' && !['idle', 'ended'].includes(this.state))
-      throw new Error(t('Saia da transmissão atual antes de compartilhar sua tela.'))
+      throw new Error(t('Saia da transmissão atual antes de transmitir a sua.'))
 
     // Defesa contra navegação/duplo acionamento: uma transmissão local ativa
     // troca de fonte em vez de tentar criar uma segunda sessão no servidor.
@@ -332,7 +332,7 @@ export class ShareSessionController {
       if (generation !== this.generation) return
       const stream = await this.capture.start(sourceId, quality)
       if (generation !== this.generation) return
-      if (!this.capture.getSnapshot().hasStream) throw new Error(t('A fonte escolhida foi encerrada. Selecione outra fonte.'))
+      if (!this.capture.getSnapshot().hasStream) throw new Error(t('Essa fonte foi fechada. Escolha outra.'))
       this.localStream = stream
       const video = stream.getVideoTracks()[0]
       if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
@@ -355,8 +355,8 @@ export class ShareSessionController {
       this.teardownPeer()
       this.session = null
       this.role = null
-      this.setState('idle', toUserMessage(error, t('Não foi possível iniciar a transmissão.')))
-      throw new Error(this.error ?? t('Não foi possível iniciar a transmissão.'))
+      this.setState('idle', toUserMessage(error, t('Não deu pra iniciar a transmissão.')))
+      throw new Error(this.error ?? t('Não deu pra iniciar a transmissão.'))
     }
   }
 
@@ -366,10 +366,10 @@ export class ShareSessionController {
    */
   async joinFriendShare(friendCode: string): Promise<void> {
     const code = friendCode.trim().replaceAll('-', '').toUpperCase()
-    if (!code || code.length !== 6) throw new Error(t('Código de amigo deve ter 6 caracteres.'))
-    if (this.startInFlight || this.joiningInFlight) throw new Error(t('Aguarde a operação atual terminar.'))
+    if (!code || code.length !== 6) throw new Error(t('O código tem 6 letras ou números.'))
+    if (this.startInFlight || this.joiningInFlight) throw new Error(t('Um segundo, ainda tem outra coisa em andamento.'))
     if (this.role === 'sharer' && !['idle', 'ended'].includes(this.state))
-      throw new Error(t('Encerre sua transmissão antes de assistir a um amigo.'))
+      throw new Error(t('Pare de transmitir antes de assistir a um amigo.'))
     const signaling = this.requireSignaling()
     const switching = this.role === 'viewer' && VIEWING_STATES.includes(this.state)
     const generation = this.generation
@@ -388,7 +388,7 @@ export class ShareSessionController {
       this.joinPending = false
       this.pendingSignals.length = 0
       this.joiningInFlight = false
-      const message = toUserMessage(error, t('Não foi possível entrar na transmissão do amigo.'))
+      const message = toUserMessage(error, t('Não deu pra entrar na transmissão.'))
       if (generation !== this.generation) throw new Error(message)
       if (!switching) {
         // Nada foi anexado no servidor: a entrada anterior (se houver) já foi liberada localmente.
@@ -431,8 +431,8 @@ export class ShareSessionController {
       this.session = null
       this.role = null
       this.liveSinceMs = null
-      this.setState('idle', toUserMessage(error, t('Não foi possível entrar na transmissão do amigo.')))
-      throw new Error(this.error ?? t('Não foi possível entrar na transmissão do amigo.'))
+      this.setState('idle', toUserMessage(error, t('Não deu pra entrar na transmissão.')))
+      throw new Error(this.error ?? t('Não deu pra entrar na transmissão.'))
     } finally {
       this.joiningInFlight = false
     }
@@ -440,8 +440,8 @@ export class ShareSessionController {
 
   async switchSource(sourceId: string): Promise<void> {
     if (this.role !== 'sharer' || !this.session || !this.localStream)
-      throw new Error(t('Inicie a transmissão antes de trocar a fonte.'))
-    if (this.switchingInFlight) throw new Error(t('Aguarde a troca de fonte terminar.'))
+      throw new Error(t('Comece a transmitir antes de trocar a fonte.'))
+    if (this.switchingInFlight) throw new Error(t('Um segundo, a troca de fonte ainda não terminou.'))
     this.switchingInFlight = true
     const generation = this.generation
     try {
@@ -510,15 +510,15 @@ export class ShareSessionController {
   }
 
   setUploadBudget(mbps: number) {
-    if (!Number.isFinite(mbps) || mbps < 2 || mbps > 200) throw new Error(t('Informe um limite entre 2 e 200 Mbps.'))
+    if (!Number.isFinite(mbps) || mbps < 2 || mbps > 200) throw new Error(t('O limite precisa ficar entre 2 e 200 Mbps.'))
     this.uploadBudgetMbps = mbps
     for (const controller of this.viewerQuality.values()) controller.reset()
     this.emit()
   }
 
   async setQuality(quality: QualityProfile, contentMode: ContentMode = qualityContentMode(quality)) {
-    if (this.role !== 'sharer' || !this.localStream) throw new Error(t('Inicie a transmissão antes de ajustar a qualidade.'))
-    if (this.switchingInFlight) throw new Error(t('Aguarde a alteração atual terminar.'))
+    if (this.role !== 'sharer' || !this.localStream) throw new Error(t('Comece a transmitir antes de mexer na qualidade.'))
+    if (this.switchingInFlight) throw new Error(t('Um segundo, a alteração anterior ainda está sendo aplicada.'))
     if (quality === this.quality && contentMode === this.contentMode) return
     this.switchingInFlight = true
     const stream = this.localStream
@@ -603,7 +603,7 @@ export class ShareSessionController {
   // ---- private ----
 
   private requireSignaling(): SignalingClient {
-    if (!this.signaling) throw new Error(t('Conecte-se antes de iniciar uma transmissão.'))
+    if (!this.signaling) throw new Error(t('Ainda sem conexão com o servidor. Espera um instante.'))
     return this.signaling
   }
 
@@ -671,7 +671,7 @@ export class ShareSessionController {
       this.viewerStates.delete(viewerId)
       this.clearReconnectTimer(viewerId)
       this.viewerQuality.delete(viewerId)
-      this.setState(this.connectedViewers.size ? 'live' : this.sharerPeers.size ? 'negotiating' : 'waiting-for-peer', toUserMessage(error, t('Não foi possível conectar o espectador.')))
+      this.setState(this.connectedViewers.size ? 'live' : this.sharerPeers.size ? 'negotiating' : 'waiting-for-peer', toUserMessage(error, t('Não deu pra conectar quem entrou.')))
     }
   }
 
@@ -720,7 +720,7 @@ export class ShareSessionController {
     this.session = null
     const wasViewer = this.role === 'viewer'
     this.role = null
-    this.setState('ended', wasViewer ? t('A transmissão foi encerrada ou seu acesso foi removido.') : null)
+    this.setState('ended', wasViewer ? t('A transmissão acabou ou você foi tirado dela.') : null)
   }
 
   private handleSignalingChanged(status: ConnectionStatus) {
@@ -775,7 +775,7 @@ export class ShareSessionController {
     if (status === 'failed') {
       if (this.role === 'viewer') this.framePresented = false
       if (this.state === 'live' || this.state === 'negotiating' || this.state === 'reconnecting') {
-        void this.attemptRestart(t('A conexão falhou. Tentando restabelecer…'))
+        void this.attemptRestart(t('A conexão caiu. Tentando voltar…'))
       }
     }
   }
@@ -820,7 +820,7 @@ export class ShareSessionController {
         this.setState(this.connectedViewers.size ? 'live' : 'waiting-for-peer', t('Um espectador perdeu a conexão. Ele pode entrar novamente pela lista de amigos.'))
       } else {
         void this.leave()
-        this.setState('ended', t('Não foi possível restabelecer a conexão. Tente entrar novamente.'))
+        this.setState('ended', t('Não deu pra reconectar. Tenta entrar de novo.'))
       }
       return
     }

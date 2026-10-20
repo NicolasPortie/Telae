@@ -98,7 +98,7 @@ describe('native desktop video scaler', () => {
     vi.useFakeTimers()
     const f = fixture()
     const pending = scaleDesktopVideo(f.source, hd)
-    const rejection = expect(pending).rejects.toThrow('quadros')
+    const rejection = expect(pending).rejects.toThrow('imagem')
     await vi.advanceTimersByTimeAsync(10_000)
     await rejection
     expect(f.raw.stop).toHaveBeenCalledTimes(1)

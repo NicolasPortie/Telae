@@ -138,7 +138,7 @@ describe('capture frames without a compositor surface', () => {
     vi.useFakeTimers()
     const f = fixture()
     const pending = scaleDesktopVideo(f.source, hd)
-    const rejection = expect(pending).rejects.toThrow('quadros')
+    const rejection = expect(pending).rejects.toThrow('imagem')
     await vi.advanceTimersByTimeAsync(10000)
     await rejection
     expect(f.cancel).toHaveBeenCalledOnce()

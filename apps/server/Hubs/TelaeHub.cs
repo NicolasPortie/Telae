@@ -24,14 +24,14 @@ public sealed class TelaeHub(
             var account = Guid.TryParse(accountId, out var id) && accounts is not null
                 ? await accounts.FindActiveAsync(id, Context.ConnectionAborted)
                 : null;
-            if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão expirou. Entre novamente.");
+            if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão acabou. Entra de novo.");
             return await presence.RegisterAsync(
                 new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, ""), Context.ConnectionId, authenticatedAccount: true);
         }
 
         if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados do dispositivo.");
         var allowLegacy = services.GetService<IOptions<AuthOptions>>()?.Value.AllowLegacyDevices ?? true;
-        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entre na sua conta para continuar.");
+        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
         return await presence.RegisterAsync(request, Context.ConnectionId);
     }
 

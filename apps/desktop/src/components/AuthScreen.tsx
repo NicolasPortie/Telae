@@ -138,13 +138,13 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
   const verify = () => void run(() => window.telae.auth.verifyEmail(identifier.trim(), code.trim()), onAuthenticated)
 
   const resend = () => void run(() => window.telae.auth.resendVerification(identifier.trim()), () => {
-    setInfo(t('Enviamos um novo código.'))
+    setInfo(t('Mandei outro código.'))
     setResendIn(RESEND_COOLDOWN_SECONDS)
   })
 
   const forgot = () => void run(() => window.telae.auth.forgotPassword(identifier.trim()), () => {
     setMode('reset')
-    setInfo(t('Se existir uma conta com esse e-mail ou usuário, enviamos um código.'))
+    setInfo(t('Se essa conta existir, o código já está a caminho.'))
     setResendIn(RESEND_COOLDOWN_SECONDS)
   })
 
@@ -152,14 +152,14 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     setMode('login')
     setPassword('')
     setCode('')
-    setInfo(t('Senha atualizada. Entre com a nova senha.'))
+    setInfo(t('Senha trocada. Entra com a nova.'))
   })
 
   const submitLabel = (label: string) => (busy ? t('Aguarde…') : label)
 
-  let icon: ReactNode = <UserRound size={22} strokeWidth={1.7} />
-  let title = t('Entrar no Telae')
-  let subtitle = t('Use sua conta para assistir e compartilhar com seus amigos.')
+  let icon: ReactNode = <UserRound size={20} strokeWidth={1.7} />
+  let title = t('Entrar')
+  let subtitle: string | null = null
   let form: ReactNode
 
   if (mode === 'login') {
@@ -176,20 +176,20 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     )
   } else if (mode === 'register') {
     title = t('Criar conta')
-    subtitle = t('Leva menos de um minuto. Você confirma o e-mail com um código.')
+    subtitle = t('Seu @ é como os amigos te acham.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(register)}>
         <Field id="email" label={t('E-mail')} value={email} onChange={setEmail} type="email" inputMode="email" autoComplete="email" spellCheck={false} maxLength={254} />
-        <Field id="username" label={t('Nome de usuário')} value={username} onChange={value => setUsername(value.toLowerCase())} autoComplete="username" spellCheck={false} maxLength={20} hint={t('3 a 20 caracteres: letras minúsculas, números e _. É como seus amigos encontram você.')} />
+        <Field id="username" label={t('Nome de usuário')} value={username} onChange={value => setUsername(value.toLowerCase())} autoComplete="username" spellCheck={false} maxLength={20} hint={t('De 3 a 20 caracteres: letras minúsculas, números e _.')} />
         <PasswordField id="new-password" label={t('Senha')} value={password} onChange={setPassword} autoComplete="new-password" hint={t('Pelo menos 10 caracteres.')} />
         <button type="submit" disabled={busy || !email.trim() || username.trim().length < 3 || password.length < 10} className="telae-press btn btn-primary btn-lg w-full">{submitLabel(t('Criar conta'))}</button>
         <button type="button" onClick={() => go('login')} className="text-[13px] text-ink-2 underline-offset-2 hover:text-ink hover:underline">{t('Já tenho uma conta')}</button>
       </form>
     )
   } else if (mode === 'verify') {
-    icon = <MailCheck size={22} strokeWidth={1.7} />
-    title = t('Confirme seu e-mail')
-    subtitle = email ? t('Enviamos um código de 6 dígitos para {email}.', { email }) : t('Enviamos um código de 6 dígitos para o e-mail da sua conta.')
+    icon = <MailCheck size={20} strokeWidth={1.7} />
+    title = t('Olha seu e-mail')
+    subtitle = email ? t('Mandamos um código de 6 dígitos pra {email}.', { email }) : t('Mandamos um código de 6 dígitos pro e-mail da sua conta.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(verify)}>
         <Field id="code" label={t('Código')} value={code} onChange={value => setCode(value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="tnum text-center font-mono text-[22px] tracking-[0.4em]" placeholder="······" />
@@ -203,9 +203,9 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
       </form>
     )
   } else if (mode === 'forgot') {
-    icon = <KeyRound size={22} strokeWidth={1.7} />
-    title = t('Recuperar senha')
-    subtitle = t('Informe seu e-mail ou usuário e enviaremos um código para criar uma nova senha.')
+    icon = <KeyRound size={20} strokeWidth={1.7} />
+    title = t('Esqueceu a senha?')
+    subtitle = t('Diz seu e-mail ou @ e a gente manda um código pra você criar outra.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(forgot)}>
         <Field id="identifier" label={t('E-mail ou usuário')} value={identifier} onChange={setIdentifier} autoComplete="username" spellCheck={false} />
@@ -214,9 +214,9 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
       </form>
     )
   } else {
-    icon = <KeyRound size={22} strokeWidth={1.7} />
-    title = t('Criar nova senha')
-    subtitle = t('Digite o código que enviamos e escolha uma nova senha.')
+    icon = <KeyRound size={20} strokeWidth={1.7} />
+    title = t('Senha nova')
+    subtitle = t('Cola o código que mandamos e escolhe a nova senha.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(reset)}>
         <Field id="code" label={t('Código')} value={code} onChange={value => setCode(value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="tnum text-center font-mono text-[22px] tracking-[0.4em]" placeholder="······" />
@@ -228,14 +228,24 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
   }
 
   return (
-    <section aria-labelledby="auth-title" className="telae-panel-enter card mx-auto mt-8 max-w-[460px] p-8">
-      <div aria-hidden="true" className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-signal/30 bg-signal/10 text-signal">{icon}</div>
-      <h1 id="auth-title" className="text-[26px] font-semibold leading-tight tracking-[-0.03em]">{title}</h1>
-      <p className="mt-2.5 text-sm leading-relaxed text-ink-2">{subtitle}</p>
-      {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abra o aplicativo Telae para continuar.')}</p>}
-      {info && <p role="status" className="notice mt-4">{info}</p>}
-      {error && <p role="alert" className="mt-4 text-sm text-danger-soft">{error}</p>}
-      {form}
+    <section aria-labelledby="auth-title" className="telae-panel-enter telae-auth">
+      <div className="telae-auth-brand" aria-hidden="true">
+        <div className="telae-beam" />
+        <p className="display relative max-w-[12ch] text-[clamp(44px,6vw,76px)]">{t('Passa a tela pros amigos.')}</p>
+        <p className="relative max-w-[38ch] text-[15px] leading-relaxed text-ink-2">{t('Imagem nítida e som junto, sem criar sala nem mandar link.')}</p>
+        <div className="telae-filmstrip" />
+      </div>
+      <div className="telae-auth-form">
+        <div className="mx-auto w-full max-w-[400px]">
+          <div aria-hidden="true" className="mb-6 flex h-11 w-11 items-center justify-center rounded-xl border border-signal/30 bg-signal/10 text-signal">{icon}</div>
+          <h1 id="auth-title" className="display text-[40px]">{title}</h1>
+          {subtitle && <p className="mt-2.5 text-sm leading-relaxed text-ink-2">{subtitle}</p>}
+          {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abra o aplicativo Telae para continuar.')}</p>}
+          {info && <p role="status" className="notice mt-4">{info}</p>}
+          {error && <p role="alert" className="mt-4 text-sm text-danger-soft">{error}</p>}
+          {form}
+        </div>
+      </div>
     </section>
   )
 }

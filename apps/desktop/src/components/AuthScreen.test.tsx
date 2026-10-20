@@ -37,7 +37,7 @@ it('shows a translated message for a server error code', async () => {
   await userEvent.type(screen.getByLabelText('E-mail ou usuário'), 'ana')
   await userEvent.type(screen.getByLabelText('Senha'), 'errada-errada-1')
   await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('incorretos')
+  expect(await screen.findByRole('alert')).toHaveTextContent('errados')
 })
 
 it('reveals and hides the password on demand', async () => {
@@ -63,7 +63,7 @@ it('creates an account, then confirms the email with the 6-digit code', async ()
   await userEvent.click(create)
   expect(auth.register).toHaveBeenCalledWith({ email: 'ana@example.com', username: 'ana', password: 'uma-senha-bem-longa-42', language: 'pt-BR' })
 
-  expect(await screen.findByRole('heading', { name: 'Confirme seu e-mail' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Olha seu e-mail' })).toBeInTheDocument()
   const confirm = screen.getByRole('button', { name: 'Confirmar' })
   expect(confirm).toBeDisabled()
   await userEvent.type(screen.getByLabelText('Código'), '12a3456')
@@ -79,7 +79,7 @@ it('goes to email confirmation when signing in with an unverified account', asyn
   await userEvent.type(screen.getByLabelText('E-mail ou usuário'), 'ana@example.com')
   await userEvent.type(screen.getByLabelText('Senha'), 'uma-senha-bem-longa-42')
   await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
-  expect(await screen.findByRole('heading', { name: 'Confirme seu e-mail' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Olha seu e-mail' })).toBeInTheDocument()
 })
 
 it('recovers a password with the emailed code', async () => {
@@ -91,13 +91,13 @@ it('recovers a password with the emailed code', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Enviar código' }))
   expect(auth.forgotPassword).toHaveBeenCalledWith('ana')
 
-  expect(await screen.findByRole('heading', { name: 'Criar nova senha' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Senha nova' })).toBeInTheDocument()
   await userEvent.type(screen.getByLabelText('Código'), '654321')
   await userEvent.type(screen.getByLabelText('Nova senha'), 'outra-senha-bem-longa-7')
   await userEvent.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
   expect(auth.resetPassword).toHaveBeenCalledWith('ana', '654321', 'outra-senha-bem-longa-7')
-  expect(await screen.findByRole('heading', { name: 'Entrar no Telae' })).toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('Senha atualizada')
+  expect(await screen.findByRole('heading', { name: 'Entrar' })).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Senha trocada')
 })
 
 it('limits resending the code with a countdown', async () => {

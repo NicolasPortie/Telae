@@ -32,6 +32,7 @@ function renderScreen(onSignOut = vi.fn()) {
 
 it('loads stored preferences and persists a toggle', async () => {
   renderScreen()
+  await userEvent.click(screen.getByRole('tab', { name: 'Geral' }))
   const launch = screen.getByRole('switch', { name: 'Abrir com o Windows' })
   await waitFor(() => expect(launch).toBeEnabled())
   expect(launch).toHaveAttribute('aria-checked', 'false')
@@ -42,6 +43,7 @@ it('loads stored preferences and persists a toggle', async () => {
 
 it('saves a new server address only when it changed', async () => {
   renderScreen()
+  await userEvent.click(screen.getByRole('tab', { name: 'Servidor' }))
   const input = await screen.findByLabelText('Endereço')
   await waitFor(() => expect(input).toHaveValue('https://telae.example.com'))
   const save = screen.getAllByRole('button', { name: 'Salvar' }).at(-1)!
@@ -64,6 +66,7 @@ it('shows who is signed in and lets the user sign out', async () => {
 
 it('requires a long enough new password before changing it, and reports success', async () => {
   renderScreen()
+  await userEvent.click(screen.getByRole('tab', { name: 'Segurança' }))
   const change = screen.getByRole('button', { name: 'Alterar senha' })
   await userEvent.type(screen.getByLabelText('Senha atual'), 'senha-antiga-1')
   await userEvent.type(screen.getByLabelText('Nova senha'), 'curta')
@@ -72,16 +75,17 @@ it('requires a long enough new password before changing it, and reports success'
   await userEvent.type(screen.getByLabelText('Nova senha'), 'uma-senha-bem-longa-42')
   await userEvent.click(change)
   expect(api.auth.changePassword).toHaveBeenCalledWith('senha-antiga-1', 'uma-senha-bem-longa-42')
-  expect(await screen.findByText(/Senha alterada/)).toBeInTheDocument()
+  expect(await screen.findByText(/Senha trocada/)).toBeInTheDocument()
 })
 
 it('asks for the password before deleting the account and shows the server error', async () => {
   renderScreen()
+  await userEvent.click(screen.getByRole('tab', { name: 'Segurança' }))
   await userEvent.click(screen.getByRole('button', { name: 'Excluir minha conta' }))
   const confirm = screen.getByRole('button', { name: 'Excluir definitivamente' })
   expect(confirm).toBeDisabled()
   await userEvent.type(screen.getByLabelText('Confirme com sua senha'), 'errada')
   await userEvent.click(confirm)
   expect(api.auth.deleteAccount).toHaveBeenCalledWith('errada')
-  expect(await screen.findByRole('alert')).toHaveTextContent('incorretos')
+  expect(await screen.findByRole('alert')).toHaveTextContent('errados')
 })

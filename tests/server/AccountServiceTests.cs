@@ -73,7 +73,7 @@ public sealed class AccountServiceTests : IDisposable
         Assert.Equal("ana", session.Account.Username);
         Assert.Equal("ana", session.Account.DisplayName);
         Assert.False(string.IsNullOrEmpty(session.AccessToken));
-        Assert.Contains("Confirme seu e-mail", _email.Sent.Single().Subject);
+        Assert.Contains("Seu código do Telae", _email.Sent.Single().Subject);
     }
 
     [Theory]

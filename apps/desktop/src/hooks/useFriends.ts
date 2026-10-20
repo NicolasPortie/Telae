@@ -13,14 +13,12 @@ function notifyFriendLive(friend: DeviceSnapshot) {
   void window.telae.getSettings().then(settings => {
     if (!settings.notifyFriendLive) return
     const notification = new Notification(t('{name} está ao vivo', { name: friend.displayName }), {
-      body: t('Abra o Telae para assistir.'),
+      body: t('Clique pra entrar.'),
       silent: true,
     })
     notification.onclick = () => window.focus()
   }).catch(() => undefined)
 }
-
-export type FriendFilter = 'all' | 'live'
 
 type Options = {
   controller: ShareSessionController
@@ -36,7 +34,6 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
   const [myFriendCode, setMyFriendCode] = useState<string | null>(null)
   const [myCodeCopied, setMyCodeCopied] = useState(false)
   const [codeInput, setCodeInput] = useState('')
-  const [filter, setFilter] = useState<FriendFilter>('all')
   const [addOpen, setAddOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,14 +92,14 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
       setMyCodeCopied(true)
       window.setTimeout(() => setMyCodeCopied(false), 2000)
     } catch {
-      setError(t('Não foi possível copiar seu código.'))
+      setError(t('Não deu pra copiar seu código.'))
     }
   }, [myFriendCode])
 
   const add = useCallback(async (codeArg?: string) => {
     const code = (codeArg ?? codeInput).trim().replaceAll('-', '').toUpperCase()
     if (!code || code.length !== 6) {
-      setError(t('Digite um código de 6 letras/números (ex.: ABC234).'))
+      setError(t('O código tem 6 letras ou números, tipo ABC234.'))
       return
     }
     if (!desktopApiAvailable) {
@@ -115,20 +112,20 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
     try {
       // Valida que o amigo existe antes de persistir
       const found = await controller.lookupFriend(code)
-      if (!found) throw new Error(t('Amigo não encontrado. Confira o código e tente novamente.'))
-      if (found.friendCode === myFriendCode) throw new Error(t('Você não pode adicionar a si mesmo.'))
-      if (friends.some(friend => friend.friendCode === code)) throw new Error(t('Este amigo já está na sua lista.'))
+      if (!found) throw new Error(t('Não achei ninguém com esse código. Confere e tenta de novo.'))
+      if (found.friendCode === myFriendCode) throw new Error(t('Você não pode se adicionar.'))
+      if (friends.some(friend => friend.friendCode === code)) throw new Error(t('Esse amigo já está na sua lista.'))
       const local = await window.telae.addFriendCode(code)
       setProfile(local)
       setCodeInput('')
       setAddOpen(false)
-      setSuccess(t('Amigo {name} adicionado!', { name: found.displayName }))
+      setSuccess(t('{name} adicionado!', { name: found.displayName }))
       window.setTimeout(() => setSuccess(null), 3000)
       setFriends(await controller.fetchFriends(local.friendCodes))
       // Aceitar um pedido o torna mútuo: ele sai da pendência.
       try { setRequests(await controller.fetchFriendRequests()) } catch { /* lista principal já atualizou */ }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não foi possível adicionar o amigo.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra adicionar o amigo.'))
     } finally {
       setBusy(false)
     }
@@ -142,7 +139,7 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
       await controller.dismissFriendRequest(code)
       setRequests(await controller.fetchFriendRequests())
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não foi possível ignorar o pedido.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra ignorar o pedido.'))
     } finally {
       setBusy(false)
     }
@@ -158,7 +155,7 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
       setProfile(local)
       setFriends(await controller.fetchFriends(local.friendCodes))
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não foi possível remover o amigo.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra remover o amigo.'))
     } finally {
       setBusy(false)
     }
@@ -172,7 +169,7 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
 
   return {
     friends, requests, myFriendCode, myCodeCopied,
-    codeInput, setCodeInput, filter, setFilter, addOpen, setAddOpen, closeAddForm,
+    codeInput, setCodeInput, addOpen, setAddOpen, closeAddForm,
     busy, error, success, pendingRemoveCode, setPendingRemoveCode,
     copyMyCode, add, dismissRequest, remove,
   }

@@ -23,18 +23,18 @@ export function SharerSession({
 }) {
   const controlsDisabled = busy || !snapshot.hasLocalStream || snapshot.state === 'ended'
   const status = snapshot.state === 'live' ? t('Ao vivo')
-    : snapshot.state === 'preparing' ? t('Preparando transmissão…')
-    : snapshot.state === 'reconnecting' ? t('Restabelecendo conexão…')
+    : snapshot.state === 'preparing' ? t('Preparando…')
+    : snapshot.state === 'reconnecting' ? t('Reconectando…')
     : snapshot.state === 'negotiating' ? t('Conectando seu amigo…')
-    : t('Aguardando seu amigo…')
+    : t('Esperando alguém entrar…')
 
   return (
     <section aria-labelledby="sharer-title" className="telae-panel-enter telae-session">
       <div className="telae-session-heading">
         <div>
-          <p className="eyebrow">{t('Sua transmissão')}</p>
-          <h1 id="sharer-title" className="mt-2.5 text-[clamp(24px,3vw,32px)] font-semibold leading-tight tracking-[-0.04em]">
-            {snapshot.state === 'preparing' ? t('Preparando transmissão') : t('Você está compartilhando')}
+          <p className="eyebrow">{t('No ar')}</p>
+          <h1 id="sharer-title" className="display mt-2 text-[clamp(34px,4vw,48px)]">
+            {snapshot.state === 'preparing' ? t('Preparando a transmissão') : t('Você está transmitindo')}
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-2">
             <p role="status" className="flex items-center gap-2">
@@ -81,41 +81,31 @@ export function SharerSession({
           {snapshot.state === 'live' && (snapshot.diagnostics.qualityLimitationReason === 'cpu' || snapshot.diagnostics.qualityLimitationReason === 'bandwidth') && (
             <p role="status" className="notice mt-3">
               {snapshot.diagnostics.qualityLimitationReason === 'cpu'
-                ? t('A qualidade foi reduzida automaticamente para aliviar o processador. Um perfil mais leve pode manter a imagem mais estável.')
-                : t('A qualidade foi reduzida automaticamente pela capacidade da rede. Um perfil mais leve pode manter a imagem mais estável.')}
+                ? t('O Telae baixou a qualidade pra aliviar o processador. Um perfil mais leve segura melhor a imagem.')
+                : t('O Telae baixou a qualidade porque a rede não deu conta. Um perfil mais leve segura melhor a imagem.')}
             </p>
           )}
           {snapshot.hasLocalStream && !snapshot.includeAudio && snapshot.state !== 'ended' && (
             <p role="status" className="notice mt-3">
-              {snapshot.audioBuffer?.error ? t('O som foi interrompido. Sua tela continua sendo compartilhada.') : t('Esta fonte está sendo compartilhada sem som.')} {t('Para compartilhar com som, troque a fonte.')}
+              {snapshot.audioBuffer?.error ? t('O som caiu, mas sua tela continua no ar.') : t('Esta fonte está sem som.')} {t('Pra ter som, troque a fonte.')}
             </p>
           )}
           {formError && <p role="alert" className="mt-3 text-sm text-danger-soft">{formError}</p>}
           {snapshot.error && <p role="alert" className="mt-3 text-sm text-danger-soft">{snapshot.error}</p>}
         </div>
 
-        <aside className="telae-session-sidebar" aria-label={t('Espectadores')}>
-          {snapshot.state !== 'ended' && (
-            <section className="telae-live-card" aria-labelledby="live-title">
-              <div className="flex items-center gap-2 text-signal">
-                <Users size={16} aria-hidden="true" /><h2 id="live-title" className="text-sm font-semibold">{t('Ao vivo para seus amigos')}</h2>
-              </div>
-              <p className="mt-3 text-[13px] leading-relaxed text-ink-2">{t('Seus amigos veem')} <span className="font-semibold text-signal">{t('Ao vivo')}</span> {t('na lista e entram em 1 clique — sem código.')}</p>
-              <p className="mt-3 text-center text-xs text-ink-3">{t('Até 12 amigos ao mesmo tempo')}</p>
-            </section>
-          )}
-
-          <section aria-label={t('Espectadores')} className="telae-audience">
-            <div className="flex items-center justify-between gap-2"><h2 className="text-sm font-medium">{t('Espectadores')}</h2><span className="count tnum">{snapshot.viewers.length}</span></div>
+        <aside className="telae-session-sidebar" aria-label={t('Quem está assistindo')}>
+          <section aria-label={t('Quem está assistindo')} className="telae-audience">
+            <div className="flex items-center justify-between gap-2"><h2 className="text-[15px] font-semibold tracking-[-0.01em]">{t('Quem está assistindo')}</h2><span className="count tnum">{t('{count} de {max}', { count: snapshot.viewers.length, max: 12 })}</span></div>
             {snapshot.viewers.length === 0 ? (
               <div className="telae-audience-empty">
                 <span aria-hidden="true" className="telae-empty-icon"><Users size={22} strokeWidth={1.5} /></span>
-                <p className="text-sm text-ink-2">{t('Tudo pronto para receber.')}</p>
-                <p className="mt-1 text-xs leading-relaxed text-ink-3">{t('Seus amigos aparecem aqui quando entrarem.')}</p>
+                <p className="text-sm text-ink-2">{t('Ninguém entrou ainda.')}</p>
+                <p className="mt-1 text-xs leading-relaxed text-ink-3">{t('Quem entrar aparece aqui.')}</p>
               </div>
             ) : (
               <>
-                <p className="mt-2 text-xs text-ink-3">{tn('{count} pessoa conectada', '{count} pessoas conectadas', snapshot.viewerCount)}</p>
+                <p className="mt-2 text-xs text-ink-3">{tn('{count} pessoa assistindo', '{count} pessoas assistindo', snapshot.viewerCount)}</p>
                 <ul className="telae-audience-list">
                   {snapshot.viewers.map(viewer => (
                     <li key={viewer.deviceId} className="telae-audience-person">

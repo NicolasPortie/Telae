@@ -576,12 +576,12 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
 
         // Código inexistente: friend_not_found
         var notFound = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ZZZZZZ"));
-        Assert.Contains("não encontrado", notFound.Message);
+        Assert.Contains("Não achei ninguém", notFound.Message);
 
         // Código com formato de convite (8 chars): invalid_friend_code
         var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
         var badFormat = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", invite.Code));
-        Assert.Contains("6 caracteres", badFormat.Message);
+        Assert.Contains("6 letras ou números", badFormat.Message);
 
         // Própria transmissão: cannot_view_own_share
         var selfError = await Assert.ThrowsAsync<HubException>(() => sharer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
@@ -795,7 +795,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         Assert.Single(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
 
         var unknown = await Assert.ThrowsAsync<HubException>(() => target.InvokeAsync("DismissFriendRequest", "ZZZZZZ"));
-        Assert.Contains("não encontrado", unknown.Message);
+        Assert.Contains("Não achei ninguém", unknown.Message);
 
         await target.InvokeAsync("DismissFriendRequest", requesterSnapshot.FriendCode);
         Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));

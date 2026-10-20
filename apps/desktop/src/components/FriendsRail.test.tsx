@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FriendsState } from '../hooks/useFriends'
 import type { DeviceSnapshot } from '../services/types'
-import { FriendsPanel } from './FriendsPanel'
+import { FriendsRail } from './FriendsRail'
 
 afterEach(cleanup)
 
@@ -21,7 +21,7 @@ const person = (overrides: Partial<DeviceSnapshot>): DeviceSnapshot => ({
 function stateWith(overrides: Partial<FriendsState> = {}): FriendsState {
   return {
     friends: [], requests: [], myFriendCode: 'XYZ789', myCodeCopied: false,
-    codeInput: '', setCodeInput: vi.fn(), filter: 'all', setFilter: vi.fn(),
+    codeInput: '', setCodeInput: vi.fn(),
     addOpen: false, setAddOpen: vi.fn(), closeAddForm: vi.fn(),
     busy: false, error: null, success: null, pendingRemoveCode: null, setPendingRemoveCode: vi.fn(),
     copyMyCode: vi.fn(), add: vi.fn(), dismissRequest: vi.fn(), remove: vi.fn(),
@@ -29,45 +29,45 @@ function stateWith(overrides: Partial<FriendsState> = {}): FriendsState {
   }
 }
 
-const baseProps = { online: true, canWatch: true, watchingDeviceId: null, watchError: null, onWatch: vi.fn() }
+const baseProps = {
+  online: true, canWatch: true, watchingDeviceId: null, watchError: null, onWatch: vi.fn(),
+  updateStatus: null, canCheckUpdate: true, onCheckUpdate: vi.fn(),
+}
 
-describe('FriendsPanel', () => {
+describe('FriendsRail', () => {
   it('shows the personal code and an empty state with a call to action', async () => {
     const state = stateWith()
-    render(<FriendsPanel state={state} {...baseProps} />)
+    render(<FriendsRail state={state} {...baseProps} />)
     expect(screen.getByTestId('my-friend-code')).toHaveTextContent('XYZ789')
-    expect(screen.getByText('Nenhum amigo ainda')).toBeInTheDocument()
+    expect(screen.getByText('Sua lista está vazia.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar primeiro amigo' }))
     expect(state.setAddOpen).toHaveBeenCalledWith(true)
   })
 
   it('shows a loading skeleton, not the empty state, while the server is unreachable', () => {
-    render(<FriendsPanel state={stateWith()} {...baseProps} online={false} />)
+    render(<FriendsRail state={stateWith()} {...baseProps} online={false} />)
     expect(screen.getByRole('status', { name: 'Conectando ao servidor' })).toBeInTheDocument()
-    expect(screen.queryByText('Nenhum amigo ainda')).not.toBeInTheDocument()
+    expect(screen.queryByText('Sua lista está vazia.')).not.toBeInTheDocument()
   })
 
-  it('offers "Assistir" only for friends that are live', async () => {
+  it('groups friends into live, online and offline, and offers "Assistir" only to live ones', async () => {
     const onWatch = vi.fn()
     const live = person({ deviceId: 'live', displayName: 'Bia', friendCode: 'BBB222', status: 'transmitting', isSharing: true, activeQualityProfile: '1080p60' })
     const idle = person({ deviceId: 'idle', displayName: 'Caio', friendCode: 'CCC333' })
-    render(<FriendsPanel state={stateWith({ friends: [live, idle] })} {...baseProps} onWatch={onWatch} />)
+    const away = person({ deviceId: 'away', displayName: 'Dani', friendCode: 'DDD444', status: 'offline' })
+    render(<FriendsRail state={stateWith({ friends: [live, idle, away] })} {...baseProps} onWatch={onWatch} />)
+
+    expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['Ao vivo1', 'Online1', 'Offline1'])
     const rows = screen.getAllByRole('listitem')
-    expect(within(rows[0]).getByText('Ao vivo')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Bia')).toBeInTheDocument()
     expect(within(rows[1]).queryByRole('button', { name: 'Assistir' })).not.toBeInTheDocument()
     await userEvent.click(within(rows[0]).getByRole('button', { name: 'Assistir' }))
     expect(onWatch).toHaveBeenCalledWith(live)
-    expect(screen.getByText('1 ao vivo')).toBeInTheDocument()
-  })
-
-  it('filters to live friends and says so when nobody is streaming', () => {
-    render(<FriendsPanel state={stateWith({ friends: [person({})], filter: 'live' })} {...baseProps} />)
-    expect(screen.getByText('Nenhum amigo transmitindo agora.')).toBeInTheDocument()
   })
 
   it('asks for confirmation before removing a friend', async () => {
     const state = stateWith({ friends: [person({})], pendingRemoveCode: 'ABC234' })
-    render(<FriendsPanel state={state} {...baseProps} />)
+    render(<FriendsRail state={state} {...baseProps} />)
     const group = screen.getByRole('group', { name: 'Confirmar remoção de Ana' })
     await userEvent.click(within(group).getByRole('button', { name: 'Remover' }))
     expect(state.remove).toHaveBeenCalledWith('ABC234')
@@ -76,10 +76,17 @@ describe('FriendsPanel', () => {
   it('lets the user accept or dismiss a friend request', async () => {
     const request = person({ deviceId: 'r', displayName: 'Dani', friendCode: 'DDD444' })
     const state = stateWith({ requests: [request] })
-    render(<FriendsPanel state={state} {...baseProps} />)
+    render(<FriendsRail state={state} {...baseProps} />)
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar de volta' }))
     expect(state.add).toHaveBeenCalledWith('DDD444')
     await userEvent.click(screen.getByRole('button', { name: 'Ignorar' }))
     expect(state.dismissRequest).toHaveBeenCalledWith('DDD444')
+  })
+
+  it('checks for updates from the rail footer', async () => {
+    const onCheckUpdate = vi.fn()
+    render(<FriendsRail state={stateWith()} {...baseProps} onCheckUpdate={onCheckUpdate} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Buscar atualização' }))
+    expect(onCheckUpdate).toHaveBeenCalledOnce()
   })
 })

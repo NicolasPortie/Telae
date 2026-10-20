@@ -116,7 +116,7 @@ async function createAudioCapture(start: (captureId: string) => Promise<void>, s
     if (context.state === 'suspended') await context.resume()
     signal?.throwIfAborted()
     const track = destination.stream.getAudioTracks()[0]
-    if (!track) throw new Error(t('Não foi possível criar a faixa de áudio do aplicativo.'))
+    if (!track) throw new Error(t('Não deu pra pegar o áudio desse app.'))
     track.contentHint = 'music'
     if (bridgeFailure) throw new Error(bridgeFailure)
 

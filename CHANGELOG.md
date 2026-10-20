@@ -4,9 +4,17 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+### Interface
+- **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Instrument Serif nos títulos e na marca, grão de filme e facho de luz.
+- **Tela inicial nova:** trilho de amigos agrupado por Ao vivo, Online e Offline, e um palco com os cartazes de quem está transmitindo ("Em cartaz") ou a "tela apagada" quando ninguém está.
+- **Entrada em duas colunas**, com painel da marca; configurações com navegação lateral por seção (Conta, Geral, Segurança, Servidor, Sobre).
+- **Textos reescritos em tom de conversa** (pt-BR e inglês), revisados com o humanizador. Erros agora dizem o que aconteceu e o que fazer.
+- A luz vermelha de "no ar" passa a marcar quem transmite; saudação por horário na tela inicial.
+
 ### Contas
 - **Contas de usuário** com e-mail, nome de usuário único e senha, em PostgreSQL. Verificação de e-mail e recuperação de senha por código de 6 dígitos (SMTP configurável), sessões com rotação e detecção de reutilização, bloqueio por tentativas, limites por IP e exclusão de conta. Detalhes na [ADR 0004](docs/adr/0004-user-accounts.md).
 - O app ganhou as telas de entrar, criar conta, confirmar e-mail e recuperar senha. Conta, senha e exclusão ficam em Configurações, e os tokens ficam no cofre do sistema.
+- Os limites por IP do cadastro e das demais chamadas de conta são configuráveis (`Auth:StrictRequestsPerMinute` e `Auth:RequestsPerMinute`).
 - O servidor continua aceitando clientes anteriores enquanto `Auth:AllowLegacyDevices` estiver ligado. Para publicar esta versão do servidor é preciso definir `Auth__JwtKey` e, em produção, a conexão com o PostgreSQL (veja `.env.example`).
 
 ## [0.1.26] - 2026-10-19

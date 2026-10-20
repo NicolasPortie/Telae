@@ -94,12 +94,12 @@ public sealed partial class TelaeRegistry
     {
         var normalized = NormalizeFriendCode(friendCode);
         if (normalized.Length != 6)
-            throw new TelaeDomainException("invalid_friend_code", "Código de amigo deve ter 6 caracteres.");
+            throw new TelaeDomainException("invalid_friend_code", "O código tem 6 letras ou números.");
         lock (_gate)
         {
             RequireOnlineDevice(deviceId);
             var target = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized)
-                ?? throw new TelaeDomainException("friend_not_found", "Amigo não encontrado. Confira o código e tente novamente.");
+                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse código. Confere e tenta de novo.");
             if (target.DeviceId == deviceId) return;
             if (!_dismissedRequests.TryGetValue(deviceId, out var set))
             {

@@ -12,7 +12,7 @@ export async function addFriend(page: Page, friendCode: string, displayName: str
   await page.getByRole('button', { name: 'Adicionar', exact: true }).first().click()
   await page.getByLabel('Código do amigo (6 caracteres)').fill(friendCode)
   await page.getByRole('button', { name: 'Adicionar', exact: true }).last().click()
-  await expect(page.getByRole('status').filter({ hasText: `Amigo ${displayName} adicionado!` })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('status').filter({ hasText: `${displayName} adicionado!` })).toBeVisible({ timeout: 30_000 })
 }
 
 /** Amizade mútua: cada lado adiciona o código do outro (a amizade só vale quando ambos declaram). */

@@ -51,19 +51,19 @@ public static class EmailTemplates
 {
     public static EmailMessage VerifyEmail(string to, string username, string code, int minutes, string language) =>
         Build(to, language,
-            pt: ("Confirme seu e-mail no Telae", $"Olá, {username}!", "Seu código de verificação é:", $"Ele expira em {minutes} minutos. Se não foi você, ignore este e-mail."),
-            en: ("Confirm your email on Telae", $"Hi, {username}!", "Your verification code is:", $"It expires in {minutes} minutes. If this wasn't you, ignore this email."),
+            pt: ("Seu código do Telae", $"Oi, {username}!", "Esse é o código pra confirmar seu e-mail:", $"Vale por {minutes} minutos. Se não foi você, ignora este e-mail."),
+            en: ("Your Telae code", $"Hi {username}!", "Here is the code to confirm your email:", $"It's good for {minutes} minutes. If this wasn't you, just ignore this email."),
             code);
 
     public static EmailMessage ResetPassword(string to, string username, string code, int minutes, string language) =>
         Build(to, language,
-            pt: ("Redefinição de senha do Telae", $"Olá, {username}.", "Use este código para criar uma nova senha:", $"Ele expira em {minutes} minutos. Se você não pediu, ignore este e-mail: sua senha continua a mesma."),
-            en: ("Telae password reset", $"Hi, {username}.", "Use this code to set a new password:", $"It expires in {minutes} minutes. If you didn't ask for it, ignore this email: your password is unchanged."),
+            pt: ("Código pra trocar sua senha do Telae", $"Oi, {username}.", "Use este código pra criar uma senha nova:", $"Vale por {minutes} minutos. Se você não pediu, ignora este e-mail: sua senha continua a mesma."),
+            en: ("Code to reset your Telae password", $"Hi {username}.", "Use this code to set a new password:", $"It's good for {minutes} minutes. If you didn't ask for it, ignore this email: your password stays the same."),
             code);
 
     public static EmailMessage AlreadyRegistered(string to, string language) =>
         Build(to, language,
-            pt: ("Você já tem uma conta no Telae", "Olá!", "Alguém tentou criar uma conta com este e-mail, mas ele já está cadastrado. Entre normalmente no app ou use \"Esqueci minha senha\".", "Se não foi você, nenhuma ação é necessária."),
+            pt: ("Você já tem conta no Telae", "Oi!", "Alguém tentou criar uma conta com este e-mail, mas ele já tem uma. Entra normalmente no app ou usa \"Esqueci minha senha\".", "Se não foi você, não precisa fazer nada."),
             en: ("You already have a Telae account", "Hi!", "Someone tried to create an account with this email, but it is already registered. Sign in normally in the app or use \"Forgot password\".", "If this wasn't you, no action is needed."),
             code: null);
 
