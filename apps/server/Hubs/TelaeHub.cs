@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using Telae.Server.Accounts;
 using Telae.Server.Core;
 
 namespace Telae.Server.Hubs;
@@ -9,11 +11,27 @@ public sealed class TelaeHub(
     DisconnectCoordinator disconnectCoordinator,
     PresenceSubscriptions presence,
     IOptions<IceConfiguration> iceConfiguration,
-    IOptions<TurnConfiguration> turnConfiguration) : Hub
+    IOptions<TurnConfiguration> turnConfiguration,
+    IServiceProvider services) : Hub
 {
     public async Task<DeviceSnapshot> RegisterDevice(RegisterDeviceRequest request)
     {
+        if (Context.User?.Identity?.IsAuthenticated == true)
+        {
+            // Conta autenticada: a identidade vem do token, nunca do que o cliente informa.
+            var accountId = Context.User.FindFirstValue(TokenService.AccountIdClaim);
+            var accounts = services.GetService<AccountService>();
+            var account = Guid.TryParse(accountId, out var id) && accounts is not null
+                ? await accounts.FindActiveAsync(id, Context.ConnectionAborted)
+                : null;
+            if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão expirou. Entre novamente.");
+            return await presence.RegisterAsync(
+                new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, ""), Context.ConnectionId, authenticatedAccount: true);
+        }
+
         if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados do dispositivo.");
+        var allowLegacy = services.GetService<IOptions<AuthOptions>>()?.Value.AllowLegacyDevices ?? true;
+        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entre na sua conta para continuar.");
         return await presence.RegisterAsync(request, Context.ConnectionId);
     }
 

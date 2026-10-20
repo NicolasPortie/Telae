@@ -11,12 +11,14 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
     private readonly Dictionary<string, HashSet<string>> _groups = new(StringComparer.Ordinal);
     private static string Group(string code) => $"presence:{code}";
 
-    public async Task<DeviceSnapshot> RegisterAsync(RegisterDeviceRequest request, string connectionId)
+    public async Task<DeviceSnapshot> RegisterAsync(RegisterDeviceRequest request, string connectionId, bool authenticatedAccount = false)
     {
         await _gate.WaitAsync();
         try
         {
-            var device = registry.RegisterDevice(request.DeviceId, request.DisplayName, connectionId, request.DeviceSecret);
+            var device = authenticatedAccount
+                ? registry.RegisterAccountDevice(request.DeviceId, request.DisplayName, connectionId)
+                : registry.RegisterDevice(request.DeviceId, request.DisplayName, connectionId, request.DeviceSecret);
             await PublishLockedAsync(device);
             return device;
         }

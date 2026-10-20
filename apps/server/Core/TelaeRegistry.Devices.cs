@@ -6,6 +6,7 @@ namespace Telae.Server.Core;
 // Dispositivos: registro, credencial e consulta por código de amigo.
 public sealed partial class TelaeRegistry
 {
+    /// <summary>Registro legado: o dispositivo se identifica por uma credencial própria (clientes anteriores às contas).</summary>
     public DeviceSnapshot RegisterDevice(string deviceId, string displayName, string connectionId, string deviceSecret)
     {
         if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128)
@@ -13,8 +14,19 @@ public sealed partial class TelaeRegistry
 
         if (deviceSecret is null || deviceSecret.Length != 64 || !deviceSecret.All(Uri.IsHexDigit))
             throw new TelaeDomainException("device_unauthorized", "Atualize o aplicativo para registrar este dispositivo com segurança.");
-        var secretHash = SHA256.HashData(Convert.FromHexString(deviceSecret));
+        return RegisterCore(deviceId, displayName, connectionId, SHA256.HashData(Convert.FromHexString(deviceSecret)));
+    }
 
+    /// <summary>Registro de uma conta já autenticada pelo token de acesso: o identificador é o da conta e não há credencial de dispositivo.</summary>
+    public DeviceSnapshot RegisterAccountDevice(string accountId, string displayName, string connectionId)
+    {
+        if (string.IsNullOrWhiteSpace(accountId) || accountId.Length > 128)
+            throw new TelaeDomainException("device_id_required", "O dispositivo não possui um identificador válido.");
+        return RegisterCore(accountId, displayName, connectionId, secretHash: null);
+    }
+
+    private DeviceSnapshot RegisterCore(string deviceId, string displayName, string connectionId, byte[]? secretHash)
+    {
         displayName = NormalizeDisplayName(displayName);
 
         lock (_gate)
@@ -27,15 +39,19 @@ public sealed partial class TelaeRegistry
             {
                 profile = new ProfileRecord(deviceId, displayName, GenerateUniqueFriendCode())
                 {
-                    DeviceSecretHash = Convert.ToHexString(secretHash)
+                    DeviceSecretHash = secretHash is null ? null : Convert.ToHexString(secretHash)
                 };
                 _profiles.Add(deviceId, profile);
                 profileChanged = true;
             }
             else
             {
-                if (profile.DeviceSecretHash is null ||
-                    !CryptographicOperations.FixedTimeEquals(secretHash, Convert.FromHexString(profile.DeviceSecretHash)))
+                // Perfis de conta (sem credencial de dispositivo) não aceitam o caminho legado, e vice-versa.
+                var credentialMatches = secretHash is null
+                    ? profile.DeviceSecretHash is null
+                    : profile.DeviceSecretHash is not null &&
+                      CryptographicOperations.FixedTimeEquals(secretHash, Convert.FromHexString(profile.DeviceSecretHash));
+                if (!credentialMatches)
                     throw new TelaeDomainException("device_unauthorized", "A credencial deste dispositivo é inválida. Atualize o aplicativo e tente novamente.");
                 profileChanged = profile.DisplayName != displayName;
                 previousName = profile.DisplayName;
