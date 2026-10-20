@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { estimateLatencyMs, formatBitrate, QUALITY_OPTIONS, qualityLabel } from './format'
+import { estimateLatencyMs, formatBitrate, qualityOptions, qualityLabel } from './format'
 
 describe('format helpers', () => {
   it('estimates latency as half the RTT plus jitter buffer and decode, only when measured', () => {
@@ -16,8 +16,8 @@ describe('format helpers', () => {
   })
 
   it('describes every quality option with resolution, fps and guidance', () => {
-    expect(QUALITY_OPTIONS.map(option => option.value)).toEqual(['720p60', '1080p30', '1080p60', '1440p30', '1440p60'])
-    for (const option of QUALITY_OPTIONS) {
+    expect(qualityOptions().map(option => option.value)).toEqual(['720p60', '1080p30', '1080p60', '1440p30', '1440p60'])
+    for (const option of qualityOptions()) {
       expect(option.fps).toMatch(/^(30|60) FPS$/)
       expect(option.detail.length).toBeGreaterThan(20)
     }

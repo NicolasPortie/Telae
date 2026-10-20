@@ -1,3 +1,5 @@
+import { t } from '../i18n'
+
 /** Keep desktop textures on the native frame path with bounded output dimensions. */
 type ScaledCapture = {
   constraints(): MediaTrackConstraints
@@ -80,7 +82,7 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
     for (const track of source.getTracks()) track.stop()
     outputTrack?.stop()
     if (capture) scaledCaptures.delete(capture)
-    rejectFirst?.(new Error('A captura foi encerrada antes do primeiro quadro.'))
+    rejectFirst?.(new Error(t('A captura foi encerrada antes do primeiro quadro.')))
     rejectFirst = null
     if (ended) outputTrack?.dispatchEvent(new Event('ended'))
   }
@@ -125,7 +127,7 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
       }
       callbackId = video.requestVideoFrameCallback(draw)
     })
-    const timeout = setTimeout(() => rejectFirst?.(new Error('A fonte não entregou quadros de vídeo.')), 10_000)
+    const timeout = setTimeout(() => rejectFirst?.(new Error(t('A fonte não entregou quadros de vídeo.'))), 10_000)
     try { await Promise.all([video.play(), firstFrame]) }
     finally { clearTimeout(timeout) }
     signal?.throwIfAborted()
@@ -133,9 +135,9 @@ export async function scaleDesktopVideo(source: MediaStream, initialConstraints:
     scaledCaptures.set(capture, {
       constraints: () => structuredClone(constraints),
       apply: async next => {
-        if (stopped) throw new Error('A captura foi encerrada.')
+        if (stopped) throw new Error(t('A captura foi encerrada.'))
         await sourceTrack.applyConstraints({ frameRate: next.frameRate })
-        if (stopped) throw new Error('A captura foi encerrada.')
+        if (stopped) throw new Error(t('A captura foi encerrada.'))
         constraints = structuredClone(next)
         nextFrameAt = null
         resize()
@@ -176,7 +178,7 @@ async function scaleVideoFrames(source: MediaStream, initialConstraints: MediaTr
     for (const track of source.getTracks()) track.stop()
     outputTrack.stop()
     scaledCaptures.delete(capture)
-    rejectFirst(new Error('A captura foi encerrada antes do primeiro quadro.'))
+    rejectFirst(new Error(t('A captura foi encerrada antes do primeiro quadro.')))
     if (ended) outputTrack.dispatchEvent(new Event('ended'))
   }
   const onEnded = () => stop(true)
@@ -221,7 +223,7 @@ async function scaleVideoFrames(source: MediaStream, initialConstraints: MediaTr
       stop(true)
     }
   })()
-  const timeout = setTimeout(() => rejectFirst(new Error('A fonte não entregou quadros de vídeo.')), 10_000)
+  const timeout = setTimeout(() => rejectFirst(new Error(t('A fonte não entregou quadros de vídeo.'))), 10_000)
   try {
     await firstFrame
     signal?.throwIfAborted()
@@ -229,9 +231,9 @@ async function scaleVideoFrames(source: MediaStream, initialConstraints: MediaTr
     scaledCaptures.set(capture, {
       constraints: () => structuredClone(constraints),
       apply: async next => {
-        if (stopped) throw new Error('A captura foi encerrada.')
+        if (stopped) throw new Error(t('A captura foi encerrada.'))
         await sourceTrack.applyConstraints({ frameRate: next.frameRate })
-        if (stopped) throw new Error('A captura foi encerrada.')
+        if (stopped) throw new Error(t('A captura foi encerrada.'))
         constraints = structuredClone(next)
         nextFrameAt = null
       },

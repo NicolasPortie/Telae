@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.ts'
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
 import type { UpdateStatus } from '../shared/contracts.ts'
@@ -109,7 +110,7 @@ export class DesktopUpdates {
 
   private errorMessage(error: unknown): string {
     const detail = error instanceof Error ? error.message : String(error)
-    if (/404|ENOENT/i.test(detail)) return 'O servidor ainda não publicou os arquivos da atualização.'
-    return 'Não foi possível acessar ou baixar a atualização. Verifique a conexão com o servidor.'
+    if (/404|ENOENT/i.test(detail)) return t('O servidor ainda não publicou os arquivos da atualização.')
+    return t('Não foi possível acessar ou baixar a atualização. Verifique a conexão com o servidor.')
   }
 }

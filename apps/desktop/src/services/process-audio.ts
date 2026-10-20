@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import type { AudioBridgeState } from '../shared/contracts'
 import { PcmDecoder } from './pcm-decoder'
 
@@ -45,7 +46,7 @@ async function createAudioCapture(start: (captureId: string) => Promise<void>, s
     const metadata = await new Promise<{ sampleRate: number; channels: number }>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         disposeState()
-        reject(new Error('O áudio do aplicativo demorou demais para iniciar.'))
+        reject(new Error(t('O áudio do aplicativo demorou demais para iniciar.')))
       }, 8000)
 
       let started = false
@@ -53,7 +54,7 @@ async function createAudioCapture(start: (captureId: string) => Promise<void>, s
         if (state.captureId !== captureId) return
         if (started) {
           if (state.status === 'idle' || state.status === 'error') {
-            bridgeFailure = state.status === 'error' ? state.message : 'A captura de áudio foi interrompida.'
+            bridgeFailure = state.status === 'error' ? state.message : t('A captura de áudio foi interrompida.')
             failCapture?.()
           }
           return
@@ -72,7 +73,7 @@ async function createAudioCapture(start: (captureId: string) => Promise<void>, s
       const onAbort = () => {
         window.clearTimeout(timeout)
         disposeState()
-        reject(new Error('A captura de áudio foi cancelada.'))
+        reject(new Error(t('A captura de áudio foi cancelada.')))
       }
       signal?.addEventListener('abort', onAbort, { once: true })
       disposeAbort = () => signal?.removeEventListener('abort', onAbort)
@@ -115,7 +116,7 @@ async function createAudioCapture(start: (captureId: string) => Promise<void>, s
     if (context.state === 'suspended') await context.resume()
     signal?.throwIfAborted()
     const track = destination.stream.getAudioTracks()[0]
-    if (!track) throw new Error('Não foi possível criar a faixa de áudio do aplicativo.')
+    if (!track) throw new Error(t('Não foi possível criar a faixa de áudio do aplicativo.'))
     track.contentHint = 'music'
     if (bridgeFailure) throw new Error(bridgeFailure)
 

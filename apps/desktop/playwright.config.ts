@@ -9,7 +9,7 @@ if (process.env.TELAE_E2E_RELAY === '1' && process.env.TELAE_E2E_MEDIA !== '1') 
 }
 
 /**
- * E2E de duas instâncias (IMPLEMENTATION_PLAN 02/03 + PROJECT_SPEC testing).
+ * E2E de duas instâncias (ver docs/PROJECT_SPEC.md, seção de testes).
  * Requer: Windows com display, `npm run build` já executado.
  * - `npm run test:e2e` — fluxos determinísticos sem mídia (nomes, picker, convite inválido).
  * - `TELAE_E2E_MEDIA=1 npm run test:e2e` — fluxo completo com captura real (headed).

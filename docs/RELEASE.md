@@ -1,6 +1,6 @@
-# Telae — Release Checklist (Ticket 10)
+# Telae — Release Checklist
 
-## Segurança (Ticket 09)
+## Segurança
 
 - [ ] `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` no `BrowserWindow` (ver `src/main/index.ts`).
 - [ ] Preload expõe só `window.telae` (superfície estreita e tipada).

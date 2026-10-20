@@ -1,6 +1,39 @@
 # Changelog
 
-Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/RELEASE_*.md`.
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
+
+## [0.1.26] - 2026-10-19
+
+Novo visual, interface em português e inglês, configurações e avisos de amigos ao vivo. Notas completas em [docs/releases/RELEASE_0.1.26.md](docs/releases/RELEASE_0.1.26.md).
+
+### Interface
+- **Nova identidade visual:** paleta neutra com acento âmbar, tipografia Geist (e Geist Mono para códigos e telemetria) empacotada com o app, e novo ícone do aplicativo.
+- **Barra de título integrada** com marca, versão e perfil; os controles da janela do Windows são preservados.
+- **Tela inicial refeita:** cartão de compartilhamento com ilustração e recursos, painel de amigos com avatares, filtro e remoção ao passar o mouse, e código pessoal em destaque.
+- Seletor de fontes, seletor de qualidade, tela de quem transmite, player e painel de estatísticas atualizados para o mesmo sistema de design (botões, cartões, campos e selos reutilizáveis em `index.css`).
+- A navegação foi dividida em componentes (`HomeScreen`, `FriendsPanel`, `PickerScreen`, `AppHeader`, `NameForm`) e o estado de amigos foi isolado no hook `useFriends`, sem mudança de comportamento.
+
+- **Configurações:** perfil, avisos, início com o Windows, endereço do servidor de sinalização e informações da instalação.
+- **Aviso do Windows** quando um amigo começa a transmitir e o Telae não está em foco.
+- Indicador de conexão no cabeçalho, esqueleto de carregamento na lista de amigos e passos de "Como funciona" na tela inicial.
+- Texto terciário com contraste mínimo de 4,5:1 e botão de configurações no lugar do botão de perfil.
+- O player do espectador virou o componente `ViewerSession`; `App.tsx` caiu de mais de 1000 para cerca de 450 linhas.
+
+- **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações. Os textos usam `t()` com o pt-BR como texto-fonte; um teste garante que todo texto tem tradução (inclusive as mensagens do servidor).
+- A credencial do dispositivo passa a ser guardada cifrada com o cofre do sistema (DPAPI); perfis antigos são migrados sem trocar a identidade.
+
+### Projeto
+- README em inglês (`README.md`) e português (`README.pt-BR.md`), com novas capturas de tela.
+- `TelaeRegistry` dividido em arquivos parciais por responsabilidade (dispositivos, sessões, amigos, convites, conexões e persistência).
+- Licença MIT, `CONTRIBUTING.md`, `SECURITY.md`, `.editorconfig`, Dependabot e modelos de issue e PR.
+- Dockerfile e `docker-compose.yml` para hospedar o servidor.
+- ADR 0003 documenta a identidade por dispositivo (sem contas).
+- Servidor e testes compilam com avisos tratados como erro; atualizado o cliente SignalR dos testes por vulnerabilidade conhecida.
+- Testes de componentes (Testing Library) para o painel de amigos e as configurações.
+- Dependências atualizadas dentro das faixas atuais (React 19.3.1, Electron 44.9, Playwright, Vitest, oxlint, lucide).
+- Notas de versão e validações movidas para `docs/releases` e `docs/validation`.
+- Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
+- Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
 
 ## [0.1.25] - 2026-10-14
 
@@ -30,4 +63,4 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## 0.1.23 e anteriores
 
-Consulte `docs/RELEASE_0.1.12.md` a `docs/RELEASE_0.1.17.md`, `docs/DEPLOYMENT_0.1.16.md` e as tags do repositório.
+Consulte `docs/releases/` e as tags do repositório.

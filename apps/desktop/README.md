@@ -1,32 +1,30 @@
-# React + TypeScript + Vite
+# Telae Desktop
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Aplicativo Electron do Telae: captura de tela e janela, WebRTC, qualidade adaptativa e a interface em React.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | Inicia o app em modo de desenvolvimento (electron-vite) |
+| `npm run build` | Verifica tipos e gera `out/` |
+| `npm run lint` | oxlint |
+| `npm run typecheck` | `tsc -b` |
+| `npm test` | Testes unitários (vitest) |
+| `npm run test:e2e` | E2E de duas instâncias com Playwright (inicia o servidor local) |
+| `npm run dist` | Gera o instalador NSIS x64 com a ponte de áudio |
 
-## React Compiler
+## Estrutura
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```text
+src/
+├─ main/         processo principal: janela, IPC, perfil local, atualizações, ponte de áudio
+├─ preload/      API segura exposta ao renderer (window.telae)
+├─ shared/       contratos entre main e renderer
+├─ services/     sinalização, WebRTC, captura, qualidade e telemetria (sem React)
+├─ hooks/        estado de interface com efeitos (amigos e presença)
+├─ components/   telas e componentes de interface
+└─ ui/           formatação e constantes de apresentação
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+O renderer roda isolado (`contextIsolation`, sem Node) e fala com o processo principal somente por `window.telae`. Os tokens de design ficam em `tailwind.config.cjs`; veja [docs/DESIGN.md](../../docs/DESIGN.md).

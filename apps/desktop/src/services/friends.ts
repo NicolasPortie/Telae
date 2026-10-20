@@ -21,3 +21,12 @@ export function upsertFriend(list: DeviceSnapshot[], device: DeviceSnapshot): De
 export function liveFriendsExcept(list: DeviceSnapshot[], currentSharerDeviceId: string | null): DeviceSnapshot[] {
   return list.filter(friend => friend.isSharing && friend.deviceId !== currentSharerDeviceId)
 }
+
+/**
+ * O amigo acabou de começar a transmitir? Só vale quando ele já estava na lista e não transmitia;
+ * a primeira leitura da lista (sem estado anterior) nunca dispara aviso.
+ */
+export function startedSharing(previous: DeviceSnapshot[], device: DeviceSnapshot): boolean {
+  const before = previous.find(friend => friend.deviceId === device.deviceId)
+  return before !== undefined && !before.isSharing && device.isSharing
+}

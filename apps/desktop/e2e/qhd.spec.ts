@@ -15,7 +15,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-qhd-'))
     directories.push(directory)
     const app = await electron.launch({
-      args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--mute-audio', `--user-data-dir=${directory}`],
+      args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--lang=pt-BR', '--mute-audio', `--user-data-dir=${directory}`],
       env: { ...process.env, TELAE_SIGNALING_URL: process.env.TELAE_E2E_SIGNALING_URL || 'http://localhost:5015' },
     })
     apps.push(app)

@@ -25,7 +25,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  # Assinatura (Ticket 10): definir CSC_LINK (certificado) e CSC_KEY_PASSWORD
+  # Assinatura: definir CSC_LINK (certificado) e CSC_KEY_PASSWORD
   # no ambiente de release. Sem eles o instalador sai unsigned, só para teste.
 
 nsis:

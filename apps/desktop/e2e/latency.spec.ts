@@ -18,7 +18,7 @@ test('latência: movimento com áudio não acumula atraso após uma pausa do emi
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'telae-latency-'))
     directories.push(directory)
     const app = await electron.launch({
-      args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])],
+      args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])],
       env: { ...process.env, TELAE_SIGNALING_URL: process.env.TELAE_E2E_SIGNALING_URL || 'http://localhost:5015' },
     })
     apps.push(app)

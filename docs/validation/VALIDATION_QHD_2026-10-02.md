@@ -25,7 +25,7 @@ Nas amostras do receptor, `packetsLost=0` e `framesDropped=0`; no emissor, `qual
 
 Entre a primeira e terceira amostras de cada intervalo inicial: vídeo enviado médio de 2,40 Mbps e encode médio de 10,82 ms/quadro em 1440p30; 3,07 Mbps e 12,27 ms/quadro em 1440p60. Esses valores se aplicam ao padrão animado usado, não a filmes/jogos ou banda mínima necessária. Os 20/32 Mbps são tetos, não tráfego obrigatório.
 
-Evidência: [telemetria de vídeo e parâmetros dos senders](evidence/qhd-2026-10-02.json). O arquivo preserva os campos coletados de vídeo, pares de candidatos, settings e encodings, retirando listagens repetidas de todos os codecs e relatórios de áudio. O teste mantém a coleta completa em seu diretório de resultados.
+Evidência: [telemetria de vídeo e parâmetros dos senders](../evidence/qhd-2026-10-02.json). O arquivo preserva os campos coletados de vídeo, pares de candidatos, settings e encodings, retirando listagens repetidas de todos os codecs e relatórios de áudio. O teste mantém a coleta completa em seu diretório de resultados.
 
 As duas tentativas iniciais falharam porque a janela de teste tinha área útil menor que QHD: primeiro 2544 × 1378 (bordas/menu), depois 2560 × 1392 (limite da área de trabalho do Windows). A janela em tela cheia forneceu a fonte real de 2560 × 1440. Os asserts de resolução foram mantidos.
 
@@ -50,4 +50,4 @@ O PC emissor captura e codifica, usando CPU/GPU conforme o encoder disponível. 
 
 ## Limites da validação
 
-Não foram medidos nesta execução: dois PCs físicos distintos, GPU integrada, Internet congestionada, TURN real, múltiplos espectadores em QHD, endurance, qualidade visual de filme/jogo e latência física glass-to-glass. Pressão de CPU/rede foi validada com estatísticas simuladas nos testes unitários, não imposta fisicamente durante este teste de mídia. O resultado local não valida 1440p60 estável em todos esses cenários. Siga [BENCHMARK.md](BENCHMARK.md) para a matriz completa antes de afirmar suporte universal.
+Não foram medidos nesta execução: dois PCs físicos distintos, GPU integrada, Internet congestionada, TURN real, múltiplos espectadores em QHD, endurance, qualidade visual de filme/jogo e latência física glass-to-glass. Pressão de CPU/rede foi validada com estatísticas simuladas nos testes unitários, não imposta fisicamente durante este teste de mídia. O resultado local não valida 1440p60 estável em todos esses cenários. Siga [BENCHMARK.md](../BENCHMARK.md) para a matriz completa antes de afirmar suporte universal.

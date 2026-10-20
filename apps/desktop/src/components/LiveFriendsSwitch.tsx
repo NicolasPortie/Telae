@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { liveFriendsExcept } from '../services/friends'
 import type { DeviceSnapshot } from '../services/types'
 
@@ -19,8 +20,8 @@ export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDevic
     <div className="telae-live-switch">
       {options.length > 0 && (
         <>
-          <span className="telae-live-switch-label">Ao vivo agora</span>
-          <ul className="telae-live-switch-list" aria-label="Amigos ao vivo">
+          <span className="telae-live-switch-label">{t('Ao vivo agora')}</span>
+          <ul className="telae-live-switch-list" aria-label={t('Amigos ao vivo')}>
             {options.map(friend => (
               <li key={friend.deviceId}>
                 <button
@@ -31,7 +32,7 @@ export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDevic
                   className="telae-press telae-live-chip"
                 >
                   <span aria-hidden="true" className="telae-live-dot" />
-                  {pendingDeviceId === friend.deviceId ? 'Entrando…' : friend.displayName}
+                  {pendingDeviceId === friend.deviceId ? t('Entrando…') : friend.displayName}
                 </button>
               </li>
             ))}

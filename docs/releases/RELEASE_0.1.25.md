@@ -37,7 +37,7 @@ Os quadros decodificados mantiveram a resolução esperada e texto legível, com
 
 No teste A/V, o percentil 95 da latência de vídeo foi 100 ms. Os 16 pares de pulsos tiveram diferença mediana de +87 ms entre áudio e vídeo; a mediana inicial foi +138 ms e a final +76 ms. O sinal positivo indica áudio observado depois do vídeo. A fila não acumulou atraso depois da pausa e da minimização. Esses números descrevem o grafo de reprodução local durante 30 segundos, sem medir alto-falantes, sincronismo labial de um filme ou uma sessão longa pela internet.
 
-As métricas resumidas estão em [stream-2026-10-14.metrics.json](evidence/stream-2026-10-14.metrics.json). As capturas de qualidade e a telemetria completa foram preservadas localmente em `apps/desktop/build/validation-0.1.25/`.
+As métricas resumidas estão em [stream-2026-10-14.metrics.json](../evidence/stream-2026-10-14.metrics.json). As capturas de qualidade e a telemetria completa foram preservadas localmente em `apps/desktop/build/validation-0.1.25/`.
 
 ## Atualização
 
