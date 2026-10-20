@@ -37,7 +37,7 @@ O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assisti
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
 - **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.
 - **Avisos do Windows** quando um amigo começa a transmitir, início automático opcional e atualização automática em segundo plano.
-- **Sem conta nem senha**: cada instalação tem uma identidade criptográfica própria ([ADR 0003](docs/adr/0003-device-identity.md)).
+- **Contas**: e-mail e senha com verificação por código, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
 
 <table>
   <tr>
@@ -90,11 +90,13 @@ npm run dev
 
 ## Self-hosting
 
-O servidor de sinalização roda em um container:
+O servidor de sinalização e o banco PostgreSQL rodam em containers. Copie `.env.example` para `.env`, defina `POSTGRES_PASSWORD` e `TELAE_JWT_KEY` (e o SMTP, para enviar os e-mails de verificação) e suba:
 
 ```bash
 docker compose up -d
 ```
+
+Em desenvolvimento (`dotnet run`), as contas usam um arquivo SQLite local e os códigos de verificação aparecem no log do servidor, então não precisa de banco nem de servidor de e-mail.
 
 Depois, no app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor persiste perfis em um volume e expõe `GET /health`. Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)).
 

@@ -2,6 +2,13 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 
+## [Não lançado]
+
+### Contas
+- **Contas de usuário** com e-mail, nome de usuário único e senha, em PostgreSQL. Verificação de e-mail e recuperação de senha por código de 6 dígitos (SMTP configurável), sessões com rotação e detecção de reutilização, bloqueio por tentativas, limites por IP e exclusão de conta. Detalhes na [ADR 0004](docs/adr/0004-user-accounts.md).
+- O app ganhou as telas de entrar, criar conta, confirmar e-mail e recuperar senha. Conta, senha e exclusão ficam em Configurações, e os tokens ficam no cofre do sistema.
+- O servidor continua aceitando clientes anteriores enquanto `Auth:AllowLegacyDevices` estiver ligado. Para publicar esta versão do servidor é preciso definir `Auth__JwtKey` e, em produção, a conexão com o PostgreSQL (veja `.env.example`).
+
 ## [0.1.26] - 2026-10-19
 
 Novo visual, interface em português e inglês, configurações e avisos de amigos ao vivo. Notas completas em [docs/releases/RELEASE_0.1.26.md](docs/releases/RELEASE_0.1.26.md).

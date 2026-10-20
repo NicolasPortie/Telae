@@ -91,11 +91,13 @@ npm run dev
 
 ## Self-hosting
 
-The signaling server runs in a container:
+The signaling server and its PostgreSQL database run in containers. Copy `.env.example` to `.env`, set `POSTGRES_PASSWORD` and `TELAE_JWT_KEY` (and the SMTP settings, so verification emails can be sent), then:
 
 ```bash
 docker compose up -d
 ```
+
+In development (`dotnet run`), accounts use a local SQLite file and verification codes are written to the server log, so no database or mail server is needed.
 
 Then, in the app, open **Settings > Signaling server** and enter its address (for example `http://localhost:5015`). The server keeps profiles in a volume and exposes `GET /health`. For restrictive networks, configure a TURN server (see [`ops/turnserver.conf.example`](ops/turnserver.conf.example) and the comments in [`docker-compose.yml`](docker-compose.yml)).
 
