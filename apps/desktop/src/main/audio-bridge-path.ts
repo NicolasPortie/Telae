@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.ts'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
@@ -16,6 +17,6 @@ export function resolveAudioBridgePath(
         ]),
       ]
   const found = candidates.find(exists)
-  if (!found) throw new Error('Audio bridge não encontrado. Execute npm run build:audio-bridge antes de iniciar o desktop.')
+  if (!found) throw new Error(t('Audio bridge não encontrado. Execute npm run build:audio-bridge antes de iniciar o desktop.'))
   return found
 }

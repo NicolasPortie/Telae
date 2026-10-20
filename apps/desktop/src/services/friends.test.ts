@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { liveFriendsExcept, sortFriends, upsertFriend } from './friends'
+import { liveFriendsExcept, sortFriends, startedSharing, upsertFriend } from './friends'
 import type { DeviceSnapshot } from './types'
 
 function friend(overrides: Partial<DeviceSnapshot> & Pick<DeviceSnapshot, 'deviceId' | 'displayName'>): DeviceSnapshot {
@@ -46,4 +46,13 @@ it('never offers the sharer the viewer is already watching as a switch target', 
   ]
   expect(liveFriendsExcept(list, 'ana-device').map(item => item.displayName)).toEqual(['Bia'])
   expect(liveFriendsExcept(list, null).map(item => item.displayName)).toEqual(['Ana', 'Bia'])
+})
+
+it('detects a friend that just went live, and ignores everything else', () => {
+  const idle = friend({ deviceId: 'a', displayName: 'Ana', status: 'online' })
+  const live = { ...idle, status: 'transmitting' as const, isSharing: true }
+  expect(startedSharing([idle], live)).toBe(true)
+  expect(startedSharing([live], live)).toBe(false)
+  expect(startedSharing([], live)).toBe(false)
+  expect(startedSharing([live], idle)).toBe(false)
 })

@@ -8,4 +8,4 @@ Backend com presença restrita, remoção autorizada e bloqueio de retorno à se
 
 Validação anterior à release: 99 testes desktop, 67 testes backend, builds/lint/tipos, E2E de mídia e TURN local aprovados. Carga de 3/6/12 espectadores por 60 segundos em uma máquina. Essas medições não afirmam sincronização acústica, 1080p60, alcance em redes externas ou endurance de uma hora.
 
-Instalador sem assinatura Authenticode enquanto nenhum certificado de distribuição estiver configurado. Consulte [a validação de publicação](RELEASE_VALIDATION.md) e [o relatório das melhorias](IMPROVEMENTS_2026-10-02.md).
+Instalador sem assinatura Authenticode enquanto nenhum certificado de distribuição estiver configurado. Consulte [a validação de publicação](../RELEASE_VALIDATION.md).

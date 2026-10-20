@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Telae desktop app for low-latency screen sharing with synchronized system audio.",
   "author": "Telae",
   "type": "module",
@@ -18,6 +18,8 @@
     "dist": "npm run build && npm run build:audio-bridge && electron-builder --win --publish never"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@microsoft/signalr": "^10.0.11",
     "electron-updater": "^6.8.9",
     "lucide-react": "^1.48.0",
@@ -26,6 +28,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
@@ -34,6 +39,7 @@
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
+    "jsdom": "^29.1.1",
     "oxlint": "^1.81.0",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.17",
