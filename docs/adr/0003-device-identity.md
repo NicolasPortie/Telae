@@ -1,6 +1,6 @@
 # ADR 0003: identidade por dispositivo, sem contas
 
-**Status:** aceita
+**Status:** substituída pela [ADR 0004](0004-user-accounts.md)
 
 ## Contexto
 

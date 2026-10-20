@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { diagnosticSnapshot } from './diagnostics.ts'
+import { signUp } from './auth.ts'
 import { addFriend, befriend, friendCodeOf, watchFriend } from './friends.ts'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
@@ -48,12 +49,7 @@ async function firstWindow(app: ElectronApplication): Promise<Page> {
   return page
 }
 
-async function enterWithName(page: Page, name: string) {
-  const nameInput = page.getByLabel('Seu nome')
-  await nameInput.fill(name)
-  await page.getByRole('button', { name: 'Continuar' }).click()
-  await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
-}
+const enterWithName = signUp
 
 test.describe('duas instâncias Telae', () => {
   test('janela captura apenas o áudio do aplicativo escolhido', async () => {

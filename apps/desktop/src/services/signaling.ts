@@ -32,12 +32,14 @@ export class SignalingClient {
   private readonly listeners = new Map<keyof Events, Set<(...args: never[]) => void>>()
   private deviceId = ''
   private displayName = ''
-  private deviceSecret = ''
   private friendCodes: string[] = []
 
   constructor(baseUrl: string) {
     this.connection = new HubConnectionBuilder()
-      .withUrl(`${baseUrl.replace(/\/$/, '')}/hubs/telae`)
+      // O token de acesso é pedido ao processo principal a cada (re)conexão, então nunca vai vencido.
+      .withUrl(`${baseUrl.replace(/\/$/, '')}/hubs/telae`, {
+        accessTokenFactory: async () => (await window.telae.auth.getAccessToken()) ?? '',
+      })
       .withAutomaticReconnect([0, 1000, 2500, 5000, 8000])
       .configureLogging(LogLevel.Warning)
       .build()
@@ -54,7 +56,7 @@ export class SignalingClient {
     this.connection.onreconnected(async () => {
       try {
         if (this.deviceId && this.displayName) {
-          await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName, deviceSecret: this.deviceSecret })
+          await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName, deviceSecret: '' })
         }
         await this.connection.invoke('GetFriends', this.friendCodes)
         this.emit('connectionChanged', 'online')
@@ -78,13 +80,13 @@ export class SignalingClient {
     }
   }
 
-  async connect(deviceId: string, displayName: string, deviceSecret: string): Promise<DeviceSnapshot> {
+  /** A identidade vem do token da conta; `deviceId` e `displayName` só espelham o que o servidor confirma. */
+  async connect(deviceId: string, displayName: string): Promise<DeviceSnapshot> {
     this.deviceId = deviceId
     this.displayName = displayName
-    this.deviceSecret = deviceSecret
     this.emit('connectionChanged', 'connecting')
     if (this.connection.state === HubConnectionState.Disconnected) await this.connection.start()
-    const device = await this.connection.invoke<DeviceSnapshot>('RegisterDevice', { deviceId, displayName, deviceSecret })
+    const device = await this.connection.invoke<DeviceSnapshot>('RegisterDevice', { deviceId, displayName, deviceSecret: '' })
     this.emit('connectionChanged', 'online')
     return device
   }

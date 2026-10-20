@@ -31,6 +31,8 @@ export default defineConfig({
         command: 'dotnet run --project ..\\server\\Telae.Server.csproj --no-launch-profile --urls http://localhost:5015',
         url: 'http://localhost:5015/health',
         reuseExistingServer: !process.env.CI,
+        // Banco SQLite local e cadastro sem código por e-mail: só para testes automatizados.
+        env: { ASPNETCORE_ENVIRONMENT: 'Development', Auth__RequireEmailVerification: 'false' },
         timeout: 120_000,
       },
 })

@@ -5,7 +5,8 @@ import { AppHeader } from './components/AppHeader'
 import { FriendsPanel } from './components/FriendsPanel'
 import { HomeScreen } from './components/HomeScreen'
 import { LiveFriendsSwitch } from './components/LiveFriendsSwitch'
-import { SetupScreen } from './components/NameForm'
+import { AuthScreen } from './components/AuthScreen'
+import { authErrorMessage } from './components/authErrors'
 import { SettingsScreen } from './components/SettingsScreen'
 import { PickerScreen } from './components/PickerScreen'
 import { SharerSession } from './components/SharerSession'
@@ -13,9 +14,9 @@ import { ViewerSession } from './components/ViewerSession'
 import { useFriends } from './hooks/useFriends'
 import { ShareSessionController } from './services/share-session'
 import type { DeviceSnapshot, QualityProfile } from './services/types'
-import type { CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
+import type { AccountInfo, CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
-type Screen = 'boot' | 'setup' | 'home' | 'picker' | 'session' | 'profile'
+type Screen = 'boot' | 'auth' | 'home' | 'picker' | 'session' | 'profile'
 
 export default function App() {
   const [controller] = useState(() => new ShareSessionController())
@@ -25,7 +26,9 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = locale }, [locale])
   const [snapshot, setSnapshot] = useState(() => controller.getSnapshot())
   const [screen, setScreen] = useState<Screen>('boot')
-  const [profile, setProfile] = useState<LocalProfile | null>(null)
+  const [, setProfile] = useState<LocalProfile | null>(null)
+  const [account, setAccount] = useState<AccountInfo | null>(null)
+  const [authNotice, setAuthNotice] = useState<string | null>(null)
 
   const [sources, setSources] = useState<CaptureSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(false)
@@ -88,30 +91,43 @@ export default function App() {
     void window.telae.getSettings().then(settings => setLocale(resolveLocale(settings.language, navigator.language))).catch(() => undefined)
   }, [desktopApiAvailable])
 
-  // Boot: perfil local + ambiente (sincroniza com o main process via IPC).
+  /** Conecta ao servidor com a conta atual (o hub valida o token de acesso). */
+  const connectToServer = useCallback(async () => {
+    setConnectError(null)
+    try {
+      await controller.connect()
+    } catch (error) {
+      setConnectError(error instanceof Error ? error.message : t('Não foi possível conectar ao Telae.'))
+    }
+  }, [controller])
+
+  // Boot: sessão da conta + perfil local + ambiente (sincroniza com o main process via IPC).
   useEffect(() => {
     let cancelled = false
     void (async () => {
       if (!desktopApiAvailable) {
-        if (!cancelled) setScreen('setup')
+        if (!cancelled) setScreen('auth')
         return
       }
       try {
-        const [local, environment] = await Promise.all([window.telae.getLocalProfile(), window.telae.getEnvironment()])
+        const [signedIn, environment] = await Promise.all([window.telae.auth.getSession(), window.telae.getEnvironment()])
+        // O perfil local é alinhado à conta no processo principal; lê depois da sessão.
+        const local = await window.telae.getLocalProfile()
         if (cancelled) return
         setProfile(local)
         setAppVersion(environment.version)
-        setNameInput(local.displayName)
-        setScreen(local.displayName ? 'home' : 'setup')
-        if (local.displayName) {
-          try {
-            await controller.connect(local.displayName)
-          } catch (error) {
-            if (!cancelled) setConnectError(error instanceof Error ? error.message : t('Falha ao conectar.'))
-          }
+        setAccount(signedIn)
+        if (!signedIn) {
+          setScreen('auth')
+          return
         }
+        setNameInput(signedIn.displayName)
+        setScreen('home')
+        await controller.connect().catch(error => {
+          if (!cancelled) setConnectError(error instanceof Error ? error.message : t('Falha ao conectar.'))
+        })
       } catch {
-        if (!cancelled) setScreen('setup')
+        if (!cancelled) setScreen('auth')
       }
     })()
     return () => {
@@ -119,51 +135,65 @@ export default function App() {
     }
   }, [controller, desktopApiAvailable])
 
-  const connectWithName = useCallback(
-    async (name: string) => {
-      setBusy(true)
-      setFormError(null)
-      setConnectError(null)
-      try {
-        const device = await controller.connect(name)
-        setProfile((previous) => (previous ? { ...previous, displayName: device.displayName } : previous))
-        setConnectError(null)
-        setScreen('home')
-      } catch (error) {
-        setConnectError(error instanceof Error ? error.message : t('Não foi possível conectar ao Telae.'))
-      } finally {
-        setBusy(false)
+  // Mudanças de sessão vindas do processo principal: nome atualizado, saída ou sessão expirada.
+  const explicitSignOut = useRef(false)
+  useEffect(() => {
+    if (!desktopApiAvailable) return
+    return window.telae.auth.onSessionChanged(next => {
+      if (next) {
+        setAccount(next)
+        setNameInput(next.displayName)
+        setProfile(current => (current ? { ...current, displayName: next.displayName, accountId: next.id } : current))
+        return
       }
-    },
-    [controller],
-  )
+      controller.signOut()
+      setAccount(null)
+      setProfile(current => (current ? { ...current, displayName: '' } : current))
+      setAuthNotice(explicitSignOut.current ? null : t('Sua sessão expirou. Entre novamente.'))
+      explicitSignOut.current = false
+      setScreen('auth')
+    })
+  }, [controller, desktopApiAvailable])
+
+  const handleAuthenticated = useCallback(async (signedIn: AccountInfo) => {
+    setAccount(signedIn)
+    setNameInput(signedIn.displayName)
+    setAuthNotice(null)
+    setFormError(null)
+    setProfile(await window.telae.getLocalProfile())
+    setScreen('home')
+    await connectToServer()
+  }, [connectToServer])
+
+  const signOut = useCallback(async () => {
+    explicitSignOut.current = true
+    await window.telae.auth.logout()
+  }, [])
 
   const saveName = useCallback(async () => {
     if (!desktopApiAvailable) {
       setFormError(t('Abra o aplicativo Telae para continuar.'))
       return
     }
-
     setBusy(true)
     setFormError(null)
     try {
-      const local = await window.telae.setDisplayName(nameInput)
-      setProfile(local)
-      setNameInput(local.displayName)
-
-      try {
-        await controller.connect(local.displayName)
-        setConnectError(null)
-      } catch (error) {
-        setConnectError(error instanceof Error ? error.message : t('Seu nome foi salvo, mas não foi possível conectar.'))
+      const outcome = await window.telae.auth.updateDisplayName(nameInput)
+      if (!outcome.ok) {
+        setFormError(authErrorMessage(outcome.code))
+        return
       }
+      setProfile(await window.telae.getLocalProfile())
+      setNameInput(outcome.data.displayName)
+      // O servidor lê o nome atual da conta ao registrar a conexão.
+      await connectToServer()
       setScreen('home')
     } catch (error) {
       setFormError(error instanceof Error ? error.message : t('Não foi possível salvar seu nome.'))
     } finally {
       setBusy(false)
     }
-  }, [controller, desktopApiAvailable, nameInput])
+  }, [connectToServer, desktopApiAvailable, nameInput])
 
   const loadSources = useCallback(async () => {
     if (!desktopApiAvailable) {
@@ -319,7 +349,7 @@ export default function App() {
     <div className={`telae-shell ${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : 'min-h-full'} text-ink`}>
       <AppHeader
         version={appVersion}
-        displayName={profile?.displayName}
+        displayName={account?.displayName}
         connection={snapshot.signaling === 'online' ? 'online' : snapshot.signaling === 'offline' ? 'offline' : 'connecting'}
         profileLocked={sessionActive}
         updateStatus={updateStatus}
@@ -327,7 +357,7 @@ export default function App() {
         connectError={connectError}
         onOpenProfile={() => setScreen('profile')}
         onRetryUpdate={() => void window.telae.checkForUpdates()}
-        onReconnect={() => profile?.displayName && void connectWithName(profile.displayName)}
+        onReconnect={() => void connectToServer()}
       />
 
       <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} ${visibleScreen === 'home' ? 'telae-home-main' : ''} mx-auto w-full px-6 pb-16 pt-10`}>
@@ -338,13 +368,13 @@ export default function App() {
 
         {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">{t('Abrindo Telae…')}</p>}
 
-        {visibleScreen === 'setup' && (
-          <SetupScreen value={nameInput} onChange={setNameInput} onSubmit={() => void saveName()} busy={busy} error={formError} desktopApiAvailable={desktopApiAvailable} />
+        {visibleScreen === 'auth' && (
+          <AuthScreen desktopApiAvailable={desktopApiAvailable} notice={authNotice} onAuthenticated={signedIn => void handleAuthenticated(signedIn)} />
         )}
 
         {visibleScreen === 'home' && (
           <HomeScreen
-            displayName={profile?.displayName}
+            displayName={account?.displayName}
             canShare={online}
             onChooseScreen={openPicker}
             updateStatus={updateStatus}
@@ -389,8 +419,9 @@ export default function App() {
             nameBusy={busy}
             nameError={formError}
             version={appVersion}
-            deviceId={profile?.deviceId}
-            onBack={() => setScreen(profile?.displayName ? 'home' : 'setup')}
+            account={account}
+            onSignOut={() => void signOut()}
+            onBack={() => setScreen(account ? 'home' : 'auth')}
           />
         )}
 

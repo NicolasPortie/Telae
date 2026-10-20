@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { befriend, watchFriend } from './friends.ts'
 import { diagnosticSnapshot } from './diagnostics.ts'
+import { signUp } from './auth.ts'
 
 // Local, real window/process-loopback capture. The source encodes wall time in
 // large black/white cells; a simultaneous flash and quiet tone measure A/V offset.
@@ -23,9 +24,7 @@ test('latência: movimento com áudio não acumula atraso após uma pausa do emi
     })
     apps.push(app)
     const page = await app.firstWindow()
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar' }).click()
-    await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+    await signUp(page, name)
     return { app, page, name }
   }
   async function measure(page: Page) {

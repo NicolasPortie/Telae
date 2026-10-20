@@ -249,16 +249,16 @@ export class ShareSessionController {
     return this.signaling.on('friendRequestReceived', listener)
   }
 
-  async connect(displayName?: string): Promise<DeviceSnapshot> {
+  /** Conecta com a conta da sessão atual; o servidor confirma a identidade pelo token de acesso. */
+  async connect(): Promise<DeviceSnapshot> {
     if (typeof window === 'undefined' || typeof window.telae === 'undefined') {
       throw new Error('Abra o Telae pelo Electron para conectar.')
     }
     this.detachSignaling()
-    const profile = await window.telae.getLocalProfile()
-    const name = (displayName ?? profile.displayName).trim()
-    if (!name) throw new Error(t('Informe seu nome para entrar.'))
-    const saved = name !== profile.displayName ? await window.telae.setDisplayName(name) : profile
-    this.deviceId = saved.deviceId
+    const account = await window.telae.auth.getSession()
+    if (!account) throw new Error(t('Entre na sua conta para continuar.'))
+    const saved = await window.telae.getLocalProfile()
+    this.deviceId = account.id
 
     const environment = await window.telae.getEnvironment()
     this.forceRelay = environment.forceRelay === true
@@ -276,7 +276,7 @@ export class ShareSessionController {
       client.on('connectionChanged', (status) => this.handleSignalingChanged(status)),
     ]
     try {
-      const device = await client.connect(saved.deviceId, name, saved.deviceSecret)
+      const device = await client.connect(account.id, account.displayName)
       this.myFriendCode = device.friendCode ?? null
       this.signalingStatus = 'online'
       this.emit()
@@ -587,6 +587,17 @@ export class ShareSessionController {
     this.teardownPeer()
     this.teardownLocal()
     this.detachSignaling()
+  }
+
+  /** Encerra tudo ao sair da conta: transmissão, conexão e o código de amigo em memória. */
+  signOut() {
+    this.dispose()
+    this.myFriendCode = null
+    this.signalingStatus = 'offline'
+    this.session = null
+    this.role = null
+    this.viewerPresence = 'none'
+    this.setState('idle')
   }
 
   // ---- private ----

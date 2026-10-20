@@ -11,12 +11,16 @@ import type {
   AudioBridgeState,
   AudioProcess,
   AudioStreamMetadata,
+  AccountInfo,
   AppSettings,
   CaptureSource,
   LocalProfile,
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
 import { readLocalProfile, writeJsonAtomically, writeLocalProfile, type SecretCipher } from './profile-store.ts'
+import { AuthServerClient } from './auth-client.ts'
+import { AuthSession } from './auth-session.ts'
+import { createSessionStorage } from './auth-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
 
 // Sharing remains active when the main window is minimized or covered.
@@ -155,6 +159,30 @@ function readProfile(): LocalProfile {
 function persistProfile(profile: LocalProfile): LocalProfile {
   writeLocalProfile(profilePath(), profile, profileCipher())
   return profile
+}
+
+const authSessionPath = () => path.join(app.getPath('userData'), 'session.json')
+let authSession: AuthSession | null = null
+
+/** Alinha o perfil local à conta: nome vindo do servidor e, ao trocar de conta, lista de amigos zerada. */
+function syncProfileWithAccount(account: AccountInfo | null) {
+  if (account) {
+    const profile = readProfile()
+    if (profile.accountId !== account.id) profile.friendCodes = []
+    profile.accountId = account.id
+    profile.displayName = account.displayName
+    persistProfile(profile)
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('auth:changed', account)
+}
+
+function getAuth(): AuthSession {
+  authSession ??= new AuthSession(
+    new AuthServerClient(readSignalingUrl),
+    createSessionStorage(authSessionPath(), profileCipher),
+    syncProfileWithAccount,
+  )
+  return authSession
 }
 
 function normalizeFriendCode(value: string): string {
@@ -318,6 +346,23 @@ function registerIpc() {
     void updates.check(saved)
     return { version: app.getVersion(), platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
   })
+  ipcMain.handle('auth:session', async () => {
+    const auth = getAuth()
+    const account = await auth.restore()
+    if (account) syncProfileWithAccount(account)
+    return account
+  })
+  ipcMain.handle('auth:register', (_event, input: { email: string; username: string; password: string; language: string }) => getAuth().register(input))
+  ipcMain.handle('auth:verify-email', (_event, identifier: string, code: string) => getAuth().verifyEmail(String(identifier), String(code)))
+  ipcMain.handle('auth:resend-verification', (_event, identifier: string) => getAuth().resendVerification(String(identifier)))
+  ipcMain.handle('auth:login', (_event, identifier: string, password: string) => getAuth().login(String(identifier), String(password)))
+  ipcMain.handle('auth:logout', () => getAuth().logout())
+  ipcMain.handle('auth:forgot-password', (_event, identifier: string) => getAuth().forgotPassword(String(identifier)))
+  ipcMain.handle('auth:reset-password', (_event, identifier: string, code: string, newPassword: string) => getAuth().resetPassword(String(identifier), String(code), String(newPassword)))
+  ipcMain.handle('auth:update-display-name', (_event, displayName: string) => getAuth().updateDisplayName(String(displayName)))
+  ipcMain.handle('auth:change-password', (_event, current: string, next: string) => getAuth().changePassword(String(current), String(next)))
+  ipcMain.handle('auth:delete-account', (_event, password: string) => getAuth().deleteAccount(String(password)))
+  ipcMain.handle('auth:access-token', () => getAuth().getAccessToken())
   ipcMain.handle('settings:get', () => readSettings())
   ipcMain.handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
   ipcMain.handle('update:status', () => updates.getStatus())

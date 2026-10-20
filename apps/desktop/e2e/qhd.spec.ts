@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { befriend, watchFriend } from './friends.ts'
+import { signUp } from './auth.ts'
 
 // Real Windows display capture, product signaling, encoder and receiver. No fake media.
 test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () => {
@@ -22,9 +23,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     return app
   }
   async function enter(page: Page, name: string) {
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar' }).click()
-    await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+    await signUp(page, name)
     await page.evaluate(() => {
       const target = window as unknown as { qhdPeers: RTCPeerConnection[] }
       target.qhdPeers = []

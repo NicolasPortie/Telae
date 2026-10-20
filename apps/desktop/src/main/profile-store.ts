@@ -42,6 +42,7 @@ export function readLocalProfile(filePath: string, cipher?: SecretCipher): Local
     displayName: typeof parsed.displayName === 'string' ? parsed.displayName.trim() : '',
     friendCodes: Array.isArray(parsed.friendCodes)
       ? parsed.friendCodes.filter((code): code is string => typeof code === 'string' && /^[A-Z2-9]{6}$/.test(code)) : [],
+    ...(typeof parsed.accountId === 'string' && parsed.accountId ? { accountId: parsed.accountId } : {}),
   }
 }
 

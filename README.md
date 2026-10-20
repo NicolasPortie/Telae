@@ -37,7 +37,7 @@ Telae does one thing well: pick a screen or window and let a friend watch it wit
 - **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
 - **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.
 - **Windows notifications** when a friend goes live, optional launch at startup and background auto-updates.
-- **No account, no password**: each installation has its own cryptographic identity ([ADR 0003](docs/adr/0003-device-identity.md)), stored with the OS keystore.
+- **Accounts**: email + password with 6-digit email verification, password recovery, rotating sessions and account deletion ([ADR 0004](docs/adr/0004-user-accounts.md)). Tokens are kept in the OS keystore.
 - **English and Portuguese** interface, following the Windows language or chosen in Settings.
 
 <table>

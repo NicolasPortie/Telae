@@ -5,6 +5,7 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { diagnosticSnapshot } from './diagnostics.ts'
 import { befriend, watchFriend } from './friends.ts'
+import { signUp } from './auth.ts'
 
 const requestedViewers = process.env.TELAE_E2E_VIEWERS
 const viewerCount = Number(requestedViewers)
@@ -101,8 +102,7 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     const app = await electron.launch({ args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])], env })
     const page = await app.firstWindow()
     instances.push({ app, page, directory })
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
+    await signUp(page, name)
     await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
     return { app, page }
   }
