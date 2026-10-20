@@ -26,7 +26,7 @@ async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> 
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([, value]) => value !== undefined),
   ) as Record<string, string>
-  const args = [APP_DIR, '--no-sandbox', `--user-data-dir=${userDataDir}`]
+  const args = [APP_DIR, '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${userDataDir}`]
   if (muteAudioOutput) args.push('--mute-audio')
   const app = await electron.launch({
     args,
@@ -62,7 +62,7 @@ test.describe('duas instâncias Telae', () => {
     try {
       const page = await firstWindow(app)
       await enterWithName(page, 'JanelaE2E')
-      await expect(page.locator('header svg')).toHaveCount(1) // Only the profile icon remains.
+      await expect(page.locator('header svg')).toHaveCount(1) // Somente o ícone de configurações.
       await expect(page.locator('header').getByText(/Pronto|Aguardando seu amigo/)).toHaveCount(0)
       await page.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(page.getByRole('heading', { name: /O que você quer compartilhar/ })).toBeVisible()
@@ -345,7 +345,7 @@ test.describe('duas instâncias Telae', () => {
 
       await sharer.getByRole('button', { name: 'Trocar fonte' }).click()
       await expect(sharer.getByText('A transmissão continua ativa durante a troca.')).toBeVisible()
-      await expect(sharer.getByRole('button', { name: 'Abrir perfil' })).toBeDisabled()
+      await expect(sharer.getByRole('button', { name: 'Abrir configurações' })).toBeDisabled()
       await sharer.getByRole('button', { name: /Voltar/ }).click()
       await expect(sharer.getByRole('button', { name: 'Parar transmissão' })).toBeVisible()
 

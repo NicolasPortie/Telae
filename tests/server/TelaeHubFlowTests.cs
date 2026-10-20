@@ -12,7 +12,7 @@ using Telae.Server.Hubs;
 namespace Telae.Server.Tests;
 
 /// <summary>
-/// E2E no nível da sinalização (Tickets 02/03/07): dois clientes SignalR reais
+/// E2E no nível da sinalização: dois clientes SignalR reais
 /// contra o hub servido por Kestrel em porta efêmera — invite, offer/answer,
 /// trickle ICE, leave e queda. Mídia WebRTC de ponta a ponta exige 2 Electrons
 /// (ver docs/BENCHMARK.md).
