@@ -1,8 +1,10 @@
 # Changelog
 
-Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/RELEASE_*.md`.
+Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 
-## [Não lançado]
+## [0.1.26] - 2026-10-19
+
+Novo visual, interface em português e inglês, configurações e avisos de amigos ao vivo. Notas completas em [docs/releases/RELEASE_0.1.26.md](docs/releases/RELEASE_0.1.26.md).
 
 ### Interface
 - **Nova identidade visual:** paleta neutra com acento âmbar, tipografia Geist (e Geist Mono para códigos e telemetria) empacotada com o app, e novo ícone do aplicativo.
@@ -28,6 +30,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - ADR 0003 documenta a identidade por dispositivo (sem contas).
 - Servidor e testes compilam com avisos tratados como erro; atualizado o cliente SignalR dos testes por vulnerabilidade conhecida.
 - Testes de componentes (Testing Library) para o painel de amigos e as configurações.
+- Dependências atualizadas dentro das faixas atuais (React 19.3.1, Electron 44.9, Playwright, Vitest, oxlint, lucide).
 - Notas de versão e validações movidas para `docs/releases` e `docs/validation`.
 - Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
 - Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
