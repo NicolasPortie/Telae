@@ -11,6 +11,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - **Textos reescritos em tom de conversa** (pt-BR e inglês), revisados com o humanizador. Erros agora dizem o que aconteceu e o que fazer.
 - A luz vermelha de "no ar" passa a marcar quem transmite; saudação por horário na tela inicial.
 
+### Amigos
+- **Amigos pelo @usuário, sem código.** A lista de amigos, os pedidos e as dispensas agora ficam no banco e acompanham a conta em qualquer computador. O app mostra o seu @, adiciona por @ e não menciona mais códigos.
+- Entrar e criar conta redesenhados: abas, campos com ícone, medidor de força da senha, código de verificação em seis casas (aceita colar) e uma amostra do produto ao lado.
+
 ### Contas
 - **Contas de usuário** com e-mail, nome de usuário único e senha, em PostgreSQL. Verificação de e-mail e recuperação de senha por código de 6 dígitos (SMTP configurável), sessões com rotação e detecção de reutilização, bloqueio por tentativas, limites por IP e exclusão de conta. Detalhes na [ADR 0004](docs/adr/0004-user-accounts.md).
 - O app ganhou as telas de entrar, criar conta, confirmar e-mail e recuperar senha. Conta, senha e exclusão ficam em Configurações, e os tokens ficam no cofre do sistema.

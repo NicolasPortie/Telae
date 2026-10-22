@@ -158,6 +158,14 @@ A Viewer is marked live only after the playback element confirms a presented fra
 
 Diagnostic exports use an explicit allowlist without invite codes, identities or session identifiers. They retain up to one hour of structured samples, bounded state/error-category history and aggregates covering all collected samples. Actual glass-to-glass latency and perceptual A/V drift still require the physical benchmark.
 
+## Accounts and friends
+
+Since the account release, identity is an account (see [ADR 0004](adr/0004-user-accounts.md)) stored in PostgreSQL. The desktop signs in over REST (`/auth/*`) and keeps the session in the main process: a rotating refresh token encrypted with the OS keystore and a short-lived JWT access token handed to the renderer only to authenticate the SignalR connection. In the hub, `RegisterDevice` trusts the validated token, never what the client sends: the device ID is the account ID and the public friend identifier is the account's `@username`.
+
+The friend list is server-side. Each row of `Friendships` is a directed edge (who added whom); `DismissedRequests` records ignored requests. `GetFriends` loads the list from the database for the connection's account (the argument is ignored), subscribes the connection to its friends' presence groups and refreshes the in-memory mutual-friendship view used to authorize watching. `AddFriend` and `RemoveFriend` change the database, then run the same synchronization, which also ends sessions that stop being mutual. Pending requests are computed from the database (edges pointing at me that I have not reciprocated or dismissed), so they survive restarts and reach people who were offline when the request was made.
+
+The legacy device-credential path described below remains for clients released before accounts, behind `Auth:AllowLegacyDevices`.
+
 ## Device credentials and migration
 
 Each desktop stores a random 256-bit device credential locally. Registration requires it; the server persists only its SHA-256 hash and compares credentials in constant time. Device IDs and friend codes are public identifiers and do not authorize registration or joining.
