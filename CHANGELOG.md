@@ -5,7 +5,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 ## [Não lançado]
 
 ### Interface
-- **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Instrument Serif nos títulos e na marca, grão de filme e facho de luz.
+- **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Geist em peso forte nos títulos e na marca, grão de filme e facho de luz.
 - **Tela inicial nova:** trilho de amigos agrupado por Ao vivo, Online e Offline, e um palco com os cartazes de quem está transmitindo ("Em cartaz") ou a "tela apagada" quando ninguém está.
 - **Entrada em duas colunas**, com painel da marca; configurações com navegação lateral por seção (Conta, Geral, Segurança, Servidor, Sobre).
 - **Textos reescritos em tom de conversa** (pt-BR e inglês), revisados com o humanizador. Erros agora dizem o que aconteceu e o que fazer.

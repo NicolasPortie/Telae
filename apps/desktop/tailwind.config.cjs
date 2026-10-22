@@ -24,7 +24,8 @@ module.exports = {
       fontFamily: {
         sans: ['"Geist Variable"', '"Segoe UI Variable"', '"Segoe UI"', 'system-ui', 'sans-serif'],
         mono: ['"Geist Mono Variable"', 'ui-monospace', 'Consolas', 'monospace'],
-        display: ['"Instrument Serif"', 'Georgia', '"Times New Roman"', 'serif'],
+        // Fonte dos títulos grandes e da marca. Trocar aqui muda o app inteiro.
+        display: ['"Geist Variable"', '"Segoe UI Variable"', '"Segoe UI"', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 0 rgba(255,244,224,0.03) inset, 0 12px 32px -12px rgba(0,0,0,0.65)',

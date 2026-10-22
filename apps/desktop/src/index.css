@@ -167,17 +167,18 @@ h2 {
 
 .telae-wordmark {
   font-family: theme('fontFamily.display');
-  font-size: 23px;
-  font-style: italic;
+  font-size: 17px;
+  font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.04em;
 }
 
+/* Títulos grandes: mesma família da interface, peso forte e espaçamento justo. */
 .display {
   font-family: theme('fontFamily.display');
-  font-weight: 400;
-  letter-spacing: -0.015em;
-  line-height: 1.02;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.04;
 }
 
 /* Luz vermelha do "no ar". */
@@ -280,7 +281,7 @@ h2 {
   transition: border-color 150ms ease, transform 150ms ease;
 }
 .telae-poster:hover { border-color: rgb(245 181 68 / 0.55); }
-.telae-poster-initial { font-family: theme('fontFamily.display'); font-size: 84px; line-height: 0.75; color: rgb(245 181 68 / 0.92); }
+.telae-poster-initial { font-family: theme('fontFamily.display'); font-size: 76px; font-weight: 700; letter-spacing: -0.05em; line-height: 0.8; color: rgb(245 181 68 / 0.92); }
 
 /* Tela apagada: estado vazio da home. */
 .telae-darkscreen {

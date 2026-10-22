@@ -231,7 +231,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     <section aria-labelledby="auth-title" className="telae-panel-enter telae-auth">
       <div className="telae-auth-brand" aria-hidden="true">
         <div className="telae-beam" />
-        <p className="display relative max-w-[12ch] text-[clamp(44px,6vw,76px)]">{t('Passa a tela pros amigos.')}</p>
+        <p className="display relative max-w-[11ch] text-[clamp(40px,5.4vw,68px)]">{t('Passa a tela pros amigos.')}</p>
         <p className="relative max-w-[38ch] text-[15px] leading-relaxed text-ink-2">{t('Imagem nítida e som junto, sem criar sala nem mandar link.')}</p>
         <div className="telae-filmstrip" />
       </div>

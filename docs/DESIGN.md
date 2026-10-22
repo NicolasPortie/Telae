@@ -6,7 +6,7 @@ O Telae é um utilitário de desktop para assistir à tela de um amigo. A imagem
 
 Uma sala de cinema pequena, só para os amigos. O app é quase preto, com tons quentes de projetor: o âmbar é a luz que sai do projetor (ações e destaques) e o vermelho é a luz de "no ar", usado apenas para quem está transmitindo. Quem está ao vivo aparece como um **cartaz** em "Em cartaz"; quando ninguém transmite, o palco mostra uma **tela apagada**.
 
-- **Marca:** a palavra *Telae* em serifa itálica ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
+- **Marca:** a palavra *Telae* em Geist negrito, com espaçamento justo, ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
 - **Barra de título integrada:** o Windows mantém os controles da janela (`titleBarOverlay`) e a interface desenha o cabeçalho de 40 px. Fora da conta (tela de entrada) o cabeçalho mostra só a marca.
 - **Atmosfera:** facho de luz âmbar no canto superior, filme de grão por cima de tudo (`.telae-shell::after`, 7% de opacidade) e uma tira de fotograma na tela de entrada. No player não há decoração.
 - **Composição:** a tela inicial é um trilho de amigos à esquerda (agrupados por Ao vivo, Online e Offline) e o palco à direita. A tela de entrada divide-se em painel da marca e formulário. As configurações têm navegação lateral com um painel por seção.
@@ -28,10 +28,10 @@ Definidos em `apps/desktop/tailwind.config.cjs`. Componentes usam apenas nomes s
 
 ## Tipografia
 
-- **Instrument Serif** (regular e itálico) para títulos grandes, para a marca e para o nome de quem está ao vivo. Classe `.display`.
-- **Geist** para a interface e **Geist Mono** para códigos, versão e números de telemetria.
+- **Geist** para tudo: interface, títulos grandes (classe `.display`, peso 650 e espaçamento de -0,045 em) e marca.
+- **Geist Mono** para códigos, versão e números de telemetria.
 
-As três fontes são empacotadas com o aplicativo (`@fontsource`), sem depender de rede. Numerais tabulares nas estatísticas.
+As fontes são empacotadas com o aplicativo (`@fontsource-variable`), sem depender de rede. A fonte dos títulos é um único token (`fontFamily.display` em `tailwind.config.cjs`): trocar ali muda o app inteiro. Numerais tabulares nas estatísticas.
 
 ## Componentes base
 

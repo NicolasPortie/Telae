@@ -72,7 +72,7 @@ export function HomeScreen({ displayName, friendsState, online, canWatch, watchi
       <div className="telae-stage">
         <div className="telae-stage-inner">
           <p className="eyebrow">{greeting(displayName?.split(' ')[0] || t('você'))}</p>
-          <h1 id="home-title" className="display mt-3 text-[clamp(40px,5vw,60px)]">{headline}</h1>
+          <h1 id="home-title" className="display mt-3 text-[clamp(36px,4.4vw,54px)]">{headline}</h1>
           {live.length === 0 && (
             <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-2">
               {hasFriends ? t('Quando alguém transmitir, o cartaz aparece aqui.') : t('Você ainda não tem amigos por aqui. Adicione o primeiro pelo código dele.')}
@@ -98,7 +98,7 @@ export function HomeScreen({ displayName, friendsState, online, canWatch, watchi
               </>
             ) : (
               <div className="telae-darkscreen" role="img" aria-label={t('Tela apagada')}>
-                <p className="display text-[34px] italic text-ink-2">{t('Tela apagada.')}</p>
+                <p className="display text-[30px] text-ink-3">{t('Tela apagada.')}</p>
                 <p className="text-[13px] text-ink-4">{t('Nenhuma transmissão em cartaz.')}</p>
               </div>
             )}
