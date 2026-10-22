@@ -12,7 +12,7 @@ using Telae.Server.Accounts;
 namespace Telae.Server.Accounts.Migrations
 {
     [DbContext(typeof(TelaeDbContext))]
-    [Migration("20261020022312_InitialAccounts")]
+    [Migration("20261022031834_InitialAccounts")]
     partial class InitialAccounts
     {
         /// <inheritdoc />
@@ -92,6 +92,42 @@ namespace Telae.Server.Accounts.Migrations
                     b.ToTable("Accounts");
                 });
 
+            modelBuilder.Entity("Telae.Server.Accounts.DismissedRequest", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FromId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AccountId", "FromId");
+
+                    b.HasIndex("FromId");
+
+                    b.ToTable("DismissedRequests");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.Friendship", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FriendId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AccountId", "FriendId");
+
+                    b.HasIndex("FriendId");
+
+                    b.ToTable("Friendships");
+                });
+
             modelBuilder.Entity("Telae.Server.Accounts.OneTimeCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -166,6 +202,44 @@ namespace Telae.Server.Accounts.Migrations
                         .IsUnique();
 
                     b.ToTable("RefreshTokens");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.DismissedRequest", b =>
+                {
+                    b.HasOne("Telae.Server.Accounts.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Telae.Server.Accounts.Account", "From")
+                        .WithMany()
+                        .HasForeignKey("FromId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("From");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.Friendship", b =>
+                {
+                    b.HasOne("Telae.Server.Accounts.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Telae.Server.Accounts.Account", "Friend")
+                        .WithMany()
+                        .HasForeignKey("FriendId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Friend");
                 });
 
             modelBuilder.Entity("Telae.Server.Accounts.OneTimeCode", b =>

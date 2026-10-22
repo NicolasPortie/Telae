@@ -63,13 +63,11 @@ public sealed partial class TelaeRegistry
     public FriendJoinResult JoinFriendShare(string viewerDeviceId, string friendCode)
     {
         var normalized = NormalizeFriendCode(friendCode);
-        if (normalized.Length != 6)
-            throw new TelaeDomainException("invalid_friend_code", "O código tem 6 letras ou números.");
         lock (_gate)
         {
             RequireOnlineDevice(viewerDeviceId);
-            var sharerProfile = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized)
-                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse código. Confere e tenta de novo.");
+            var sharerProfile = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, normalized, StringComparison.OrdinalIgnoreCase))
+                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo.");
             var sharerDeviceId = sharerProfile.DeviceId;
             if (sharerDeviceId == viewerDeviceId)
                 throw new TelaeDomainException("cannot_view_own_share", "Você não pode assistir à sua própria transmissão.");

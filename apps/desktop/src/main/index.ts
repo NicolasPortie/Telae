@@ -164,11 +164,10 @@ function persistProfile(profile: LocalProfile): LocalProfile {
 const authSessionPath = () => path.join(app.getPath('userData'), 'session.json')
 let authSession: AuthSession | null = null
 
-/** Alinha o perfil local à conta: nome vindo do servidor e, ao trocar de conta, lista de amigos zerada. */
+/** Alinha o perfil local à conta (nome vindo do servidor) e avisa a interface. */
 function syncProfileWithAccount(account: AccountInfo | null) {
   if (account) {
     const profile = readProfile()
-    if (profile.accountId !== account.id) profile.friendCodes = []
     profile.accountId = account.id
     profile.displayName = account.displayName
     persistProfile(profile)
@@ -183,10 +182,6 @@ function getAuth(): AuthSession {
     syncProfileWithAccount,
   )
   return authSession
-}
-
-function normalizeFriendCode(value: string): string {
-  return value.trim().replaceAll('-', '').toUpperCase()
 }
 
 function findAudioBridge(): string {
@@ -215,18 +210,6 @@ function registerIpc() {
     if (!normalized) throw new Error(t('Escreva seu nome.'))
     const profile = readProfile()
     profile.displayName = normalized
-    return persistProfile(profile)
-  })
-  ipcMain.handle('profile:add-friend', (_event, friendCode: string) => {
-    const code = normalizeFriendCode(friendCode)
-    if (!/^[A-Z2-9]{6}$/.test(code)) throw new Error(t('Código de amigo inválido.'))
-    const profile = readProfile()
-    if (!profile.friendCodes.includes(code)) profile.friendCodes.push(code)
-    return persistProfile(profile)
-  })
-  ipcMain.handle('profile:remove-friend', (_event, friendCode: string) => {
-    const profile = readProfile()
-    profile.friendCodes = profile.friendCodes.filter((code) => code !== normalizeFriendCode(friendCode))
     return persistProfile(profile)
   })
 

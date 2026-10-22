@@ -93,8 +93,15 @@ public static class AuthEndpoints
         signedIn.MapPost("/change-password", (ChangePasswordRequest request, ClaimsPrincipal user, AccountService accounts, HttpContext http, CancellationToken ct) =>
             Run(async () => Results.Ok(await accounts.ChangePasswordAsync(AccountId(user), request.CurrentPassword, request.NewPassword, UserAgent(http), ct))));
 
-        signedIn.MapPost("/delete-account", (PasswordConfirmRequest request, ClaimsPrincipal user, AccountService accounts, CancellationToken ct) =>
-            Run(async () => { await accounts.DeleteAsync(AccountId(user), request.Password, ct); return Results.NoContent(); }));
+        signedIn.MapPost("/delete-account", (PasswordConfirmRequest request, ClaimsPrincipal user, AccountService accounts, HttpContext http, CancellationToken ct) =>
+            Run(async () =>
+            {
+                var id = AccountId(user);
+                await accounts.DeleteAsync(id, request.Password, ct);
+                // Libera o @usuário também no registro de presença em memória.
+                http.RequestServices.GetService<Telae.Server.Core.TelaeRegistry>()?.ForgetAccount(id.ToString());
+                return Results.NoContent();
+            }));
     }
 
     internal static Guid AccountId(ClaimsPrincipal user) =>

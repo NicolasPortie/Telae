@@ -35,6 +35,56 @@ namespace Telae.Server.Accounts.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "DismissedRequests",
+                columns: table => new
+                {
+                    AccountId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FromId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_DismissedRequests", x => new { x.AccountId, x.FromId });
+                    table.ForeignKey(
+                        name: "FK_DismissedRequests_Accounts_AccountId",
+                        column: x => x.AccountId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_DismissedRequests_Accounts_FromId",
+                        column: x => x.FromId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Friendships",
+                columns: table => new
+                {
+                    AccountId = table.Column<Guid>(type: "uuid", nullable: false),
+                    FriendId = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Friendships", x => new { x.AccountId, x.FriendId });
+                    table.ForeignKey(
+                        name: "FK_Friendships_Accounts_AccountId",
+                        column: x => x.AccountId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Friendships_Accounts_FriendId",
+                        column: x => x.FriendId,
+                        principalTable: "Accounts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "OneTimeCodes",
                 columns: table => new
                 {
@@ -95,6 +145,16 @@ namespace Telae.Server.Accounts.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_DismissedRequests_FromId",
+                table: "DismissedRequests",
+                column: "FromId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Friendships_FriendId",
+                table: "Friendships",
+                column: "FriendId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_OneTimeCodes_AccountId_Purpose",
                 table: "OneTimeCodes",
                 columns: new[] { "AccountId", "Purpose" });
@@ -114,6 +174,12 @@ namespace Telae.Server.Accounts.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "DismissedRequests");
+
+            migrationBuilder.DropTable(
+                name: "Friendships");
+
             migrationBuilder.DropTable(
                 name: "OneTimeCodes");
 

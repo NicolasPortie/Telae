@@ -75,7 +75,7 @@ export function HomeScreen({ displayName, friendsState, online, canWatch, watchi
           <h1 id="home-title" className="display mt-3 text-[clamp(36px,4.4vw,54px)]">{headline}</h1>
           {live.length === 0 && (
             <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-2">
-              {hasFriends ? t('Quando alguém transmitir, o cartaz aparece aqui.') : t('Você ainda não tem amigos por aqui. Adicione o primeiro pelo código dele.')}
+              {hasFriends ? t('Quando alguém transmitir, o cartaz aparece aqui.') : t('Você ainda não tem amigos por aqui. Adicione o primeiro pelo @ dele.')}
             </p>
           )}
 

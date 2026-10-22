@@ -32,7 +32,6 @@ export class SignalingClient {
   private readonly listeners = new Map<keyof Events, Set<(...args: never[]) => void>>()
   private deviceId = ''
   private displayName = ''
-  private friendCodes: string[] = []
 
   constructor(baseUrl: string) {
     this.connection = new HubConnectionBuilder()
@@ -58,7 +57,7 @@ export class SignalingClient {
         if (this.deviceId && this.displayName) {
           await this.connection.invoke('RegisterDevice', { deviceId: this.deviceId, displayName: this.displayName, deviceSecret: '' })
         }
-        await this.connection.invoke('GetFriends', this.friendCodes)
+        await this.connection.invoke('GetFriends', [])
         this.emit('connectionChanged', 'online')
       } catch {
         this.emit('connectionChanged', 'offline')
@@ -107,9 +106,18 @@ export class SignalingClient {
     return this.connection.invoke('DismissFriendRequest', friendCode)
   }
 
-  getFriends(friendCodes: string[]) {
-    this.friendCodes = [...friendCodes]
-    return this.connection.invoke<DeviceSnapshot[]>('GetFriends', friendCodes)
+  /** Lista de amigos da conta (vem do servidor, igual em todos os aparelhos), com a presença de cada um. */
+  getFriends() {
+    return this.connection.invoke<DeviceSnapshot[]>('GetFriends', [])
+  }
+
+  /** Adiciona pelo @usuário. O servidor valida e devolve quem foi adicionado. */
+  addFriend(username: string) {
+    return this.connection.invoke<DeviceSnapshot>('AddFriend', username)
+  }
+
+  removeFriend(username: string) {
+    return this.connection.invoke('RemoveFriend', username)
   }
 
   joinFriendShare(friendCode: string) {

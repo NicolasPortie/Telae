@@ -40,7 +40,7 @@ public sealed partial class TelaeRegistry
 
         public string DeviceId { get; init; }
         public string DisplayName { get; set; }
-        public string FriendCode { get; init; }
+        public string FriendCode { get; set; }
         public string? DeviceSecretHash { get; init; }
     }
 

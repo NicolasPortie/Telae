@@ -53,3 +53,26 @@ public sealed class OneTimeCode
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? ConsumedAt { get; set; }
 }
+
+/// <summary>
+/// Aresta dirigida da lista de amigos: AccountId adicionou FriendId.
+/// A amizade só vale (assistir, presença) quando existem as duas arestas.
+/// </summary>
+public sealed class Friendship
+{
+    public Guid AccountId { get; set; }
+    public Account? Account { get; set; }
+    public Guid FriendId { get; set; }
+    public Account? Friend { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Pedido de amizade que AccountId escolheu ignorar, vindo de FromId.</summary>
+public sealed class DismissedRequest
+{
+    public Guid AccountId { get; set; }
+    public Account? Account { get; set; }
+    public Guid FromId { get; set; }
+    public Account? From { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}

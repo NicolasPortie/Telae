@@ -58,7 +58,7 @@ export default function App() {
   const viewerLive = visibleScreen === 'session' && snapshot.role === 'viewer' && snapshot.state === 'live'
 
   const online = snapshot.signaling === 'online'
-  const friendsState = useFriends({ controller, desktopApiAvailable, online, setProfile })
+  const friendsState = useFriends({ controller, desktopApiAvailable, online })
 
   useEffect(() => controller.subscribe(() => setSnapshot(controller.getSnapshot())), [controller])
 

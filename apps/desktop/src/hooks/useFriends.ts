@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { startedSharing, upsertFriend } from '../services/friends'
-import type { ShareSessionController } from '../services/share-session'
+import { normalizeUsername, type ShareSessionController } from '../services/share-session'
 import type { DeviceSnapshot } from '../services/types'
-import type { LocalProfile } from '../shared/contracts'
 
 const REFRESH_INTERVAL_MS = 12_000
 
@@ -24,46 +23,35 @@ type Options = {
   controller: ShareSessionController
   desktopApiAvailable: boolean
   online: boolean
-  setProfile: Dispatch<SetStateAction<LocalProfile | null>>
 }
 
-/** Lista de amigos, pedidos de amizade e código pessoal: estado, sincronização com o servidor e ações. */
-export function useFriends({ controller, desktopApiAvailable, online, setProfile }: Options) {
+/** Lista de amigos, pedidos de amizade e o seu @: estado, sincronização com o servidor e ações. */
+export function useFriends({ controller, desktopApiAvailable, online }: Options) {
   const [friends, setFriends] = useState<DeviceSnapshot[]>([])
   const [requests, setRequests] = useState<DeviceSnapshot[]>([])
-  const [myFriendCode, setMyFriendCode] = useState<string | null>(null)
-  const [myCodeCopied, setMyCodeCopied] = useState(false)
-  const [codeInput, setCodeInput] = useState('')
+  const [myUsername, setMyUsername] = useState<string | null>(null)
+  const [myHandleCopied, setMyHandleCopied] = useState(false)
+  const [usernameInput, setUsernameInput] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [pendingRemoveCode, setPendingRemoveCode] = useState<string | null>(null)
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
   const friendsRef = useRef(friends)
   useEffect(() => { friendsRef.current = friends }, [friends])
 
   const refresh = useCallback(async () => {
-    if (!desktopApiAvailable) return
+    if (!desktopApiAvailable || !online) return
+    const me = controller.getMyUsername()
+    if (me) setMyUsername(me)
     try {
-      const local = await window.telae.getLocalProfile()
-      setProfile(current => (current?.deviceId === local.deviceId && JSON.stringify(current.friendCodes) === JSON.stringify(local.friendCodes) ? current : local))
-      // Meu código independe de ter amigos: precisa aparecer mesmo com a lista vazia.
-      const me = controller.getMyFriendCode()
-      if (me) setMyFriendCode(me)
-      const current = local.friendCodes ?? []
-      if (!online) return
       // Pedidos recebidos (quem me adicionou sem reciprocidade): não bloqueiam a lista.
       try { setRequests(await controller.fetchFriendRequests()) } catch { /* pedidos não bloqueiam */ }
-      if (current.length === 0) {
-        setFriends([])
-        return
-      }
-      // Declara a lista ao servidor: a lista volta ordenada e a amizade passa a valer nos dois lados.
-      setFriends(await controller.fetchFriends(current))
+      setFriends(await controller.fetchFriends())
     } catch {
-      // lista de amigos não bloqueia a home
+      // a lista de amigos não bloqueia a home
     }
-  }, [controller, desktopApiAvailable, online, setProfile])
+  }, [controller, desktopApiAvailable, online])
 
   // Mantém lista e presença atualizadas quando online (poll + push), inclusive durante o player.
   useEffect(() => {
@@ -74,8 +62,7 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
     const interval = window.setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
     // A presença chega com o snapshot completo do amigo: atualiza na hora, sem nova consulta.
     const offPresence = controller.onPresenceChanged(device => {
-      const known = friendsRef.current
-      if (startedSharing(known, device)) notifyFriendLive(device)
+      if (startedSharing(friendsRef.current, device)) notifyFriendLive(device)
       setFriends(list => upsertFriend(list, device))
     })
     // Pedido novo chega na hora; a busca confirma o estado atual no servidor.
@@ -85,58 +72,56 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
     return () => { window.clearInterval(interval); offPresence(); offRequest() }
   }, [controller, desktopApiAvailable, online, refresh])
 
-  const copyMyCode = useCallback(async () => {
-    if (!myFriendCode) return
+  const copyMyHandle = useCallback(async () => {
+    if (!myUsername) return
     try {
-      await navigator.clipboard.writeText(myFriendCode)
-      setMyCodeCopied(true)
-      window.setTimeout(() => setMyCodeCopied(false), 2000)
+      await navigator.clipboard.writeText(`@${myUsername}`)
+      setMyHandleCopied(true)
+      window.setTimeout(() => setMyHandleCopied(false), 2000)
     } catch {
-      setError(t('Não deu pra copiar seu código.'))
+      setError(t('Não deu pra copiar seu @.'))
     }
-  }, [myFriendCode])
+  }, [myUsername])
 
-  const add = useCallback(async (codeArg?: string) => {
-    const code = (codeArg ?? codeInput).trim().replaceAll('-', '').toUpperCase()
-    if (!code || code.length !== 6) {
-      setError(t('O código tem 6 letras ou números, tipo ABC234.'))
+  const add = useCallback(async (usernameArg?: string) => {
+    const username = normalizeUsername(usernameArg ?? usernameInput)
+    if (!username) {
+      setError(t('Esse @ não parece certo. Use de 3 a 20 letras, números ou _.'))
       return
     }
     if (!desktopApiAvailable) {
       setError(t('Abra o aplicativo Telae para adicionar amigos.'))
       return
     }
+    if (username === myUsername) {
+      setError(t('Você não pode se adicionar.'))
+      return
+    }
     setBusy(true)
     setError(null)
     setSuccess(null)
     try {
-      // Valida que o amigo existe antes de persistir
-      const found = await controller.lookupFriend(code)
-      if (!found) throw new Error(t('Não achei ninguém com esse código. Confere e tenta de novo.'))
-      if (found.friendCode === myFriendCode) throw new Error(t('Você não pode se adicionar.'))
-      if (friends.some(friend => friend.friendCode === code)) throw new Error(t('Esse amigo já está na sua lista.'))
-      const local = await window.telae.addFriendCode(code)
-      setProfile(local)
-      setCodeInput('')
+      const added = await controller.addFriend(username)
+      setUsernameInput('')
       setAddOpen(false)
-      setSuccess(t('{name} adicionado!', { name: found.displayName }))
+      setSuccess(t('{name} adicionado!', { name: added.displayName }))
       window.setTimeout(() => setSuccess(null), 3000)
-      setFriends(await controller.fetchFriends(local.friendCodes))
-      // Aceitar um pedido o torna mútuo: ele sai da pendência.
-      try { setRequests(await controller.fetchFriendRequests()) } catch { /* lista principal já atualizou */ }
+      setFriends(await controller.fetchFriends())
+      // Adicionar de volta torna a amizade mútua: o pedido some.
+      try { setRequests(await controller.fetchFriendRequests()) } catch { /* a lista principal já atualizou */ }
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('Não deu pra adicionar o amigo.'))
     } finally {
       setBusy(false)
     }
-  }, [controller, desktopApiAvailable, codeInput, friends, myFriendCode, setProfile])
+  }, [controller, desktopApiAvailable, usernameInput, myUsername])
 
-  const dismissRequest = useCallback(async (code: string) => {
+  const dismissRequest = useCallback(async (username: string) => {
     if (!desktopApiAvailable) return
     setBusy(true)
     setError(null)
     try {
-      await controller.dismissFriendRequest(code)
+      await controller.dismissFriendRequest(username)
       setRequests(await controller.fetchFriendRequests())
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('Não deu pra ignorar o pedido.'))
@@ -145,33 +130,32 @@ export function useFriends({ controller, desktopApiAvailable, online, setProfile
     }
   }, [controller, desktopApiAvailable])
 
-  const remove = useCallback(async (code: string) => {
+  const remove = useCallback(async (username: string) => {
     if (!desktopApiAvailable) return
-    setPendingRemoveCode(null)
+    setPendingRemove(null)
     setBusy(true)
     setError(null)
     try {
-      const local = await window.telae.removeFriendCode(code)
-      setProfile(local)
-      setFriends(await controller.fetchFriends(local.friendCodes))
+      await controller.removeFriend(username)
+      setFriends(await controller.fetchFriends())
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : t('Não deu pra remover o amigo.'))
     } finally {
       setBusy(false)
     }
-  }, [controller, desktopApiAvailable, setProfile])
+  }, [controller, desktopApiAvailable])
 
   const closeAddForm = useCallback(() => {
     setAddOpen(false)
-    setCodeInput('')
+    setUsernameInput('')
     setError(null)
   }, [])
 
   return {
-    friends, requests, myFriendCode, myCodeCopied,
-    codeInput, setCodeInput, addOpen, setAddOpen, closeAddForm,
-    busy, error, success, pendingRemoveCode, setPendingRemoveCode,
-    copyMyCode, add, dismissRequest, remove,
+    friends, requests, myUsername, myHandleCopied,
+    usernameInput, setUsernameInput, addOpen, setAddOpen, closeAddForm,
+    busy, error, success, pendingRemove, setPendingRemove,
+    copyMyHandle, add, dismissRequest, remove,
   }
 }
 

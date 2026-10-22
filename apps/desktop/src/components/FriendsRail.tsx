@@ -8,6 +8,9 @@ const UPDATE_BUSY_PHASES = ['checking', 'downloading', 'ready', 'installing']
 
 const initialOf = (name: string) => name.trim().slice(0, 1).toLocaleUpperCase(getLocale()) || '?'
 
+/** Para contas, o identificador público do amigo (friendCode no protocolo) é o @usuário. */
+const handleOf = (friend: DeviceSnapshot) => `@${friend.friendCode}`
+
 function GroupTitle({ children, count }: { children: string; count: number }) {
   return (
     <h3 className="mb-1.5 mt-4 flex items-center gap-2 px-1 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-3 first:mt-1">
@@ -26,7 +29,7 @@ function FriendRow({ friend, state, canWatch, watching, onWatch }: {
 }) {
   const live = friend.isSharing
   const online = friend.status === 'online'
-  const confirmingRemoval = state.pendingRemoveCode === friend.friendCode
+  const confirmingRemoval = state.pendingRemove === friend.friendCode
   return (
     <li className={`group flex flex-wrap items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-active/60 ${live ? 'bg-tally/[0.06]' : ''}`}>
       <span aria-hidden="true" className={`avatar h-9 w-9 ${live ? 'avatar-live' : ''}`}>{initialOf(friend.displayName)}</span>
@@ -37,6 +40,7 @@ function FriendRow({ friend, state, canWatch, watching, onWatch }: {
           <span className={`whitespace-nowrap ${live ? 'font-medium text-tally-soft' : online ? 'text-ok' : 'text-ink-4'}`}>
             {live ? t('Ao vivo') : online ? t('Online') : t('Offline')}
           </span>
+          <span className="truncate font-mono text-[11px] text-ink-4">{handleOf(friend)}</span>
         </p>
       </div>
       <div className="ml-auto flex items-center gap-1">
@@ -49,12 +53,12 @@ function FriendRow({ friend, state, canWatch, watching, onWatch }: {
           <span role="group" aria-label={t('Confirmar remoção de {name}', { name: friend.displayName })} title={t('Vocês deixam de poder assistir um ao outro.')} className="inline-flex flex-wrap items-center gap-1.5 text-xs text-signal-soft">
             {t('Remover {name}?', { name: friend.displayName })}
             <button type="button" onClick={() => void state.remove(friend.friendCode)} disabled={state.busy} className="telae-press btn btn-sm btn-danger">{t('Remover')}</button>
-            <button type="button" onClick={() => state.setPendingRemoveCode(null)} className="telae-press btn btn-sm btn-ghost">{t('Cancelar')}</button>
+            <button type="button" onClick={() => state.setPendingRemove(null)} className="telae-press btn btn-sm btn-ghost">{t('Cancelar')}</button>
           </span>
         ) : (
           <button
             type="button"
-            onClick={() => state.setPendingRemoveCode(friend.friendCode)}
+            onClick={() => state.setPendingRemove(friend.friendCode)}
             disabled={state.busy}
             title={t('Remover amigo')}
             aria-label={t('Remover {name}', { name: friend.displayName })}
@@ -68,7 +72,7 @@ function FriendRow({ friend, state, canWatch, watching, onWatch }: {
   )
 }
 
-/** Trilho fixo à esquerda: seu código, pedidos de amizade e a lista agrupada por quem está ao vivo, online e offline. */
+/** Trilho fixo à esquerda: seu @, pedidos de amizade e a lista agrupada por quem está ao vivo, online e offline. */
 export function FriendsRail({ state, online, canWatch, watchingDeviceId, watchError, onWatch, updateStatus, canCheckUpdate, onCheckUpdate }: {
   state: FriendsState
   /** Conectado ao servidor de sinalização. */
@@ -98,20 +102,20 @@ export function FriendsRail({ state, online, canWatch, watchingDeviceId, watchEr
 
   return (
     <aside aria-label={t('Amigos')} className="telae-rail">
-      {state.myFriendCode && (
+      {state.myUsername && (
         <div className="mx-3 mb-1 mt-3 flex items-center justify-between gap-3 rounded-xl border border-line-strong bg-canvas/70 px-3.5 py-2.5">
           <div className="min-w-0">
-            <span className="eyebrow">{t('Seu código')}</span>
-            <p data-testid="my-friend-code" className="tnum mt-1 font-mono text-[17px] font-semibold leading-none tracking-[0.2em] text-ink">{state.myFriendCode}</p>
+            <span className="eyebrow">{t('Seu @')}</span>
+            <p data-testid="my-handle" className="mt-1 truncate font-mono text-[16px] font-semibold leading-none text-ink">@{state.myUsername}</p>
           </div>
           <button
             type="button"
-            onClick={() => void state.copyMyCode()}
-            aria-label={t('Copiar seu código de amigo')}
-            title={state.myCodeCopied ? t('Copiado!') : t('Copiar código')}
+            onClick={() => void state.copyMyHandle()}
+            aria-label={t('Copiar seu @')}
+            title={state.myHandleCopied ? t('Copiado!') : t('Copiar')}
             className="telae-press btn btn-secondary h-9 w-9 shrink-0 p-0"
           >
-            {state.myCodeCopied ? <Check size={14} aria-hidden="true" className="text-ok" /> : <Copy size={14} aria-hidden="true" />}
+            {state.myHandleCopied ? <Check size={14} aria-hidden="true" className="text-ok" /> : <Copy size={14} aria-hidden="true" />}
           </button>
         </div>
       )}
@@ -127,28 +131,35 @@ export function FriendsRail({ state, online, canWatch, watchingDeviceId, watchEr
       </div>
 
       {state.addOpen && (
-        <div className="mx-3 mb-2 mt-1 flex flex-wrap items-end gap-2 rounded-xl border border-line-strong bg-canvas p-3">
+        <form
+          className="mx-3 mb-2 mt-1 flex flex-wrap items-end gap-2 rounded-xl border border-line-strong bg-canvas p-3"
+          onSubmit={event => { event.preventDefault(); void state.add() }}
+        >
           <div className="min-w-0 flex-1 basis-full">
-            <label htmlFor="friend-code" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Código do amigo (6 caracteres)')}</label>
-            <input
-              id="friend-code"
-              value={state.codeInput}
-              onChange={event => state.setCodeInput(event.target.value.replace(/\s/g, '').toUpperCase())}
-              placeholder={t('Ex.: ABC234')}
-              maxLength={6}
-              autoComplete="off"
-              spellCheck={false}
-              className="telae-code-input field tnum h-10 bg-surface"
-            />
+            <label htmlFor="friend-username" className="mb-1.5 block text-xs font-medium text-ink-2">{t('@ do amigo')}</label>
+            <div className="relative">
+              <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-ink-4">@</span>
+              <input
+                id="friend-username"
+                value={state.usernameInput}
+                onChange={event => state.setUsernameInput(event.target.value.replace(/[\s@]/g, '').toLowerCase())}
+                placeholder={t('usuario')}
+                maxLength={20}
+                autoComplete="off"
+                autoFocus
+                spellCheck={false}
+                className="field h-10 bg-surface pl-7 font-mono text-[13px]"
+              />
+            </div>
           </div>
-          <button type="button" onClick={() => void state.add()} disabled={state.busy || state.codeInput.trim().length !== 6} className="telae-press btn btn-primary btn-sm">
+          <button type="submit" disabled={state.busy || state.usernameInput.trim().length < 3} className="telae-press btn btn-primary btn-sm">
             {state.busy ? t('Adicionando…') : t('Adicionar')}
           </button>
           <button type="button" onClick={state.closeAddForm} className="telae-press btn btn-ghost btn-sm">{t('Cancelar')}</button>
           {(state.error || state.success) && (
             <p role={state.error ? 'alert' : 'status'} className={`w-full text-[13px] ${state.error ? 'text-danger-soft' : 'text-ok'}`}>{state.error ?? state.success}</p>
           )}
-        </div>
+        </form>
       )}
       {state.error && !state.addOpen && <p role="alert" className="mx-4 mt-2 text-[13px] text-danger-soft">{state.error}</p>}
       {state.success && !state.addOpen && <p role="status" className="mx-4 mt-2 text-[13px] text-ok">{state.success}</p>}
@@ -168,7 +179,7 @@ export function FriendsRail({ state, online, canWatch, watchingDeviceId, watchEr
                   <span aria-hidden="true" className="avatar h-8 w-8">{initialOf(request.displayName)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-medium leading-none">{request.displayName}</p>
-                    <p className="tnum mt-1 font-mono text-[11px] text-ink-4">{request.friendCode}</p>
+                    <p className="mt-1 truncate font-mono text-[11px] text-ink-4">{handleOf(request)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button type="button" onClick={() => void state.add(request.friendCode)} disabled={state.busy || !online} className="telae-press btn btn-primary btn-sm">{t('Adicionar de volta')}</button>
@@ -193,7 +204,7 @@ export function FriendsRail({ state, online, canWatch, watchingDeviceId, watchEr
           <div className="mx-1 mt-4 rounded-xl border border-dashed border-line-strong px-5 py-8 text-center">
             <div aria-hidden="true" className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl border border-line-strong bg-raised text-ink-3"><Users size={18} /></div>
             <p className="mt-3 text-sm font-medium">{t('Sua lista está vazia.')}</p>
-            <p className="mx-auto mt-1.5 max-w-[26ch] text-xs leading-relaxed text-ink-3">{t('Peça o código de quem você quer assistir e coloque aqui.')}</p>
+            <p className="mx-auto mt-1.5 max-w-[26ch] text-xs leading-relaxed text-ink-3">{t('Pergunte o @ de quem você quer assistir e coloque aqui.')}</p>
             <button type="button" onClick={() => state.setAddOpen(true)} className="telae-press btn btn-primary btn-sm mt-4">{t('Adicionar primeiro amigo')}</button>
           </div>
         ) : (

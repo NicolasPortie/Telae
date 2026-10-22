@@ -8,6 +8,8 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OneTimeCode> OneTimeCodes => Set<OneTimeCode>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
+    public DbSet<DismissedRequest> DismissedRequests => Set<DismissedRequest>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configuration)
     {
@@ -37,6 +39,21 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
             token.Property(t => t.TokenHash).HasMaxLength(64);
             token.Property(t => t.UserAgent).HasMaxLength(256);
             token.HasOne(t => t.Account).WithMany(a => a.RefreshTokens).HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<Friendship>(friendship =>
+        {
+            friendship.HasKey(f => new { f.AccountId, f.FriendId });
+            friendship.HasIndex(f => f.FriendId);
+            friendship.HasOne(f => f.Account).WithMany().HasForeignKey(f => f.AccountId).OnDelete(DeleteBehavior.Cascade);
+            friendship.HasOne(f => f.Friend).WithMany().HasForeignKey(f => f.FriendId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<DismissedRequest>(dismissed =>
+        {
+            dismissed.HasKey(d => new { d.AccountId, d.FromId });
+            dismissed.HasOne(d => d.Account).WithMany().HasForeignKey(d => d.AccountId).OnDelete(DeleteBehavior.Cascade);
+            dismissed.HasOne(d => d.From).WithMany().HasForeignKey(d => d.FromId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<OneTimeCode>(code =>

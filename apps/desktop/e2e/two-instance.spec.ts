@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { diagnosticSnapshot } from './diagnostics.ts'
 import { signUp } from './auth.ts'
-import { addFriend, befriend, friendCodeOf, watchFriend } from './friends.ts'
+import { addFriend, befriend, friendCodeOf, submitFriend, watchFriend } from './friends.ts'
 
 const APP_DIR = path.resolve(import.meta.dirname, '..')
 const WITH_MEDIA = process.env.TELAE_E2E_MEDIA === '1'
@@ -81,7 +81,7 @@ test.describe('duas instâncias Telae', () => {
     }
   })
 
-  test('código de amigo inexistente falha com motivo específico', async () => {
+  test('@ inexistente falha com motivo específico', async () => {
     const sharerApp = await launchApp()
     const viewerApp = await launchApp(true)
     try {
@@ -167,9 +167,7 @@ test.describe('duas instâncias Telae', () => {
         expect(processId).toBeGreaterThan(0)
       }
 
-      await viewer.getByRole('button', { name: 'Adicionar', exact: true }).first().click()
-      await viewer.getByLabel('Código do amigo (6 caracteres)').fill('ZZZZZZ')
-      await viewer.getByRole('button', { name: 'Adicionar', exact: true }).last().click()
+      await submitFriend(viewer, 'ninguem_aqui')
       await expect(viewer.getByRole('alert')).toContainText(/Não achei ninguém/, { timeout: 30_000 })
     } finally {
       await sharerApp.close()

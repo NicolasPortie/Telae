@@ -98,7 +98,8 @@ public sealed class AccountHubTests : IAsyncLifetime
 
         Assert.Equal(session.Account.Id.ToString(), device.DeviceId);
         Assert.Equal("ana", device.DisplayName);
-        Assert.Matches("^[A-Z2-9]{6}$", device.FriendCode);
+        // O identificador público de amigo é o próprio @usuário.
+        Assert.Equal("ana", device.FriendCode);
     }
 
     [Fact]

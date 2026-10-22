@@ -27,7 +27,7 @@ public sealed partial class TelaeRegistry
         lock (_gate)
         {
             RequireOnlineDevice(viewerDeviceId);
-            var normalized = NormalizeFriendCode(inviteCode);
+            var normalized = NormalizeInviteCode(inviteCode);
             if (!_invitesByCode.TryGetValue(normalized, out var invite))
                 throw new TelaeDomainException("invite_invalid", "Este convite não existe. Confira o código e tente de novo.");
             if (invite.ExpiresAt <= DateTimeOffset.UtcNow)

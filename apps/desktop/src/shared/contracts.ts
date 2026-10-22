@@ -2,8 +2,8 @@ export type LocalProfile = {
   deviceId: string
   deviceSecret: string
   displayName: string
+  /** Sem uso desde as contas: a lista de amigos agora fica no servidor. Mantido para ler perfis antigos. */
   friendCodes: string[]
-  /** Conta à qual os amigos locais pertencem; ao entrar com outra conta a lista é zerada. */
   accountId?: string
 }
 
@@ -118,8 +118,6 @@ export type TelaeDesktopApi = {
   auth: TelaeAuthApi
   getLocalProfile(): Promise<LocalProfile>
   setDisplayName(displayName: string): Promise<LocalProfile>
-  addFriendCode(friendCode: string): Promise<LocalProfile>
-  removeFriendCode(friendCode: string): Promise<LocalProfile>
   listCaptureSources(): Promise<CaptureSource[]>
   selectCaptureSource(sourceId: string): Promise<void>
   resolveWindowAudioProcess(sourceId: string): Promise<number>

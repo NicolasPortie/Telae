@@ -10,15 +10,15 @@ public sealed partial class TelaeRegistry
     {
         lock (_gate)
         {
-            var newSet = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.Ordinal);
+            var newSet = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var oldSet = _declaredFriendsByDevice.GetValueOrDefault(deviceId)
-                ?? new HashSet<string>(StringComparer.Ordinal);
+                ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _declaredFriendsByDevice[deviceId] = newSet;
 
             // Dispensa caduca quando o pedido deixa de existir: removeu e readicionou = nova intenção.
             foreach (var removed in oldSet.Except(newSet))
             {
-                var target = _profiles.Values.FirstOrDefault(p => p.FriendCode == removed);
+                var target = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, removed, StringComparison.OrdinalIgnoreCase));
                 if (target is not null && _dismissedRequests.TryGetValue(target.DeviceId, out var set))
                     set.Remove(deviceId);
             }
@@ -44,7 +44,7 @@ public sealed partial class TelaeRegistry
             // Amizade mútua dispensa o pedido pendente (para os dois lados).
             foreach (var code in newSet)
             {
-                var other = _profiles.Values.FirstOrDefault(p => p.FriendCode == code);
+                var other = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, code, StringComparison.OrdinalIgnoreCase));
                 if (other is null || !AreMutualFriendsLocked(deviceId, other.DeviceId)) continue;
                 if (_dismissedRequests.TryGetValue(deviceId, out var mine)) mine.Remove(other.DeviceId);
                 if (_dismissedRequests.TryGetValue(other.DeviceId, out var theirs)) theirs.Remove(deviceId);
@@ -58,7 +58,7 @@ public sealed partial class TelaeRegistry
                 var dismissedMine = _dismissedRequests.GetValueOrDefault(deviceId);
                 foreach (var code in newSet.Except(oldSet))
                 {
-                    var other = _profiles.Values.FirstOrDefault(p => p.FriendCode == code);
+                    var other = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, code, StringComparison.OrdinalIgnoreCase));
                     if (other is null || other.DeviceId == deviceId) continue;
                     if (AreMutualFriendsLocked(deviceId, other.DeviceId)) continue;
                     if (dismissedMine?.Contains(other.DeviceId) == true) continue;
@@ -93,13 +93,11 @@ public sealed partial class TelaeRegistry
     public void DismissFriendRequest(string deviceId, string friendCode)
     {
         var normalized = NormalizeFriendCode(friendCode);
-        if (normalized.Length != 6)
-            throw new TelaeDomainException("invalid_friend_code", "O código tem 6 letras ou números.");
         lock (_gate)
         {
             RequireOnlineDevice(deviceId);
-            var target = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized)
-                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse código. Confere e tenta de novo.");
+            var target = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, normalized, StringComparison.OrdinalIgnoreCase))
+                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo.");
             if (target.DeviceId == deviceId) return;
             if (!_dismissedRequests.TryGetValue(deviceId, out var set))
             {
@@ -108,6 +106,12 @@ public sealed partial class TelaeRegistry
             }
             set.Add(target.DeviceId);
         }
+    }
+
+    /// <summary>As duas partes declararam uma à outra.</summary>
+    public bool AreMutualFriends(string deviceA, string deviceB)
+    {
+        lock (_gate) return AreMutualFriendsLocked(deviceA, deviceB);
     }
 
     private bool AreMutualFriendsLocked(string deviceA, string deviceB)

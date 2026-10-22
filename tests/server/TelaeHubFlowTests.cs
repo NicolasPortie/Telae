@@ -578,10 +578,10 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var notFound = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ZZZZZZ"));
         Assert.Contains("Não achei ninguém", notFound.Message);
 
-        // Código com formato de convite (8 chars): invalid_friend_code
+        // Identificador fora do formato do @usuário: invalid_friend_code
         var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        var badFormat = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", invite.Code));
-        Assert.Contains("6 letras ou números", badFormat.Message);
+        var badFormat = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "no"));
+        Assert.Contains("não parece certo", badFormat.Message);
 
         // Própria transmissão: cannot_view_own_share
         var selfError = await Assert.ThrowsAsync<HubException>(() => sharer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));

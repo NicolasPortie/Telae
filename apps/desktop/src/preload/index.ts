@@ -23,9 +23,6 @@ const api: TelaeDesktopApi = {
   },
   getLocalProfile: () => ipcRenderer.invoke('profile:get') as Promise<LocalProfile>,
   setDisplayName: (displayName: string) => ipcRenderer.invoke('profile:set-name', displayName) as Promise<LocalProfile>,
-  addFriendCode: (friendCode: string) => ipcRenderer.invoke('profile:add-friend', friendCode) as Promise<LocalProfile>,
-  removeFriendCode: (friendCode: string) =>
-    ipcRenderer.invoke('profile:remove-friend', friendCode) as Promise<LocalProfile>,
   listCaptureSources: () => ipcRenderer.invoke('capture:list-sources'),
   selectCaptureSource: (sourceId: string) => ipcRenderer.invoke('capture:select-source', sourceId),
   resolveWindowAudioProcess: (sourceId: string) => ipcRenderer.invoke('capture:resolve-window-audio', sourceId),

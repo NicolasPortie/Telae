@@ -18,14 +18,52 @@ public sealed partial class TelaeRegistry
     }
 
     /// <summary>Registro de uma conta já autenticada pelo token de acesso: o identificador é o da conta e não há credencial de dispositivo.</summary>
-    public DeviceSnapshot RegisterAccountDevice(string accountId, string displayName, string connectionId)
+    public DeviceSnapshot RegisterAccountDevice(string accountId, string username, string displayName, string connectionId)
     {
         if (string.IsNullOrWhiteSpace(accountId) || accountId.Length > 128)
             throw new TelaeDomainException("device_id_required", "O dispositivo não possui um identificador válido.");
-        return RegisterCore(accountId, displayName, connectionId, secretHash: null);
+        return RegisterCore(accountId, displayName, connectionId, secretHash: null, friendCode: NormalizeFriendCode(username));
     }
 
-    private DeviceSnapshot RegisterCore(string deviceId, string displayName, string connectionId, byte[]? secretHash)
+    /// <summary>
+    /// Garante o perfil de uma conta que ainda não se conectou, para poder aparecer (offline) na lista de quem a adicionou.
+    /// </summary>
+    public DeviceSnapshot EnsureAccountProfile(string accountId, string username, string displayName)
+    {
+        var friendCode = NormalizeFriendCode(username);
+        displayName = NormalizeDisplayName(displayName);
+        lock (_gate)
+        {
+            if (!_profiles.TryGetValue(accountId, out var profile))
+            {
+                EnsureFriendCodeFreeLocked(accountId, friendCode);
+                profile = new ProfileRecord(accountId, displayName, friendCode);
+                _profiles.Add(accountId, profile);
+                PersistProfiles();
+            }
+            return ToDeviceSnapshot(profile);
+        }
+    }
+
+    /// <summary>Esquece o perfil de uma conta excluída, liberando o @usuário.</summary>
+    public void ForgetAccount(string accountId)
+    {
+        lock (_gate)
+        {
+            if (!_profiles.Remove(accountId)) return;
+            _declaredFriendsByDevice.Remove(accountId);
+            _dismissedRequests.Remove(accountId);
+            PersistProfiles();
+        }
+    }
+
+    private void EnsureFriendCodeFreeLocked(string deviceId, string friendCode)
+    {
+        if (_profiles.Values.Any(p => p.DeviceId != deviceId && string.Equals(p.FriendCode, friendCode, StringComparison.OrdinalIgnoreCase)))
+            throw new TelaeDomainException("friend_code_conflict", "Esse @ já está em uso por outro perfil.");
+    }
+
+    private DeviceSnapshot RegisterCore(string deviceId, string displayName, string connectionId, byte[]? secretHash, string? friendCode = null)
     {
         displayName = NormalizeDisplayName(displayName);
 
@@ -37,7 +75,8 @@ public sealed partial class TelaeRegistry
                 throw new TelaeDomainException("device_mismatch", "Esta conexão já pertence a outro dispositivo.");
             if (!_profiles.TryGetValue(deviceId, out var profile))
             {
-                profile = new ProfileRecord(deviceId, displayName, GenerateUniqueFriendCode())
+                if (friendCode is not null) EnsureFriendCodeFreeLocked(deviceId, friendCode);
+                profile = new ProfileRecord(deviceId, displayName, friendCode ?? GenerateUniqueFriendCode())
                 {
                     DeviceSecretHash = secretHash is null ? null : Convert.ToHexString(secretHash)
                 };
@@ -56,6 +95,13 @@ public sealed partial class TelaeRegistry
                 profileChanged = profile.DisplayName != displayName;
                 previousName = profile.DisplayName;
                 profile.DisplayName = displayName;
+                // Perfis de conta que ainda tinham um código aleatório passam a usar o @usuário.
+                if (friendCode is not null && !string.Equals(profile.FriendCode, friendCode, StringComparison.Ordinal))
+                {
+                    EnsureFriendCodeFreeLocked(deviceId, friendCode);
+                    profile.FriendCode = friendCode;
+                    profileChanged = true;
+                }
             }
 
             if (profileChanged)
@@ -92,7 +138,7 @@ public sealed partial class TelaeRegistry
         var normalized = NormalizeFriendCode(friendCode);
         lock (_gate)
         {
-            var profile = _profiles.Values.FirstOrDefault(p => p.FriendCode == normalized);
+            var profile = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, normalized, StringComparison.OrdinalIgnoreCase));
             return profile is null ? null : ToDeviceSnapshot(profile);
         }
     }
@@ -145,7 +191,7 @@ public sealed partial class TelaeRegistry
             var chars = new char[6];
             for (var i = 0; i < chars.Length; i++) chars[i] = alphabet[bytes[i] % alphabet.Length];
             var code = new string(chars);
-            if (_profiles.Values.All(profile => profile.FriendCode != code)) return code;
+            if (_profiles.Values.All(profile => !string.Equals(profile.FriendCode, code, StringComparison.OrdinalIgnoreCase))) return code;
         }
 
         throw new InvalidOperationException("Não foi possível gerar um código de amigo único.");

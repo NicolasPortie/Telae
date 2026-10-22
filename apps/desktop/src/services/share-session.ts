@@ -82,6 +82,12 @@ const MAX_RESTART_ATTEMPTS = 3
 // Estados em que o Viewer já está ligado a uma transmissão (troca de amigo sem passar por idle).
 const VIEWING_STATES: SessionState[] = ['joining', 'negotiating', 'live', 'reconnecting']
 
+/** @usuário normalizado (sem @, minúsculo), ou null quando o formato é inválido. */
+export function normalizeUsername(value: string): string | null {
+  const normalized = value.trim().replace(/^@+/, '').toLowerCase()
+  return /^[a-z0-9_]{3,20}$/.test(normalized) ? normalized : null
+}
+
 function toUserMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message.trim()) {
     const cleaned = error.message.replace(/^HubException:\s*/i, '').replace(/^Server returned an error:\s*/i, '').trim()
@@ -116,7 +122,7 @@ export class ShareSessionController {
   private role: SessionRole | null = null
   private error: string | null = null
   private session: ShareSessionSnapshot | null = null
-  private myFriendCode: string | null = null
+  private myUsername: string | null = null
   // Verdadeiro entre o pedido de entrada e a resposta do servidor: sinais chegam antes do fim do join.
   private joinPending = false
   private viewerPresence: ViewerPresence = 'none'
@@ -218,17 +224,25 @@ export class ShareSessionController {
     this.emit()
   }
 
-  async fetchFriends(friendCodes: string[]): Promise<DeviceSnapshot[]> {
-    const signaling = this.requireSignaling()
-    return signaling.getFriends(friendCodes)
+  async fetchFriends(): Promise<DeviceSnapshot[]> {
+    return this.requireSignaling().getFriends()
+  }
+
+  addFriend(username: string): Promise<DeviceSnapshot> {
+    return this.requireSignaling().addFriend(username)
+  }
+
+  removeFriend(username: string): Promise<void> {
+    return this.requireSignaling().removeFriend(username).then(() => undefined)
   }
 
   lookupFriend(friendCode: string): Promise<DeviceSnapshot | null> {
     return this.requireSignaling().lookupFriend(friendCode)
   }
 
-  getMyFriendCode(): string | null {
-    return this.myFriendCode
+  /** O @usuário da conta conectada (sem o @). */
+  getMyUsername(): string | null {
+    return this.myUsername
   }
 
   onPresenceChanged(listener: (device: DeviceSnapshot) => void): () => void {
@@ -257,7 +271,6 @@ export class ShareSessionController {
     this.detachSignaling()
     const account = await window.telae.auth.getSession()
     if (!account) throw new Error(t('Entre na sua conta pra continuar.'))
-    const saved = await window.telae.getLocalProfile()
     this.deviceId = account.id
 
     const environment = await window.telae.getEnvironment()
@@ -277,13 +290,12 @@ export class ShareSessionController {
     ]
     try {
       const device = await client.connect(account.id, account.displayName)
-      this.myFriendCode = device.friendCode ?? null
+      this.myUsername = device.friendCode ?? null
       this.signalingStatus = 'online'
       this.emit()
-      // Declara a lista de amigos local: o servidor só libera entrada por amizade mútua.
-      // Sempre enviada (mesmo vazia) para que revogações pendentes sejam aplicadas.
+      // O servidor carrega a lista da conta e só libera entrada por amizade mútua.
       try {
-        await client.getFriends(saved.friendCodes ?? [])
+        await client.getFriends()
       } catch { /* presença e amizade são restauradas na próxima conexão */ }
       return device
     } catch (error) {
@@ -365,8 +377,8 @@ export class ShareSessionController {
    * faz a troca em uma única operação: se ela for recusada, a transmissão atual continua.
    */
   async joinFriendShare(friendCode: string): Promise<void> {
-    const code = friendCode.trim().replaceAll('-', '').toUpperCase()
-    if (!code || code.length !== 6) throw new Error(t('O código tem 6 letras ou números.'))
+    const code = normalizeUsername(friendCode)
+    if (!code) throw new Error(t('Esse @ não parece certo. Use de 3 a 20 letras, números ou _.'))
     if (this.startInFlight || this.joiningInFlight) throw new Error(t('Um segundo, ainda tem outra coisa em andamento.'))
     if (this.role === 'sharer' && !['idle', 'ended'].includes(this.state))
       throw new Error(t('Pare de transmitir antes de assistir a um amigo.'))
@@ -589,10 +601,10 @@ export class ShareSessionController {
     this.detachSignaling()
   }
 
-  /** Encerra tudo ao sair da conta: transmissão, conexão e o código de amigo em memória. */
+  /** Encerra tudo ao sair da conta: transmissão, conexão e o @ em memória. */
   signOut() {
     this.dispose()
-    this.myFriendCode = null
+    this.myUsername = null
     this.signalingStatus = 'offline'
     this.session = null
     this.role = null

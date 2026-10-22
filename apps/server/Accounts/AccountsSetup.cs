@@ -41,6 +41,7 @@ public static class AccountsSetup
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<TokenService>();
         services.AddScoped<AccountService>();
+        services.AddScoped<FriendsService>();
         services.AddHostedService<AccountMaintenance>();
 
         var smtp = configuration.GetSection("Smtp").Get<SmtpOptions>();
@@ -81,8 +82,28 @@ public static class AccountsSetup
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<TelaeDbContext>();
-        if (db.Database.IsNpgsql()) await db.Database.MigrateAsync();
-        else await db.Database.EnsureCreatedAsync();
+        if (db.Database.IsNpgsql())
+        {
+            await db.Database.MigrateAsync();
+            return;
+        }
+
+        // SQLite é só para desenvolvimento e testes e não usa migrações: se o arquivo veio de uma versão
+        // anterior (esquema diferente), ele é recriado em vez de falhar na primeira consulta.
+        await db.Database.EnsureCreatedAsync();
+        try
+        {
+            _ = await db.Accounts.AnyAsync();
+            _ = await db.Friendships.AnyAsync();
+            _ = await db.DismissedRequests.AnyAsync();
+        }
+        catch (Exception exception) when (exception is Microsoft.Data.Sqlite.SqliteException)
+        {
+            services.GetService<ILoggerFactory>()?.CreateLogger("Telae.Accounts")
+                .LogWarning("Banco SQLite de desenvolvimento com esquema antigo; recriando.");
+            await db.Database.EnsureDeletedAsync();
+            await db.Database.EnsureCreatedAsync();
+        }
     }
 }
 

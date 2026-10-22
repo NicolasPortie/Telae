@@ -9,7 +9,7 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, HashSet<string>> _groups = new(StringComparer.Ordinal);
-    private static string Group(string code) => $"presence:{code}";
+    private static string Group(string code) => $"presence:{code.ToLowerInvariant()}";
 
     public async Task<DeviceSnapshot> RegisterAsync(RegisterDeviceRequest request, string connectionId, bool authenticatedAccount = false)
     {
@@ -17,7 +17,7 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
         try
         {
             var device = authenticatedAccount
-                ? registry.RegisterAccountDevice(request.DeviceId, request.DisplayName, connectionId)
+                ? registry.RegisterAccountDevice(request.DeviceId, request.Username ?? "", request.DisplayName, connectionId)
                 : registry.RegisterDevice(request.DeviceId, request.DisplayName, connectionId, request.DeviceSecret);
             await PublishLockedAsync(device);
             return device;
