@@ -32,7 +32,7 @@ O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assisti
 
 - **Até 1440p60** com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou rede.
 - **Áudio sincronizado** do sistema ou apenas do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
-- **Amigos e presença**: código pessoal de 6 caracteres, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo.
+- **Amigos e presença**: adicione pelo @usuário, com amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo. A lista fica no servidor, então acompanha sua conta em qualquer computador.
 - **Até 12 espectadores** por transmissão, cada um com qualidade e recuperação independentes.
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
 - **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.

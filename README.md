@@ -32,7 +32,7 @@ Telae does one thing well: pick a screen or window and let a friend watch it wit
 
 - **Up to 1440p60** with explicit profiles (720p60, 1080p30, 1080p60, 1440p30, 1440p60) and automatic adaptation under CPU or network pressure.
 - **Synced audio** from the whole system or only the chosen application, captured by a native bridge using Windows process loopback. Discord's audio is excluded automatically when sharing a full screen.
-- **Friends and presence**: a personal 6-character code, mutual friendship, friend requests and quick switching between live streams.
+- **Friends and presence**: add people by their @username, mutual friendship, friend requests and quick switching between live streams. The friend list lives on the server, so it follows your account to any computer.
 - **Up to 12 viewers** per stream, each with independent quality and recovery.
 - **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
 - **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.

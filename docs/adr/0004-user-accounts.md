@@ -18,10 +18,16 @@ Contas com e-mail, nome de usuário único e senha:
 - **Privacidade:** o e-mail nunca é exposto a outros usuários; a conta pode ser excluída pelo app (remoção definitiva).
 - **Anti-enumeração:** cadastro, recuperação e reenvio respondem igual para contas existentes e inexistentes.
 
+## Amigos
+
+O identificador público é o `@usuário`; o código de 6 caracteres deixou de existir para contas. A lista de amigos, os pedidos e as dispensas ficam no banco (`Friendships` e `DismissedRequests`), então acompanham a conta em qualquer computador. Cada linha é uma aresta dirigida (quem adicionou quem): a amizade só vale quando existem as duas, e assistir continua exigindo amizade mútua. Os nomes de usuário não mudam, o que mantém o `@` estável como chave de presença.
+
+Buscar por `@` é exato, sem listagem de usuários, e passa pelos mesmos limites de taxa do hub. Bloquear usuário e privacidade de busca ficam para a próxima etapa.
+
 ## Compatibilidade
 
 Clientes até a 0.1.26 continuam funcionando enquanto `Auth:AllowLegacyDevices` estiver ligado (padrão). Perfis de conta e perfis legados nunca se confundem no servidor.
 
 ## Próximos passos
 
-Amizades por nome de usuário (busca, pedidos e bloqueio no banco), convite por link, login social opcional e migração de quem já usava o código de amigo.
+Bloqueio de usuário, convite por link, login social opcional e migração de quem já usava o código de amigo (o código antigo continua valendo apenas para clientes anteriores às contas).

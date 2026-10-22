@@ -14,7 +14,7 @@ function uniqueUsername(name: string): string {
  */
 export async function signUp(page: Page, displayName: string): Promise<{ username: string; password: string }> {
   const username = uniqueUsername(displayName)
-  await page.getByRole('button', { name: 'Criar conta' }).click()
+  await page.getByRole('tab', { name: 'Criar conta' }).click()
   await page.getByLabel('E-mail', { exact: true }).fill(`${username}@e2e.test`)
   await page.getByLabel('Nome de usuário').fill(username)
   await page.getByLabel('Senha', { exact: true }).fill(PASSWORD)

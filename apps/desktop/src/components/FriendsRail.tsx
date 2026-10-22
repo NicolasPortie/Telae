@@ -62,7 +62,7 @@ function FriendRow({ friend, state, canWatch, watching, onWatch }: {
             disabled={state.busy}
             title={t('Remover amigo')}
             aria-label={t('Remover {name}', { name: friend.displayName })}
-            className="telae-press flex h-8 w-8 items-center justify-center rounded-lg text-ink-4 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger-soft focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+            className="telae-press flex h-8 w-0 items-center justify-center overflow-hidden rounded-lg text-ink-4 opacity-0 transition-[width,opacity] hover:bg-danger/10 hover:text-danger-soft focus-visible:w-8 focus-visible:opacity-100 group-hover:w-8 group-hover:opacity-100 disabled:opacity-50"
           >
             <Trash2 size={14} aria-hidden="true" />
           </button>
