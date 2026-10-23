@@ -9,6 +9,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - **Clientes sem conta desligados por padrão** (`Auth__AllowLegacyDevices=false`): sem entrar numa conta, não há acesso ao servidor. Antes de publicar este servidor, distribua o desktop com contas, ou ligue a opção temporariamente.
 - Arquivos de operação (`ops/`) sem usuário nem caminhos pessoais, e o unit de exemplo escuta só em `127.0.0.1`. Removida a nota de implantação da 0.1.16.
 
+### Operação
+- **Repositório público só com CI em runners da GitHub.** O deploy, os runners `self-hosted`, os scripts do servidor e a validação física de mídia foram para um repositório de operação privado, que consulta a Release pública. Um PR de fora não alcança mais nenhuma máquina de operação.
+- Novo `release.yml`: ao enviar uma tag `v*`, valida, gera o instalador e cria a Release. Removidos `deploy-server.yml` e os scripts de `ops/` com o layout do servidor (ficam `ops/telae-server.service` e `ops/turnserver.conf.example`).
+
 ### Marca
 - O nome do produto passa a ser escrito **Telaê**, com acento, na interface, nos e-mails e na documentação. Identificadores técnicos (pacotes, namespaces, domínio, nome do instalador) continuam `Telae`.
 

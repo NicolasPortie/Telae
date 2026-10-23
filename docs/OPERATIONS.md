@@ -28,37 +28,41 @@ python tests/audio/verify.py
 
 O teste usa tons discretos de aplicativos separados e valida exclusão de processos filhos, abertura/reinício, preservação do outro aplicativo e silêncio seguro com duas árvores.
 
-## Acesso ao servidor e segurança do CI
+## Acesso ao servidor
 
-- O cadastro vem fechado. Para liberar alguém, acrescente o e-mail em `Auth__AllowedEmails` (separados por vírgula) no arquivo de ambiente do servidor e reinicie o serviço. `Auth__RegistrationOpen=true` abre para qualquer pessoa.
-- O servidor não deve escutar em endereço público: use `ASPNETCORE_URLS=http://127.0.0.1:5015` atrás de um túnel ou proxy reverso com TLS.
-- Como o repositório é público, os logs do GitHub Actions também são. Os jobs de publicação não imprimem caminhos, hosts nem o estado do serviço, e os segredos ficam em *Secrets*.
-- Runners `self-hosted` executam código na sua máquina. Mantenha em Settings > Actions a aprovação para todo contribuidor externo, só ações oficiais da GitHub liberadas e permissão de leitura por padrão, e só crie tags `v*` você mesmo (há uma regra de proteção para elas).
+- O cadastro vem fechado. Para liberar alguém, acrescente o e-mail em `Auth__AllowedEmails` (separados por vírgula) no ambiente do servidor e reinicie o serviço. `Auth__RegistrationOpen=true` abre para qualquer pessoa.
+- Clientes sem conta ficam desligados (`Auth__AllowLegacyDevices=false`).
+- O servidor não deve escutar em endereço público: use `ASPNETCORE_URLS=http://127.0.0.1:5015` atrás de um túnel ou proxy reverso com TLS (veja o [unit de exemplo](../ops/telae-server.service)).
+
+## Repositórios e CI
+
+O código fica neste repositório público e roda só em runners da GitHub, sem segredos de infraestrutura. A parte que mexe em máquinas próprias vive num repositório de operação **privado**: os runners `self-hosted`, a entrega do instalador ao servidor, a validação física de mídia e os scripts de deploy com o layout do servidor.
+
+O repositório privado consulta a Release pública mais recente. O público nunca o chama e não guarda segredos dele, então um PR de fora não alcança as máquinas de operação. Mantenha em Settings > Actions a aprovação de workflows para contribuidores externos, só ações oficiais liberadas e permissão de leitura por padrão. As tags `v*` têm regra de proteção: só o mantenedor cria.
 
 ## Versões e publicação
 
-As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, gera o instalador Windows, publica os arquivos em um GitHub Release e os entrega ao servidor de atualizações por um runner dedicado. O backend pode ser atualizado separadamente pela tag:
+As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...):
 
 ```bash
 git tag v0.1.1
 git push origin v0.1.1
-ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.1'
 ```
 
-O estado persistente do servidor fica fora da pasta de release e não é versionado. Antes de atualizar o backend a partir da 0.1.13, leia as [notas de migração](releases/RELEASE_0.1.13.md): a versão passou a exigir credencial por dispositivo e convite para novos espectadores.
+Ao enviar a tag, o `release.yml` valida, gera o instalador do Windows e cria a Release pública com o instalador, o blockmap e o `latest.yml`. A entrega ao servidor de atualizações e a atualização do backend são feitas pelo repositório de operação.
+
+Quem hospeda o próprio servidor pode implantar o backend de qualquer forma que preferir (veja o `docker-compose.yml` e o [unit de exemplo](../ops/telae-server.service)). O estado persistente fica fora da pasta de release e não é versionado.
 
 ## Atualização automática do desktop
 
-O aplicativo instalado verifica atualizações ao abrir e a cada 15 minutos, usando o endereço do servidor configurado. O servidor publica os arquivos em `/updates/windows/`.
+O aplicativo instalado verifica atualizações ao abrir e a cada 15 minutos, usando o endereço do servidor configurado. O servidor publica os arquivos em `/updates/windows/` (`Updates__Path`).
 
 - Quando há versão nova, o download começa sozinho. Com transmissão ativa, a instalação espera o encerramento.
 - O app reinicia e instala em silêncio, sem abrir o assistente. A tela inicial oferece "Buscar atualização" e a versão instalada aparece no cabeçalho.
 - O instalador inicial usa instalação com um clique, por usuário. Instalações para todos os usuários podem exigir autorização do Windows na atualização.
 - Mudanças só chegam a aplicativos já instalados depois de distribuídas em uma nova versão.
 
-O runner de publicação executa com uma conta dedicada e grava em `/var/lib/telae-updates/windows`. O publicador confere o SHA-512 e troca os arquivos de forma atômica, com `latest.yml` por último. Confira `http://<servidor>:5015/updates/windows/latest.yml` após publicar.
-
-Para republicar manualmente, execute `pwsh ./ops/publish-desktop-update.ps1 -Server usuario@servidor` depois de `npm run dist` em `apps/desktop`, ou depois de baixar os três arquivos do GitHub Release para `apps/desktop/dist`.
+O publicador confere o SHA-512 do instalador contra o `latest.yml` e troca os arquivos de forma atômica, com o `latest.yml` por último. Confira `/updates/windows/latest.yml` após publicar.
 
 Os instaladores atuais não possuem assinatura de código do Windows. Para assinar, defina `CSC_LINK` e `CSC_KEY_PASSWORD` no ambiente de release.
 

@@ -10,7 +10,7 @@ Os clientes anteriores à correção de credenciais precisam atualizar para a 0.
 
 ```powershell
 git push origin main refs/tags/v0.1.13
-ssh usuario@servidor '~/apps/telae/repo/ops/update-server-from-tag.sh v0.1.13'
+ssh usuario@servidor '~/apps/telae/ops/update-server-from-tag.sh v0.1.13'
 ```
 
 O workflow da tag valida os testes, compila o instalador e executa o E2E do Electron antes de publicar o GitHub Release e entregar a atualização Windows ao runner. Faça a troca do backend somente depois que `/updates/windows/latest.yml` apresentar `version: 0.1.13`. Preserve perfis e configurações de TURN, mantenha a release anterior para recuperação e verifique `/health`, registro com credencial, recusa de entrada sem convite, entrada por convite e encerramento.
