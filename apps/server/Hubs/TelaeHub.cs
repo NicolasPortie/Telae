@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using Telae.Server.Accounts;
 using Telae.Server.Core;
 
 namespace Telae.Server.Hubs;
@@ -9,25 +11,77 @@ public sealed class TelaeHub(
     DisconnectCoordinator disconnectCoordinator,
     PresenceSubscriptions presence,
     IOptions<IceConfiguration> iceConfiguration,
-    IOptions<TurnConfiguration> turnConfiguration) : Hub
+    IOptions<TurnConfiguration> turnConfiguration,
+    IServiceProvider services) : Hub
 {
     public async Task<DeviceSnapshot> RegisterDevice(RegisterDeviceRequest request)
     {
+        if (Context.User?.Identity?.IsAuthenticated == true)
+        {
+            // Conta autenticada: a identidade vem do token, nunca do que o cliente informa.
+            var accountId = Context.User.FindFirstValue(TokenService.AccountIdClaim);
+            var accounts = services.GetService<AccountService>();
+            var account = Guid.TryParse(accountId, out var id) && accounts is not null
+                ? await accounts.FindActiveAsync(id, Context.ConnectionAborted)
+                : null;
+            if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão acabou. Entra de novo.");
+            return await presence.RegisterAsync(
+                new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, "", account.Username), Context.ConnectionId, authenticatedAccount: true);
+        }
+
         if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados do dispositivo.");
+        var allowLegacy = services.GetService<IOptions<AuthOptions>>()?.Value.AllowLegacyDevices ?? true;
+        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
         return await presence.RegisterAsync(request, Context.ConnectionId);
     }
 
-    public Task<DeviceSnapshot?> LookupFriend(string friendCode)
+    /// <summary>Conta autenticada desta conexão (token validado), ou nulo no caminho legado.</summary>
+    private Guid? AuthenticatedAccountId() =>
+        Context.User?.Identity?.IsAuthenticated == true && Guid.TryParse(Context.User.FindFirstValue(TokenService.AccountIdClaim), out var id) ? id : null;
+
+    private FriendsService Friends() =>
+        services.GetService<FriendsService>() ?? throw new TelaeDomainException("accounts_unavailable", "Contas indisponíveis neste servidor.");
+
+    private static TelaeDomainException FriendFailure(AccountException error) => error.Code switch
+    {
+        "friend_not_found" => new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo."),
+        "cannot_add_self" => new TelaeDomainException("cannot_add_self", "Você não pode se adicionar."),
+        "already_friends" => new TelaeDomainException("already_friends", "Esse amigo já está na sua lista."),
+        "too_many_friends" => new TelaeDomainException("too_many_friends", "Sua lista chegou ao limite de 200 amigos."),
+        _ => new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Use de 3 a 20 letras, números ou _."),
+    };
+
+    private DeviceSnapshot ProfileOf(FriendAccount account) =>
+        registry.EnsureAccountProfile(account.Id.ToString(), account.Username, account.DisplayName);
+
+    public async Task<DeviceSnapshot?> LookupFriend(string friendCode)
     {
         registry.GetDeviceIdForConnection(Context.ConnectionId);
-        return Task.FromResult(registry.FindByFriendCode(friendCode));
+        if (AuthenticatedAccountId() is null) return registry.FindByFriendCode(friendCode);
+        try
+        {
+            var found = await Friends().FindByUsernameAsync(friendCode, Context.ConnectionAborted);
+            return found is null ? null : ProfileOf(found);
+        }
+        catch (AccountException error) { throw FriendFailure(error); }
     }
 
+    /// <summary>
+    /// Declara a lista de amigos da conexão e devolve cada um com a presença atual. Contas ignoram o argumento:
+    /// a lista vem do banco, então é a mesma em todos os aparelhos.
+    /// </summary>
     public async Task<IReadOnlyList<DeviceSnapshot>> GetFriends(string[] friendCodes)
     {
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var account = AuthenticatedAccountId();
+        if (account is not null)
+            friendCodes = (await Friends().ListAsync(account.Value, Context.ConnectionAborted)).Select(friend =>
+            {
+                ProfileOf(friend);
+                return friend.Username;
+            }).ToArray();
         if (friendCodes is null || friendCodes.Length > 200)
-            throw new TelaeDomainException("invalid_friend_list", "Informe no máximo 200 códigos de amigos.");
+            throw new TelaeDomainException("invalid_friend_list", "Informe no máximo 200 amigos.");
         var friends = registry.GetDevicesByFriendCodes(friendCodes);
         await presence.ReplaceAsync(Context.ConnectionId, friends);
         // Quem deixou de ser amigo (de qualquer um dos lados) sai da transmissão em andamento.
@@ -38,26 +92,62 @@ public sealed class TelaeHub(
             await NotifyAsync(detachment.SharerDeviceId, "ViewerLeft",
                 new ViewerLeftEvent(detachment.SessionId, detachment.ViewerDeviceId));
         }
-        // Quem foi adicionado agora fica sabendo na hora (se estiver online).
-        var requester = registry.GetDevice(deviceId);
-        if (requester is not null)
-            foreach (var targetId in declared.NewRequestDeviceIds)
-                await NotifyAsync(targetId, "FriendRequestReceived", requester);
+        // Contas só avisam o alvo quando o pedido é feito (AddFriend); reconectar não repete o aviso.
+        if (account is null)
+        {
+            var requester = registry.GetDevice(deviceId);
+            if (requester is not null)
+                foreach (var targetId in declared.NewRequestDeviceIds)
+                    await NotifyAsync(targetId, "FriendRequestReceived", requester);
+        }
         // Read again after subscribing so changes during group setup are reflected.
         return registry.GetDevicesByFriendCodes(friendCodes);
     }
 
-    public Task<IReadOnlyList<DeviceSnapshot>> GetFriendRequests()
+    /// <summary>Adiciona um amigo pelo @usuário (só contas) e avisa quem foi adicionado, se estiver online.</summary>
+    public async Task<DeviceSnapshot> AddFriend(string username)
     {
+        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        return Task.FromResult(registry.GetFriendRequests(deviceId));
+        FriendAccount friend;
+        try { friend = await Friends().AddAsync(account, username, Context.ConnectionAborted); }
+        catch (AccountException error) { throw FriendFailure(error); }
+
+        var snapshot = ProfileOf(friend);
+        await GetFriends([]);
+        // Se a outra pessoa já tinha adicionado de volta, é amizade mútua e não há pedido a avisar.
+        var requester = registry.GetDevice(deviceId);
+        if (requester is not null && !registry.AreMutualFriends(deviceId, friend.Id.ToString()))
+            await NotifyAsync(friend.Id.ToString(), "FriendRequestReceived", requester);
+        return snapshot;
     }
 
-    public Task DismissFriendRequest(string friendCode)
+    public async Task RemoveFriend(string username)
+    {
+        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
+        try { await Friends().RemoveAsync(account, username, Context.ConnectionAborted); }
+        catch (AccountException error) { throw FriendFailure(error); }
+        await GetFriends([]);
+    }
+
+    public async Task<IReadOnlyList<DeviceSnapshot>> GetFriendRequests()
     {
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        if (AuthenticatedAccountId() is not { } account) return registry.GetFriendRequests(deviceId);
+        var pending = await Friends().PendingRequestsAsync(account, Context.ConnectionAborted);
+        return pending.Select(ProfileOf).ToArray();
+    }
+
+    public async Task DismissFriendRequest(string friendCode)
+    {
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        if (AuthenticatedAccountId() is { } account)
+        {
+            try { await Friends().DismissAsync(account, friendCode, Context.ConnectionAborted); }
+            catch (AccountException error) { throw FriendFailure(error); }
+            return;
+        }
         registry.DismissFriendRequest(deviceId, friendCode);
-        return Task.CompletedTask;
     }
 
     public async Task<ShareAccessResult> StartShare(StartShareRequest request)

@@ -1,8 +1,8 @@
-# Telae — Project Spec
+# Telaê — Project Spec
 
 ## Problem Statement
 
-Watching something together through a friend's screen is useful, but general-purpose communication apps often mix screen sharing with channels, messaging, calls, communities, and account management. Telae focuses on the single job: select a screen or window, send a short invite, and let a friend watch it with excellent image quality, synchronized system audio, and latency low enough that interaction still feels immediate.
+Watching something together through a friend's screen is useful, but general-purpose communication apps often mix screen sharing with channels, messaging, calls and communities. Telaê focuses on the single job: select a screen or window and let a friend watch it with excellent image quality, synchronized system audio, and latency low enough that interaction still feels immediate.
 
 Literal zero latency is physically impossible because capture, encoding, network transit, decoding, and rendering all take time. The product goal is therefore low and stable glass-to-glass latency with graceful quality adaptation rather than buffering.
 
@@ -10,17 +10,17 @@ Literal zero latency is physically impossible because capture, encoding, network
 
 Build a Windows desktop application with Electron, React, TypeScript, and Tailwind. Chromium's WebRTC stack handles capture, encoding, congestion control, encrypted media transport, and decoding. An ASP.NET Core signaling service coordinates Share Sessions and WebRTC negotiation but does not sit in the normal media path. Peers connect directly when possible and use TURN only when NAT or firewall conditions require a relay.
 
-The first release is intentionally one Sharer to one Viewer. This keeps upstream bandwidth predictable, makes the latency target realistic, and gives the project a clean benchmark before adding multi-viewer delivery through an SFU.
+Media is sent from the Sharer to each Viewer over its own WebRTC connection, up to 12 Viewers per Share Session. This keeps the design simple and the latency low, at the cost of upload bandwidth that grows with the Viewer count; an SFU stays a future option if one upstream is ever needed. People are identified by an account with a unique `@username`, and a Viewer joins a friend's live stream with one click instead of an invite code. See [ADR 0004](adr/0004-user-accounts.md).
 
 ## User Stories
 
 1. As a Sharer, I want to choose a screen or application window, so that I control exactly what the Viewer can see.
 2. As a Sharer, I want to include system audio, so that a Viewer can hear videos and other desktop content in sync with the picture.
-3. As a Sharer, I want a short-lived invite, so that a friend can join without creating an account.
+3. As a Sharer, I want only my friends to be able to watch, so that nobody can join a stream by guessing a code.
 4. As a Sharer, I want to see when a Viewer is connecting, live, reconnecting, or gone, so that I always understand who is receiving my screen.
 5. As a Sharer, I want to stop sharing instantly, so that capture ends when I expect it to.
 6. As a Sharer, I want to choose an Auto, 720p, 1080p, or high-frame-rate Quality Profile, so that I can balance image quality and bandwidth.
-7. As a Viewer, I want to join from an invite code or link, so that starting a session takes only a few seconds.
+7. As a Viewer, I want to see which friends are live and join with one click, so that starting a session takes only a few seconds.
 8. As a Viewer, I want the shared image to fill the available window cleanly, so that the content stays the focus.
 9. As a Viewer, I want synchronized audio and video, so that films and other media remain watchable.
 10. As a Viewer, I want the stream to adapt instead of pausing to buffer, so that poor network moments do not destroy the session.
@@ -39,13 +39,14 @@ The first release is intentionally one Sharer to one Viewer. This keeps upstream
 - Keep signaling out of the media path after WebRTC negotiation.
 - Use ICE with STUN and a production TURN service for NAT/firewall fallback.
 - Use DTLS-SRTP provided by WebRTC for encrypted media transport and TLS/WSS for signaling.
-- Begin with one Sharer and one Viewer. Multi-viewer delivery is a later SFU milestone.
+- Support up to 12 Viewers per Share Session, each with an independent peer connection. An SFU is a later option.
+- Identify people by account (email, password and a unique `@username`); friendships are mutual and stored on the server.
 - Prefer hardware-friendly H.264 for the first production codec path. AV1 can be introduced when both peers and the encoder path prove capable without increasing latency or CPU usage.
 - Use Opus for transmitted audio and avoid voice-oriented audio processing on system-audio capture where the platform allows it.
 - Treat capture, signaling, peer connection, quality control, and diagnostics as deep modules with small interfaces.
-- Source selection is explicit per Share Session. Telae never starts sharing silently.
-- Session invites expire and represent temporary access rather than permanent identity.
-- DRM/HDCP-protected applications may intentionally block screen capture. Telae does not attempt to bypass those protections.
+- Source selection is explicit per Share Session. Telaê never starts sharing silently.
+- Joining a stream requires mutual friendship. Legacy invite codes remain only for clients released before accounts.
+- DRM/HDCP-protected applications may intentionally block screen capture. Telaê does not attempt to bypass those protections.
 
 ## Quality Targets
 
@@ -77,8 +78,8 @@ The targets below are product acceptance goals and must be validated on real Win
 - Remote mouse/keyboard control.
 - Text chat, communities, channels, bots, or a Discord-style social layer.
 - Recording or cloud VOD.
-- More than one Viewer in the first release.
-- macOS, Linux, mobile, and browser-only clients in the first release.
+- A hosted media server (SFU) in the current release.
+- macOS, Linux, mobile, and browser-only clients for now.
 - DRM or HDCP bypass.
 - Custom video codecs or a custom congestion-control algorithm.
 

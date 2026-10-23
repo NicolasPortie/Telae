@@ -35,13 +35,13 @@ export function PickerScreen({
         <button type="button" onClick={onBack} className="telae-press btn btn-ghost btn-sm -ml-2">
           <ArrowLeft size={16} aria-hidden="true" /> {t('Voltar')}
         </button>
-        <h1 id="picker-title" className="mt-3 text-[28px] font-semibold tracking-[-0.035em]">{t('O que você quer compartilhar?')}</h1>
+        <h1 id="picker-title" className="display mt-3 text-[40px]">{t('O que você quer mostrar?')}</h1>
         <p className="mt-1.5 text-sm text-ink-3">
-          {switching ? t('A transmissão continua ativa durante a troca.') : t('A captura só começa depois da sua confirmação.')} {t('O som de uma janela vem apenas do aplicativo escolhido.')}
+          {switching ? t('A transmissão segue no ar durante a troca.') : t('Nada sai do seu PC até você clicar em Começar.')} {t('O som de uma janela é só o do app dela.')}
         </p>
       </div>
 
-      {loading && <p className="mt-6 text-sm text-ink-3">{t('Listando telas e janelas…')}</p>}
+      {loading && <p className="mt-6 text-sm text-ink-3">{t('Procurando telas e janelas…')}</p>}
 
       {error && (
         <div className="card mt-6 p-4">
@@ -58,7 +58,7 @@ export function PickerScreen({
           </div>
 
           <div className="card shrink-0 p-4">
-            <p className="mb-3 truncate text-sm font-medium" title={selectedName}>{selectedName ?? t('Escolha uma tela ou janela acima')}</p>
+            <p className="mb-3 truncate text-sm font-medium" title={selectedName}>{selectedName ?? t('Escolha algo acima.')}</p>
             <div className="telae-picker-action-row">
               <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
                 {!switching && <QualityPicker value={quality} onChange={onQuality} />}
@@ -66,7 +66,7 @@ export function PickerScreen({
               {formError && <p role="alert" className="mt-4 text-sm text-danger-soft">{formError}</p>}
               <div className="telae-picker-submit">
                 <button type="button" onClick={onStart} disabled={busy || !selectedId} className="telae-press telae-primary-action btn btn-primary btn-lg w-full">
-                  {busy ? t('Preparando…') : switching ? t('Trocar fonte agora') : t('Começar a compartilhar')}
+                  {busy ? t('Preparando…') : switching ? t('Trocar fonte agora') : t('Começar a transmitir')}
                 </button>
               </div>
             </div>

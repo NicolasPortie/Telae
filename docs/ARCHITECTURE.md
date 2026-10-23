@@ -1,33 +1,35 @@
-# Telae — Architecture
+# Telaê — Architecture
 
 ## System shape
 
 ```text
-┌────────────────────────── Sharer / Windows ──────────────────────────┐
-│ Electron                                                       │
-│  React UI                                                      │
-│     │                                                          │
-│  StreamController                                              │
-│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio│
-│     ├─ PeerTransport ─── WebRTC RTCPeerConnection              │
-│     ├─ QualityController                                       │
-│     └─ Diagnostics                                             │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ encrypted media
-                     Direct P2P│        │TURN relay fallback
-                               ▼        ▼
-┌────────────────────────── Viewer / Windows ──────────────────────────┐
+┌───────────────────────── Sharer / Windows ─────────────────────────┐
+│ Electron                                                           │
+│  React UI                                                          │
+│     │                                                              │
+│  StreamController                                                  │
+│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio   │
+│     ├─ PeerTransport ─── WebRTC RTCPeerConnection                  │
+│     ├─ QualityController                                           │
+│     └─ Diagnostics                                                 │
+└──────────────────────────────────┬─────────────────────────────────┘
+                                   │ encrypted media
+                                   │ direct P2P · TURN relay as fallback
+                                   ▼
+┌───────────────────────── Viewer / Windows ─────────────────────────┐
 │ Electron + React                                                   │
 │  PeerTransport ──> Playback surface ──> Diagnostics                │
-└─────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────┘
 
-                ▲                                   ▲
-                └──────── SignalR / WSS ────────────┘
-                          ASP.NET Core
-                    Share Session signaling
+        Both apps connect to the server over SignalR / WSS:
+
+┌────────────────────────────── Server ──────────────────────────────┐
+│ ASP.NET Core · accounts · friends · Share Session signaling        │
+│ (SDP and ICE only; no media passes through here)                   │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-The ASP.NET Core service coordinates presence, short-lived invite tokens, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
+The ASP.NET Core service coordinates accounts, friendships, presence, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
 
 ## Why this stack
 
@@ -128,7 +130,7 @@ The Viewer must never need inbound port forwarding.
 - Narrow, typed preload IPC surface.
 - Strict Content Security Policy.
 - TLS for signaling and TURN credentials with short lifetimes.
-- Share Session invite tokens are high-entropy and expire.
+- Joining a stream requires mutual friendship; legacy invite tokens (clients before accounts) are high-entropy and expire.
 - A Viewer joining a session becomes visible to the Sharer before media is considered live.
 - Capture stops when the Share Session ends or the app exits unexpectedly.
 
@@ -157,6 +159,16 @@ The desktop exposes a total video upload ceiling (40 Mbps by default, configurab
 A Viewer is marked live only after the playback element confirms a presented frame. A connected transport without displayed video retains a bounded recovery deadline. Audio diagnostics distinguish an available track from receiving packets; silence is not itself a transmission failure. The process-audio worklet keeps at most 120 ms of PCM in a fixed ring buffer and reports discarded frames and underruns.
 
 Diagnostic exports use an explicit allowlist without invite codes, identities or session identifiers. They retain up to one hour of structured samples, bounded state/error-category history and aggregates covering all collected samples. Actual glass-to-glass latency and perceptual A/V drift still require the physical benchmark.
+
+## Accounts and friends
+
+Since the account release, identity is an account (see [ADR 0004](adr/0004-user-accounts.md)) stored in PostgreSQL. The desktop signs in over REST (`/auth/*`) and keeps the session in the main process: a rotating refresh token encrypted with the OS keystore and a short-lived JWT access token handed to the renderer only to authenticate the SignalR connection. In the hub, `RegisterDevice` trusts the validated token, never what the client sends: the device ID is the account ID and the public friend identifier is the account's `@username`.
+
+The friend list is server-side. Each row of `Friendships` is a directed edge (who added whom); `DismissedRequests` records ignored requests. `GetFriends` loads the list from the database for the connection's account (the argument is ignored), subscribes the connection to its friends' presence groups and refreshes the in-memory mutual-friendship view used to authorize watching. `AddFriend` and `RemoveFriend` change the database, then run the same synchronization, which also ends sessions that stop being mutual. Pending requests are computed from the database (edges pointing at me that I have not reciprocated or dismissed), so they survive restarts and reach people who were offline when the request was made.
+
+Access to a server is controlled by configuration, not by the code being public. Registration is closed by default (`Auth:RegistrationOpen=false`): only the emails in `Auth:AllowedEmails` can create an account, and anyone else gets `registration_closed` before any account or email is created. Clients without an account (`Auth:AllowLegacyDevices`) are refused by default, so every connection to the hub carries a validated account token. A self-hosted or public server opts in explicitly with `Auth__RegistrationOpen=true`.
+
+The legacy device-credential path described below remains for clients released before accounts, behind `Auth:AllowLegacyDevices`.
 
 ## Device credentials and migration
 

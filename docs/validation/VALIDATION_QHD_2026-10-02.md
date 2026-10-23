@@ -6,7 +6,7 @@ Resultado: os dois perfis transmitiram vídeo real em **2560 × 1440**. O teste 
 
 - Windows, Electron 44.4.5, duas instâncias do aplicativo no mesmo computador, servidor de sinalização local.
 - Monitor principal: 2560 × 1440, escala 1, 60 Hz; secundário: 2560 × 1080, escala 1, 60 Hz.
-- Fonte: janela real sem bordas, em tela cheia, com canvas animado de 2560 × 1440. Capturada pelo fluxo normal de `getDisplayMedia`, enviada por WebRTC e reproduzida pelo receptor do Telae. O canvas é conteúdo da janela; o stream não é simulado nem gerado por `captureStream`.
+- Fonte: janela real sem bordas, em tela cheia, com canvas animado de 2560 × 1440. Capturada pelo fluxo normal de `getDisplayMedia`, enviada por WebRTC e reproduzida pelo receptor do Telaê. O canvas é conteúdo da janela; o stream não é simulado nem gerado por `captureStream`.
 - Encoder observado: `MediaFoundationVideoEncodeAccelerator (NVIDIA H.264 Encoder MFT)`, com aceleração por hardware.
 - Modo de conteúdo Texto, um espectador, limite total padrão de 40 Mbps.
 - Verificação estrita da resolução recebida, conexão ativa, constraints de captura, continuidade dos frames e preservação do convite.

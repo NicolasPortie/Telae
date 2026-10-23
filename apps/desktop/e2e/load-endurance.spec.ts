@@ -5,6 +5,7 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { diagnosticSnapshot } from './diagnostics.ts'
 import { befriend, watchFriend } from './friends.ts'
+import { signUp } from './auth.ts'
 
 const requestedViewers = process.env.TELAE_E2E_VIEWERS
 const viewerCount = Number(requestedViewers)
@@ -101,17 +102,16 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
     const app = await electron.launch({ args: [path.resolve(import.meta.dirname, '..'), '--no-sandbox', '--lang=pt-BR', `--user-data-dir=${directory}`, ...(muted ? ['--mute-audio'] : [])], env })
     const page = await app.firstWindow()
     instances.push({ app, page, directory })
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar', exact: true }).click()
-    await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible({ timeout: 30_000 })
+    await signUp(page, name)
+    await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 30_000 })
     return { app, page }
   }
   try {
     const sharer = await launch('LoadSender', false)
     await sharer.page.getByRole('button', { name: /Escolher tela/ }).click()
     await sharer.page.getByRole('radio').first().click()
-    await sharer.page.getByRole('button', { name: 'Começar a compartilhar', exact: true }).click()
-    await expect(sharer.page.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
+    await sharer.page.getByRole('button', { name: 'Começar a transmitir', exact: true }).click()
+    await expect(sharer.page.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible({ timeout: 60_000 })
     for (let index = 1; index <= viewerCount; index++) {
       const viewer = await launch(`LoadViewer${index}`, true)
       await befriend({ page: sharer.page, name: 'LoadSender' }, { page: viewer.page, name: `LoadViewer${index}` })
@@ -121,7 +121,7 @@ test('carga e endurance opt-in com evidência de múltiplos espectadores', async
       catch (error) { join.outcome = 'failed'; throw error }
       await saveEvidence()
     }
-    await expect(sharer.page.getByRole('region', { name: 'Espectadores', exact: true }).getByRole('button', { name: /^Remover LoadViewer/ })).toHaveCount(viewerCount)
+    await expect(sharer.page.getByRole('region', { name: 'Quem está assistindo', exact: true }).getByRole('button', { name: /^Remover LoadViewer/ })).toHaveCount(viewerCount)
     const viewers = instances.slice(1)
     evidence.memoryStart = await Promise.all(instances.map(async (instance, index) => ({ instance: index, ...await memorySnapshot(instance.app) })))
     evidence.diagnosticsStart = await Promise.all(instances.map(instance => diagnosticSnapshot(instance.page)))

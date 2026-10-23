@@ -1,4 +1,4 @@
-# Telae 0.1.16
+# Telaê 0.1.16
 
 Inclui [as melhorias da 0.1.15](RELEASE_0.1.15.md) e corrige a avaliação dos workflows: `runner.temp` não está disponível no ambiente declarado no nível do job. Os arquivos de perfil isolados usam `github.workspace` nesse contexto.
 
