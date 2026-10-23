@@ -4,6 +4,10 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.2.0] - 2026-10-23
+
+Contas de usuário, amigos pelo @usuário e um novo visual. Notas completas em [docs/releases/RELEASE_0.2.0.md](docs/releases/RELEASE_0.2.0.md). **Exige atualizar o servidor e o desktop juntos:** o servidor passa a recusar clientes sem conta.
+
 ### Segurança
 - **Cadastro fechado por padrão.** O servidor só cria conta para e-mails liberados em `Auth__AllowedEmails` (ou `TELAE_ALLOWED_EMAILS` no Docker Compose); `Auth__RegistrationOpen=true` reabre para qualquer pessoa. Quem não está na lista recebe o erro `registration_closed`, traduzido na interface.
 - **Clientes sem conta desligados por padrão** (`Auth__AllowLegacyDevices=false`): sem entrar numa conta, não há acesso ao servidor. Antes de publicar este servidor, distribua o desktop com contas, ou ligue a opção temporariamente.

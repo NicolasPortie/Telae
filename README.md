@@ -136,6 +136,14 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 
 ## Getting started
 
+### Download
+
+Grab the Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). The installers are not code-signed yet, so Windows SmartScreen may warn on the first run: choose **More info > Run anyway**. The app updates itself in the background.
+
+An account is needed to sign in. The default server is private and only accepts invited emails, so to try Telaê yourself [run your own server](#self-hosting) and point the app to it in **Settings > Signaling server**.
+
+### Build from source
+
 **Requirements:** Windows 10/11 x64, Node.js 22+ and the .NET 10 SDK. Per-application audio filtering needs Windows build 20348 or later.
 
 Signaling server (uses a local SQLite file and prints verification codes to the log, so no database or mail server is needed):

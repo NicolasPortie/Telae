@@ -136,6 +136,14 @@ O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em ing
 
 ## Primeiros passos
 
+### Baixar
+
+Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. O app se atualiza sozinho em segundo plano.
+
+É preciso ter uma conta para entrar. O servidor padrão é privado e só aceita e-mails convidados; para testar o Telaê, [hospede o seu servidor](#hospedagem-própria) e aponte o app para ele em **Configurações > Servidor de sinalização**.
+
+### Compilar a partir do código
+
 **Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET 10 SDK. O filtro de áudio por aplicativo exige o Windows build 20348 ou superior.
 
 Servidor de sinalização (usa um arquivo SQLite local e escreve os códigos de verificação no log, então não precisa de banco nem de servidor de e-mail):
