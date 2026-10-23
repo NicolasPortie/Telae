@@ -69,7 +69,7 @@ export class StreamController {
   }
 
   async start(sourceId: string, quality: QualityProfile): Promise<MediaStream> {
-    if (!sourceId.trim()) throw new Error(t('Escolha uma tela ou janela antes de iniciar.'))
+    if (!sourceId.trim()) throw new Error(t('Escolha uma tela ou janela antes de começar.'))
     const token = ++this.startToken
     this.cancelPendingCaptures()
     this.teardownStream()
@@ -83,26 +83,26 @@ export class StreamController {
       }
       this.stream = stream
       this.observeEnded(stream)
-      if (token !== this.startToken) throw new Error(t('A fonte escolhida foi encerrada.'))
+      if (token !== this.startToken) throw new Error(t('Essa fonte foi fechada.'))
       this.setState('live')
       return stream
     } catch (error) {
       if (token !== this.startToken) throw error instanceof Error ? error : new Error(String(error))
       this.teardownStream()
-      const message = error instanceof Error ? error.message : t('Não foi possível iniciar a captura.')
+      const message = error instanceof Error ? error.message : t('Não deu pra iniciar a captura.')
       this.setState('idle', message)
       throw new Error(message)
     }
   }
 
   async prepareSwitch(sourceId: string, quality: QualityProfile) {
-    if (!this.stream) throw new Error(t('Inicie a transmissão antes de trocar a fonte.'))
+    if (!this.stream) throw new Error(t('Comece a transmitir antes de trocar a fonte.'))
     const token = this.startToken
     const previous = this.stream
     const current = await this.captureSource(sourceId, quality)
     if (token !== this.startToken || this.stream !== previous) {
       this.deps.release(current)
-      throw new Error(t('A transmissão foi encerrada durante a troca de fonte.'))
+      throw new Error(t('A transmissão acabou durante a troca de fonte.'))
     }
     this.preparedStreams.add(current)
     const rollback = () => {
@@ -113,7 +113,7 @@ export class StreamController {
       commit: () => {
         if (token !== this.startToken || this.stream !== previous || !this.preparedStreams.has(current) || current.getVideoTracks?.()[0]?.readyState === 'ended') {
           rollback()
-          throw new Error(t('A fonte ou a transmissão foi encerrada durante a troca.'))
+          throw new Error(t('A fonte ou a transmissão acabou durante a troca.'))
         }
         this.preparedStreams.delete(current)
         this.stream = current

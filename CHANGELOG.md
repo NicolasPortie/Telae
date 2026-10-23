@@ -2,6 +2,47 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 
+## [Não lançado]
+
+## [0.2.0] - 2026-10-23
+
+Contas de usuário, amigos pelo @usuário e um novo visual. Notas completas em [docs/releases/RELEASE_0.2.0.md](docs/releases/RELEASE_0.2.0.md). **Exige atualizar o servidor e o desktop juntos:** o servidor passa a recusar clientes sem conta.
+
+### Segurança
+- **Cadastro fechado por padrão.** O servidor só cria conta para e-mails liberados em `Auth__AllowedEmails` (ou `TELAE_ALLOWED_EMAILS` no Docker Compose); `Auth__RegistrationOpen=true` reabre para qualquer pessoa. Quem não está na lista recebe o erro `registration_closed`, traduzido na interface.
+- **Clientes sem conta desligados por padrão** (`Auth__AllowLegacyDevices=false`): sem entrar numa conta, não há acesso ao servidor. Antes de publicar este servidor, distribua o desktop com contas, ou ligue a opção temporariamente.
+- Arquivos de operação (`ops/`) sem usuário nem caminhos pessoais, e o unit de exemplo escuta só em `127.0.0.1`. Removida a nota de implantação da 0.1.16.
+
+### Operação
+- **Repositório público só com CI em runners da GitHub.** O deploy, os runners `self-hosted`, os scripts do servidor e a validação física de mídia foram para um repositório de operação privado, que consulta a Release pública. Um PR de fora não alcança mais nenhuma máquina de operação.
+- Novo `release.yml`: ao enviar uma tag `v*`, valida, gera o instalador e cria a Release. Removidos `deploy-server.yml` e os scripts de `ops/` com o layout do servidor (ficam `ops/telae-server.service` e `ops/turnserver.conf.example`).
+
+### Marca
+- O nome do produto passa a ser escrito **Telaê**, com acento, na interface, nos e-mails e na documentação. Identificadores técnicos (pacotes, namespaces, domínio, nome do instalador) continuam `Telae`.
+
+### Projeto
+- READMEs em inglês e português reescritos: demonstração em GIF, sumário, diagrama de sequência, tecnologias, hospedagem própria com tabela de variáveis, testes, segurança e limitações conhecidas.
+- Novas capturas de tela (início, transmissão, player, entrar e criar conta) nos dois idiomas.
+- `CODE_OF_CONDUCT.md`, modelo de sugestão de recurso, configuração de issues e `CODEOWNERS`.
+- Especificação, diagrama de arquitetura, glossário e ADRs atualizados para contas, amigos e vários espectadores; metadados do `package.json`.
+
+### Interface
+- **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Geist em peso forte nos títulos e na marca, grão de filme e facho de luz.
+- **Tela inicial nova:** trilho de amigos agrupado por Ao vivo, Online e Offline, e um palco com os cartazes de quem está transmitindo ("Em cartaz") ou a "tela apagada" quando ninguém está.
+- **Entrada em duas colunas**, com painel da marca; configurações com navegação lateral por seção (Conta, Geral, Segurança, Servidor, Sobre).
+- **Textos reescritos em tom de conversa** (pt-BR e inglês). Erros agora dizem o que aconteceu e o que fazer.
+- A luz vermelha de "no ar" passa a marcar quem transmite; saudação por horário na tela inicial.
+
+### Amigos
+- **Amigos pelo @usuário, sem código.** A lista de amigos, os pedidos e as dispensas agora ficam no banco e acompanham a conta em qualquer computador. O app mostra o seu @, adiciona por @ e não menciona mais códigos.
+- Entrar e criar conta redesenhados: abas, campos com ícone, medidor de força da senha, código de verificação em seis casas (aceita colar) e uma amostra do produto ao lado.
+
+### Contas
+- **Contas de usuário** com e-mail, nome de usuário único e senha, em PostgreSQL. Verificação de e-mail e recuperação de senha por código de 6 dígitos (SMTP configurável), sessões com rotação e detecção de reutilização, bloqueio por tentativas, limites por IP e exclusão de conta. Detalhes na [ADR 0004](docs/adr/0004-user-accounts.md).
+- O app ganhou as telas de entrar, criar conta, confirmar e-mail e recuperar senha. Conta, senha e exclusão ficam em Configurações, e os tokens ficam no cofre do sistema.
+- Os limites por IP do cadastro e das demais chamadas de conta são configuráveis (`Auth:StrictRequestsPerMinute` e `Auth:RequestsPerMinute`).
+- O servidor continua aceitando clientes anteriores enquanto `Auth:AllowLegacyDevices` estiver ligado. Para publicar esta versão do servidor é preciso definir `Auth__JwtKey` e, em produção, a conexão com o PostgreSQL (veja `.env.example`).
+
 ## [0.1.26] - 2026-10-19
 
 Novo visual, interface em português e inglês, configurações e avisos de amigos ao vivo. Notas completas em [docs/releases/RELEASE_0.1.26.md](docs/releases/RELEASE_0.1.26.md).
@@ -14,7 +55,7 @@ Novo visual, interface em português e inglês, configurações e avisos de amig
 - A navegação foi dividida em componentes (`HomeScreen`, `FriendsPanel`, `PickerScreen`, `AppHeader`, `NameForm`) e o estado de amigos foi isolado no hook `useFriends`, sem mudança de comportamento.
 
 - **Configurações:** perfil, avisos, início com o Windows, endereço do servidor de sinalização e informações da instalação.
-- **Aviso do Windows** quando um amigo começa a transmitir e o Telae não está em foco.
+- **Aviso do Windows** quando um amigo começa a transmitir e o Telaê não está em foco.
 - Indicador de conexão no cabeçalho, esqueleto de carregamento na lista de amigos e passos de "Como funciona" na tela inicial.
 - Texto terciário com contraste mínimo de 4,5:1 e botão de configurações no lugar do botão de perfil.
 - O player do espectador virou o componente `ViewerSession`; `App.tsx` caiu de mais de 1000 para cerca de 450 linhas.
@@ -32,7 +73,7 @@ Novo visual, interface em português e inglês, configurações e avisos de amig
 - Testes de componentes (Testing Library) para o painel de amigos e as configurações.
 - Dependências atualizadas dentro das faixas atuais (React 19.3.1, Electron 44.9, Playwright, Vitest, oxlint, lucide).
 - Notas de versão e validações movidas para `docs/releases` e `docs/validation`.
-- Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
+- Removidos arquivos de exemplo do projeto inicial (logos do Vite e do React, README e favicon padrão).
 - Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
 
 ## [0.1.25] - 2026-10-14

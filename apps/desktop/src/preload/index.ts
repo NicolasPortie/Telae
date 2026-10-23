@@ -1,12 +1,28 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AudioBridgeState, AudioChunk, LocalProfile, TelaeDesktopApi, UpdateStatus } from '../shared/contracts.ts'
+import type { AccountInfo, AudioBridgeState, AudioChunk, LocalProfile, TelaeDesktopApi, UpdateStatus } from '../shared/contracts.ts'
 
 const api: TelaeDesktopApi = {
+  auth: {
+    getSession: () => ipcRenderer.invoke('auth:session'),
+    register: input => ipcRenderer.invoke('auth:register', input),
+    verifyEmail: (identifier, code) => ipcRenderer.invoke('auth:verify-email', identifier, code),
+    resendVerification: identifier => ipcRenderer.invoke('auth:resend-verification', identifier),
+    login: (identifier, password) => ipcRenderer.invoke('auth:login', identifier, password),
+    logout: () => ipcRenderer.invoke('auth:logout'),
+    forgotPassword: identifier => ipcRenderer.invoke('auth:forgot-password', identifier),
+    resetPassword: (identifier, code, newPassword) => ipcRenderer.invoke('auth:reset-password', identifier, code, newPassword),
+    updateDisplayName: displayName => ipcRenderer.invoke('auth:update-display-name', displayName),
+    changePassword: (currentPassword, newPassword) => ipcRenderer.invoke('auth:change-password', currentPassword, newPassword),
+    deleteAccount: password => ipcRenderer.invoke('auth:delete-account', password),
+    getAccessToken: () => ipcRenderer.invoke('auth:access-token'),
+    onSessionChanged: (listener: (account: AccountInfo | null) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, account: AccountInfo | null) => listener(account)
+      ipcRenderer.on('auth:changed', handler)
+      return () => ipcRenderer.removeListener('auth:changed', handler)
+    },
+  },
   getLocalProfile: () => ipcRenderer.invoke('profile:get') as Promise<LocalProfile>,
   setDisplayName: (displayName: string) => ipcRenderer.invoke('profile:set-name', displayName) as Promise<LocalProfile>,
-  addFriendCode: (friendCode: string) => ipcRenderer.invoke('profile:add-friend', friendCode) as Promise<LocalProfile>,
-  removeFriendCode: (friendCode: string) =>
-    ipcRenderer.invoke('profile:remove-friend', friendCode) as Promise<LocalProfile>,
   listCaptureSources: () => ipcRenderer.invoke('capture:list-sources'),
   selectCaptureSource: (sourceId: string) => ipcRenderer.invoke('capture:select-source', sourceId),
   resolveWindowAudioProcess: (sourceId: string) => ipcRenderer.invoke('capture:resolve-window-audio', sourceId),

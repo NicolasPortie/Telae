@@ -71,7 +71,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
 
   const toggleFullscreen = useCallback(() => {
     const change = document.fullscreenElement ? document.exitFullscreen() : stageRef.current?.requestFullscreen()
-    void change?.catch(() => setError(t('Não foi possível abrir a tela cheia. Tente novamente.')))
+    void change?.catch(() => setError(t('Não deu pra abrir a tela cheia. Tenta de novo.')))
   }, [])
 
   return (

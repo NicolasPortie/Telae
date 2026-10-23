@@ -15,7 +15,7 @@ labels: bug
 
 **Ambiente**
 
-- Versão do Telae:
+- Versão do Telaê:
 - Windows (versão e build):
 - Perfil de qualidade e fonte compartilhada (tela ou janela):
 - Conexão direta ou via servidor (aba Estatísticas > Rota):

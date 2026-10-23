@@ -35,11 +35,28 @@ public sealed partial class TelaeRegistry
                     new JsonSerializerOptions { WriteIndented = true });
                 file.Flush(flushToDisk: true);
             }
-            File.Move(temporaryPath, _profilePath, overwrite: true);
+            ReplaceWithRetry(temporaryPath, _profilePath);
         }
         finally
         {
             if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
+    }
+
+    /// <summary>No Windows, antivírus e indexadores seguram o arquivo por instantes; algumas tentativas curtas resolvem sem perder atomicidade.</summary>
+    private static void ReplaceWithRetry(string source, string destination)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(source, destination, overwrite: true);
+                return;
+            }
+            catch (Exception exception) when (attempt < 6 && exception is UnauthorizedAccessException or IOException)
+            {
+                Thread.Sleep(20 * attempt);
+            }
         }
     }
 
@@ -51,7 +68,16 @@ public sealed partial class TelaeRegistry
         return normalized;
     }
 
-    private static string NormalizeFriendCode(string value)
+    /// <summary>O identificador de amigo é o @usuário: de 3 a 20 letras, números ou _, sempre em minúsculas.</summary>
+    internal static string NormalizeFriendCode(string value)
+    {
+        var normalized = (value ?? "").Trim().TrimStart('@').ToLowerInvariant();
+        if (normalized.Length is < 3 or > 20 || !normalized.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+            throw new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Use de 3 a 20 letras, números ou _.");
+        return normalized;
+    }
+
+    private static string NormalizeInviteCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 32)
             throw new TelaeDomainException("invalid_friend_code", "Código inválido.");

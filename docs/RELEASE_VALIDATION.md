@@ -4,21 +4,13 @@
 
 `validate.yml` executa lint, TypeScript, testes unitários, build .NET, testes do servidor, build desktop e E2E determinístico em Windows a cada PR/push. Não publica releases. Configure `checks` como status obrigatório na proteção de branches.
 
-O workflow de tags valida o servidor e exige mídia real antes de gerar/publicar o instalador. O job `media-readiness` falha rapidamente se faltar configuração ou runner online/livre; não agenda o job de mídia nessas condições. Uma desconexão entre a verificação e o agendamento ainda pode deixar o job em fila: cancele a execução e restaure o runner. O timeout de job limita execução, não espera na fila.
+`release.yml` roda ao enviar uma tag `v*`: valida o servidor, confere que a tag corresponde à versão do desktop, repete lint, tipos, testes e o E2E determinístico, gera o instalador e cria a Release pública. Só usa runners da GitHub e só lê os segredos opcionais `CSC_LINK` e `CSC_KEY_PASSWORD` (certificado de assinatura).
 
-Use uma máquina dedicada com Windows x64, monitor ativo, dispositivo de áudio e sessão de usuário desbloqueada. Execute o runner na sessão interativa, não como serviço Windows. Prepare uma janela capturável com conteúdo sem DRM e áudio reproduzindo. Registre labels `self-hosted`, `Windows`, `X64`, `telae-media`. Não use esse runner em PRs de forks; só tags revisadas de mantenedores chegam a ele.
+## Validação física de mídia
 
-Configuração do repositório:
+A captura real de tela e áudio exige uma máquina com monitor, e por isso não roda no repositório público. Ela é executada a partir de um repositório de operação **privado**, num runner Windows dedicado, contra o código de uma tag do repositório público. Assim, nenhum PR de fora consegue executar código nessa máquina.
 
-| Campo | Tipo | Valor |
-| --- | --- | --- |
-| `TELAE_MEDIA_RUNNER_READY` | Variable | `true` após preparar a máquina |
-| `MEDIA_RUNNER_STATUS_TOKEN` | Secret | Token de leitura de runners deste repositório, Administration: read |
-| `TELAE_TEST_TURN_URL` | Variable, opcional | URL TURN de teste, sem senha embutida |
-| `TELAE_TEST_TURN_SECRET` | Secret | Segredo REST do TURN de teste; obrigatório quando houver URL |
-| `CSC_LINK`, `CSC_KEY_PASSWORD` | Secrets, opcionais | Certificado real e senha, conforme política de distribuição |
-
-A consulta de runners usa a [API oficial do GitHub](https://docs.github.com/en/rest/actions/self-hosted-runners#list-self-hosted-runners-for-a-repository). Mantenha o token restrito e renove-o antes do vencimento. Runner de organização exige credenciais e escopo adequados ao endpoint utilizado.
+Use um Windows x64 com monitor ativo, dispositivo de áudio e sessão de usuário desbloqueada, com o runner na sessão interativa (não como serviço). Prepare uma janela capturável, sem DRM e com áudio reproduzindo. Para validar o relay TURN, defina no repositório privado a variável `TELAE_TEST_TURN_URL` (sem senha embutida) e o secret `TELAE_TEST_TURN_SECRET`.
 
 O job físico compila o bridge e executa Electron headed com `TELAE_E2E_MEDIA=1`. Verifica frames decodificados, faixa de áudio, troca de fonte, espectadores, remoção e controles durante a transmissão. Com TURN configurado, executa também `TELAE_E2E_RELAY=1` e exige relay no par ICE selecionado. Sem TURN o teste relay é explicitamente omitido; isso não comprova aptidão para redes restritivas. Os artefatos HTML/trace registram falhas, mas não substituem o benchmark de hardware/rede.
 

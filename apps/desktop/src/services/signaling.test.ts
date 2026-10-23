@@ -27,22 +27,20 @@ import { SignalingClient } from './signaling'
 
 beforeEach(() => { vi.clearAllMocks(); hub.handlers.clear(); hub.reconnected = null })
 
-it('re-registers credentials and restores only the latest friend subscriptions after reconnect', async () => {
+it('re-registers the account and reloads the friend list from the server after reconnect', async () => {
   const client = new SignalingClient('http://localhost')
-  await client.connect('device', 'Ana', 'secret')
-  await client.getFriends(['ABCDEF'])
-  await client.getFriends(['UVWXYZ'])
+  await client.connect('device', 'Ana')
+  await client.getFriends()
   await hub.reconnected!()
-  expect(hub.invoke).toHaveBeenCalledWith('RegisterDevice', { deviceId: 'device', displayName: 'Ana', deviceSecret: 'secret' })
-  expect(hub.invoke).toHaveBeenLastCalledWith('GetFriends', ['UVWXYZ'])
+  expect(hub.invoke).toHaveBeenCalledWith('RegisterDevice', { deviceId: 'device', displayName: 'Ana', deviceSecret: '' })
+  expect(hub.invoke).toHaveBeenLastCalledWith('GetFriends', [])
 })
 
-it('sends an empty subscription list to revoke old groups, including after reconnect', async () => {
+it('adds and removes friends by username through the hub', async () => {
   const client = new SignalingClient('http://localhost')
-  await client.connect('device', 'Ana', 'secret')
-  await client.getFriends(['ABCDEF'])
-  await client.getFriends([])
-  expect(hub.invoke).toHaveBeenLastCalledWith('GetFriends', [])
-  await hub.reconnected!()
-  expect(hub.invoke).toHaveBeenLastCalledWith('GetFriends', [])
+  await client.connect('device', 'Ana')
+  await client.addFriend('bia')
+  expect(hub.invoke).toHaveBeenLastCalledWith('AddFriend', 'bia')
+  await client.removeFriend('bia')
+  expect(hub.invoke).toHaveBeenLastCalledWith('RemoveFriend', 'bia')
 })

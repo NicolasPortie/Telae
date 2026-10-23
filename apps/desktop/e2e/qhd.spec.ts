@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { befriend, watchFriend } from './friends.ts'
+import { signUp } from './auth.ts'
 
 // Real Windows display capture, product signaling, encoder and receiver. No fake media.
 test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () => {
@@ -22,9 +23,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     return app
   }
   async function enter(page: Page, name: string) {
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar' }).click()
-    await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+    await signUp(page, name)
     await page.evaluate(() => {
       const target = window as unknown as { qhdPeers: RTCPeerConnection[] }
       target.qhdPeers = []
@@ -106,8 +105,8 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     const source = sender.getByRole('radiogroup', { name: 'Telas', exact: true }).getByRole('radio', { name: testSource.captureName, exact: true })
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()
-    await sender.getByRole('button', { name: 'Começar a compartilhar' }).click()
-    await expect(sender.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 60_000 })
+    await sender.getByRole('button', { name: 'Começar a transmitir' }).click()
+    await expect(sender.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible({ timeout: 60_000 })
     await watchFriend(receiver, 'QhdSender')
     const video = receiver.getByLabel('Transmissão do seu amigo')
     await expect(video).toBeVisible({ timeout: 60_000 })
@@ -178,7 +177,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
         await senderApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore())
       }
       expect(end.frames).toBeGreaterThan(start.frames)
-      await expect(sender.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible()
+      await expect(sender.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible()
       expect((await sample(sender))[0].state).toBe('connected')
       const settings = (await sample(sender))[0].senders[0].settings
       expect(settings.width).toBe(width)
@@ -188,7 +187,7 @@ test('QHD: captura real, 30/60 fps e troca de perfil sem desconectar', async () 
     await senderApp.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().find(window => window.getTitle() === 'Telae QHD Test Pattern')!.hide())
     await sender.getByRole('button', { name: 'Parar transmissão' }).click()
-    await expect(receiver.getByRole('heading', { name: 'Transmissão terminada' })).toBeVisible()
+    await expect(receiver.getByRole('heading', { name: 'A transmissão acabou.' })).toBeVisible()
   } finally {
     const evidencePath = test.info().outputPath('qhd-telemetry.json')
     await fs.writeFile(evidencePath, JSON.stringify(evidence, null, 2))

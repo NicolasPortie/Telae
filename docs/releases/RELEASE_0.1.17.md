@@ -1,4 +1,4 @@
-# Telae 0.1.17
+# Telaê 0.1.17
 
 - Seleção de fontes com lista rolável e qualidade/ação de compartilhar sempre acessíveis, inclusive na janela mínima de 980 × 650.
 - Atualização automática silenciosa com barra de download, percentual, indicador de atividade e aviso de reabertura. A instalação aguarda o fim da sessão; a animação respeita movimento reduzido.

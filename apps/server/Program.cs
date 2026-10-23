@@ -2,11 +2,14 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Telae.Server.Accounts;
 using Telae.Server.Core;
 using Telae.Server.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddTrustedClientAddress(builder.Configuration);
+builder.Services.AddTelaeAccounts(builder.Configuration, builder.Environment);
+builder.Services.AddAuthRateLimits();
 
 builder.Services.AddSignalR(options =>
 {
@@ -56,6 +59,9 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 var updatesPath = builder.Configuration["Updates:Path"];
 if (string.IsNullOrWhiteSpace(updatesPath))
 {
@@ -82,8 +88,19 @@ app.UseStaticFiles(new StaticFileOptions
         context.Context.Response.Headers.XContentTypeOptions = "nosniff";
     }
 });
-app.MapGet("/health", (IOptions<IceConfiguration> ice, IOptions<TurnConfiguration> turn) =>
-    Results.Ok(new { service = "telae-signaling", status = "ok", connectivity = ConnectivityHealth.From(ice.Value, turn.Value) }));
+app.MapGet("/health", (IOptions<IceConfiguration> ice, IOptions<TurnConfiguration> turn, IOptions<SmtpOptions> smtp, IOptions<AuthOptions> auth) =>
+    Results.Ok(new
+    {
+        service = "telae-signaling",
+        status = "ok",
+        connectivity = ConnectivityHealth.From(ice.Value, turn.Value),
+        accounts = new { emailConfigured = !string.IsNullOrWhiteSpace(smtp.Value.Host), legacyDevices = auth.Value.AllowLegacyDevices },
+    }));
+app.MapAuth();
 app.MapHub<TelaeHub>("/hubs/telae");
 
+await app.Services.InitializeAccountsDatabaseAsync();
 app.Run();
+
+/// <summary>Ponto de entrada visível aos testes de integração.</summary>
+public partial class Program;
