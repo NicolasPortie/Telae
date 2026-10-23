@@ -13,10 +13,10 @@ export function UpdateNotice({ status, sessionActive, onRetry }: {
   const failed = status.phase === 'error'
   const percent = downloading ? Math.max(0, Math.min(100, Number.isFinite(status.percent) ? status.percent : 0)) : 0
   const message = status.phase === 'checking' ? t('Verificando atualizações…')
-    : downloading ? t('Baixando Telae {version}', { version: status.version })
+    : downloading ? t('Baixando a versão {version}', { version: status.version })
     : failed ? status.message
-    : waiting ? t('Telae {version} pronto. Atualização automática ao encerrar a transmissão.', { version: status.version })
-    : t('Atualizando para Telae {version}… O aplicativo será reaberto automaticamente.', { version: status.version })
+    : waiting ? t('A versão {version} está pronta. Instalo quando você parar de transmitir.', { version: status.version })
+    : t('Instalando a versão {version}. O Telaê reabre sozinho.', { version: status.version })
   return (
     <div className="shrink-0 border-t border-line bg-warm">
       <div className="px-5 py-2.5">

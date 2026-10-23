@@ -19,7 +19,7 @@ export async function captureDesktopSource(
   try {
     await window.telae.selectCaptureSource(sourceId)
   } catch {
-    throw new Error(t('A tela ou janela escolhida não está mais disponível.'))
+    throw new Error(t('Essa tela ou janela não está mais disponível.'))
   }
 
   const isWindow = sourceId.startsWith('window:')
@@ -33,9 +33,9 @@ export async function captureDesktopSource(
     })
   } catch (error) {
     if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
-      throw new Error(t('A captura foi cancelada. Escolha novamente a tela ou janela.'))
+      throw new Error(t('A captura foi cancelada. Escolha a tela ou janela de novo.'))
     }
-    throw new Error(t('Não foi possível capturar a tela selecionada. Tente outra tela ou janela.'))
+    throw new Error(t('Não deu pra capturar essa tela. Tenta outra tela ou janela.'))
   }
 
   const onAbort = () => stopMediaStream(stream)
@@ -45,7 +45,7 @@ export async function captureDesktopSource(
     const track = stream.getVideoTracks()[0]
     if (!track) {
       stopMediaStream(stream)
-      throw new Error(t('A fonte escolhida não retornou vídeo.'))
+      throw new Error(t('Essa fonte não mandou imagem.'))
     }
     track.contentHint = quality === 'auto' || quality === '1080p30' || quality === '1440p30' ? 'detail' : 'motion'
     stream = await scaleDesktopVideo(stream, qualityConstraints(quality), signal)

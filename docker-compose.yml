@@ -1,15 +1,47 @@
-# Servidor de sinalização do Telae para uso próprio (self-hosting).
+# Servidor do Telae para uso próprio (self-hosting): sinalização + contas + PostgreSQL.
+#   cp .env.example .env   # preencha os valores
 #   docker compose up -d
 # O app desktop aponta para ele em Configurações > Servidor de sinalização.
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telae
+      POSTGRES_USER: telae
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telae -d telae"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   telae-server:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "5015:5015"
     environment:
+      ConnectionStrings__Telae: "Host=postgres;Database=telae;Username=telae;Password=${POSTGRES_PASSWORD}"
+      # Chave de assinatura dos tokens (mínimo de 32 caracteres): openssl rand -base64 48
+      Auth__JwtKey: ${TELAE_JWT_KEY:?defina TELAE_JWT_KEY no .env}
+      # Cadastro fechado por padrão: só os e-mails em TELAE_ALLOWED_EMAILS criam conta.
+      Auth__RegistrationOpen: ${TELAE_REGISTRATION_OPEN:-false}
+      Auth__AllowedEmails: ${TELAE_ALLOWED_EMAILS:-}
+      Auth__AllowLegacyDevices: "false"
+      # E-mail transacional (verificação e recuperação de senha). Sem Smtp__Host, os códigos vão só para o log.
+      Smtp__Host: ${SMTP_HOST:-}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__User: ${SMTP_USER:-}
+      Smtp__Password: ${SMTP_PASSWORD:-}
+      Smtp__From: ${SMTP_FROM:-}
       # Atrás de um proxy reverso (Cloudflare, Caddy, nginx), informe o IP do proxy
       # e o cabeçalho que carrega o IP do cliente.
       # ClientAddress__KnownProxies__0: "172.18.0.1"
@@ -23,4 +55,5 @@ services:
       - telae-data:/data
 
 volumes:
+  postgres-data:
   telae-data:

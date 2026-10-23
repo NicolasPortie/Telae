@@ -1,4 +1,4 @@
-# Telae — Release Checklist
+# Telaê — Release Checklist
 
 ## Segurança
 

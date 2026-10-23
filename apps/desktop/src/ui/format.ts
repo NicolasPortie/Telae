@@ -16,15 +16,15 @@ export type QualityOption = {
 export function qualityOptions(): QualityOption[] {
   return [
     { value: '720p60', label: '720p', resolution: '720p', fps: t('60 FPS'), hint: t('720p60 leve'),
-      detail: t('Leve e fluido. Bom para PCs modestos ou conexões de upload mais fracas.') },
+      detail: t('Leve. Roda em PC simples e em internet fraca.') },
     { value: '1080p30', label: '1080p', resolution: '1080p', fps: t('30 FPS'), hint: t('1080p30 filmes'),
-      detail: t('Equilíbrio ideal para documentos, apresentações e filmes. É o padrão recomendado.') },
+      detail: t('Bom pra filme e pra aula. É o padrão.') },
     { value: '1080p60', label: '1080p60', resolution: '1080p', fps: t('60 FPS'), hint: t('Alta taxa de quadros'),
-      detail: t('Movimento fluido para jogos e vídeos rápidos. Usa mais processador, placa de vídeo e upload.') },
+      detail: t('Pra jogo e vídeo rápido. Pede mais do PC e do upload.') },
     { value: '1440p30', label: '2K · 1440p', resolution: '2K · 1440p', fps: t('30 FPS'), hint: t('Maior nitidez'),
-      detail: t('Máxima nitidez para texto e detalhes em telas grandes. Exige um PC e uma rede mais fortes.') },
+      detail: t('O mais nítido pra texto em tela grande. Exige PC e rede fortes.') },
     { value: '1440p60', label: '2K · 1440p60', resolution: '2K · 1440p', fps: t('60 FPS'), hint: t('Maior nitidez e fluidez'),
-      detail: t('Nitidez e fluidez máximas. Recomendado apenas com placa de vídeo forte e bom upload.') },
+      detail: t('Nitidez e fluidez no máximo. Só com placa de vídeo boa e bom upload.') },
   ]
 }
 

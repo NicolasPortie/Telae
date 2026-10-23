@@ -1,14 +1,15 @@
 # Design da interface
 
-O Telae é um utilitário de desktop para assistir à tela de um amigo. A imagem compartilhada é o objeto principal; todo o resto existe para iniciar, entender ou encerrar essa experiência.
+O Telaê é um utilitário de desktop para assistir à tela de um amigo. A imagem compartilhada é o objeto principal; todo o resto existe para começar, entender ou encerrar essa experiência.
 
-## Direção visual
+## Direção visual: sala escura
 
-Interface escura e sóbria, com superfícies neutras e um único acento âmbar, lembrando a lâmpada de um projetor. O vídeo ocupa o preto absoluto e os controles ficam em grafite, com hierarquia feita por contraste, bordas finas e espaçamento, não por ornamento.
+Uma sala de cinema pequena, só para os amigos. O app é quase preto, com tons quentes de projetor: o âmbar é a luz que sai do projetor (ações e destaques) e o vermelho é a luz de "no ar", usado apenas para quem está transmitindo. Quem está ao vivo aparece como um **cartaz** em "Em cartaz"; quando ninguém transmite, o palco mostra uma **tela apagada**.
 
-- **Marca:** tela com ponto "ao vivo", em CSS (`.telae-mark`) no cabeçalho e em SVG no ícone do aplicativo (`apps/desktop/public/icon.svg`).
-- **Barra de título integrada:** o Windows mantém os controles da janela (`titleBarOverlay`) e a interface desenha o cabeçalho de 48 px.
-- **Atmosfera:** brilho âmbar discreto no topo e grade de pontos que se dissolve, só nas telas de navegação. Durante o player não há decoração.
+- **Marca:** a palavra *Telaê* em Geist negrito, com espaçamento justo, ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
+- **Barra de título integrada:** o Windows mantém os controles da janela (`titleBarOverlay`) e a interface desenha o cabeçalho de 40 px. Fora da conta (tela de entrada) o cabeçalho mostra só a marca.
+- **Atmosfera:** facho de luz âmbar no canto superior, filme de grão por cima de tudo (`.telae-shell::after`, 7% de opacidade) e uma tira de fotograma na tela de entrada. No player não há decoração.
+- **Composição:** a tela inicial é um trilho de amigos à esquerda (agrupados por Ao vivo, Online e Offline) e o palco à direita. A tela de entrada divide-se em painel da marca (com uma amostra do próprio produto: lista de amigos e cartaz "no ar") e formulário, com abas Entrar e Criar conta, campos com ícone, medidor de força da senha e o código de verificação em seis casas. As configurações têm navegação lateral com um painel por seção.
 
 ## Tokens
 
@@ -16,25 +17,33 @@ Definidos em `apps/desktop/tailwind.config.cjs`. Componentes usam apenas nomes s
 
 | Token | Valor | Uso |
 | --- | --- | --- |
-| `canvas` | `#0B0B0D` | Fundo do app e campos de entrada |
-| `surface` / `raised` | `#131316` / `#19191D` | Cartões e controles elevados |
-| `active` | `#222227` | Estado ativo e hover |
-| `ink` 1–4 | `#F4F3EF` → `#82817B` | Texto primário a terciário (mínimo 4,5:1) |
-| `line` | `#222226`, `#2D2D33`, `#3B3B43` | Divisores e bordas |
-| `signal` | `#E0AE5E` | Acento, ações primárias e "ao vivo" |
+| `canvas` | `#0A0908` | Fundo do app e campos de entrada |
+| `surface` / `raised` | `#12100E` / `#1A1713` | Cartões e controles elevados |
+| `active` | `#26211A` | Estado ativo e hover |
+| `ink` 1–4 | `#F4EFE6` → `#867F73` | Texto primário a terciário (mínimo 4,5:1) |
+| `line` | `#26211B`, `#322C24`, `#463F35` | Divisores e bordas |
+| `signal` | `#F5B544` | Luz de projetor: ações principais e destaques |
+| `tally` | `#FF5144` | Luz de "no ar": só para quem transmite |
 | `danger` / `ok` | `#F0615D` / `#5FC98A` | Parar e erro / online |
 
 ## Tipografia
 
-**Geist** para a interface e **Geist Mono** para códigos, versão e números de telemetria, ambas empacotadas com o aplicativo (`@fontsource-variable`), sem depender de rede. Numerais tabulares nas estatísticas.
+- **Geist** para tudo: interface, títulos grandes (classe `.display`, peso 650 e espaçamento de -0,045 em) e marca.
+- **Geist Mono** para códigos, versão e números de telemetria.
+
+As fontes são empacotadas com o aplicativo (`@fontsource-variable`), sem depender de rede. A fonte dos títulos é um único token (`fontFamily.display` em `tailwind.config.cjs`): trocar ali muda o app inteiro. Numerais tabulares nas estatísticas.
 
 ## Componentes base
 
-Classes em `apps/desktop/src/index.css`: `.btn` (`-primary`, `-secondary`, `-ghost`, `-danger`, `-sm`, `-lg`), `.card`, `.field`, `.avatar`, `.count`, `.badge-live`, `.notice` e `.eyebrow`. Alvos de toque de pelo menos 34 px, foco visível em âmbar e redução de movimento respeitada.
+Classes em `apps/desktop/src/index.css`: `.btn` (`-primary`, `-secondary`, `-ghost`, `-danger`, `-sm`, `-lg`), `.card`, `.field`, `.avatar`, `.count`, `.badge-live`, `.notice`, `.eyebrow`, `.display` e `.tally` (a luz pulsante de "no ar"). Alvos de toque de pelo menos 34 px, foco visível em âmbar e redução de movimento respeitada.
 
 ## Responsividade
 
-A janela mínima é 640 × 560. A tela inicial mantém a ação principal e a lista de amigos acima da dobra a partir de 980 × 650; abaixo disso as colunas empilham. A ilustração do cartão principal aparece apenas em janelas largas.
+A janela mínima é 640 × 560. A partir de 860 px a tela inicial usa trilho e palco lado a lado, cada um rolando sozinho; abaixo disso o palco vem primeiro e o trilho passa para baixo. O painel da marca da tela de entrada some em janelas estreitas.
+
+## Textos
+
+O tom é de conversa entre amigos: frases curtas, voz ativa e nada de "Não foi possível…". Erros dizem o que aconteceu e o que fazer (por exemplo, "Esse @ já tem dono. Tenta outro."). O texto-fonte é pt-BR e passou por revisão com o humanizador (sem vocabulário de modelo, sem ritmo de lista de três, sem travessão). O inglês segue o mesmo tom, com contrações.
 
 ## Idiomas
 

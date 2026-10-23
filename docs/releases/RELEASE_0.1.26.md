@@ -1,4 +1,4 @@
-# Telae 0.1.26: novo visual, idiomas e configurações
+# Telaê 0.1.26: novo visual, idiomas e configurações
 
 Versão de 19/10/2026. Não altera o protocolo com o servidor: continua compatível com o backend da 0.1.25.
 
@@ -7,7 +7,7 @@ Versão de 19/10/2026. Não altera o protocolo com o servidor: continua compatí
 - **Visual novo:** tema escuro neutro com acento âmbar, fonte Geist, barra de título integrada, novo ícone e telas inicial, de amigos, de escolha de fonte, de transmissão e do player redesenhadas.
 - **Português e inglês:** a interface segue o idioma do Windows ou o escolhido em Configurações.
 - **Configurações:** nome, idioma, avisos, início com o Windows, endereço do servidor de sinalização e informações da instalação.
-- **Aviso do Windows** quando um amigo começa a transmitir e o Telae não está em foco.
+- **Aviso do Windows** quando um amigo começa a transmitir e o Telaê não está em foco.
 - **Indicador de conexão** no cabeçalho e estado de carregamento na lista de amigos.
 - Texto secundário com contraste mínimo de 4,5:1.
 

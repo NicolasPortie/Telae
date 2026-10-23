@@ -111,6 +111,6 @@ export class DesktopUpdates {
   private errorMessage(error: unknown): string {
     const detail = error instanceof Error ? error.message : String(error)
     if (/404|ENOENT/i.test(detail)) return t('O servidor ainda não publicou os arquivos da atualização.')
-    return t('Não foi possível acessar ou baixar a atualização. Verifique a conexão com o servidor.')
+    return t('Não deu pra baixar a atualização. Confere a conexão com o servidor.')
   }
 }

@@ -1,3 +1,4 @@
+# Exemplo: ajuste User, Group e os caminhos para a sua instalação.
 [Unit]
 Description=Telae signaling server
 After=network-online.target
@@ -5,15 +6,16 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=usuario
-Group=usuario
-WorkingDirectory=/home/usuario/apps/telae/server/current
+User=telae
+Group=telae
+WorkingDirectory=/home/telae/apps/telae/server/current
 Environment=ASPNETCORE_ENVIRONMENT=Production
-Environment=ASPNETCORE_URLS=http://0.0.0.0:5015
-Environment=Profiles__Path=/home/usuario/apps/telae/data/profiles.json
+# Escute só no loopback e publique por um túnel ou proxy reverso com TLS.
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5015
+Environment=Profiles__Path=/home/telae/apps/telae/data/profiles.json
 Environment=Updates__Path=/var/lib/telae-updates/windows
-EnvironmentFile=-/home/usuario/apps/telae/telae-server.env
-ExecStart=/usr/bin/dotnet /home/usuario/apps/telae/server/current/Telae.Server.dll
+EnvironmentFile=-/home/telae/apps/telae/telae-server.env
+ExecStart=/usr/bin/dotnet /home/telae/apps/telae/server/current/Telae.Server.dll
 Restart=always
 RestartSec=3
 TimeoutStopSec=15
@@ -22,7 +24,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/home/usuario/apps/telae/data
+ReadWritePaths=/home/telae/apps/telae/data
 
 [Install]
 WantedBy=multi-user.target

@@ -1,6 +1,6 @@
 appId: com.telae.desktop
 productName: Telae
-copyright: Copyright © 2026 Telae
+copyright: Copyright © 2026 Telaê
 artifactName: "${productName}-Setup-${version}.${ext}"
 
 publish:

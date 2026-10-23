@@ -77,6 +77,7 @@ beforeEach(async () => {
   mocks.signaling.leaveShare.mockResolvedValue(undefined)
   mocks.signaling.getTurnCredentials.mockResolvedValue([])
   vi.stubGlobal('window', { setTimeout, clearTimeout, setInterval, clearInterval, telae: {
+    auth: { getSession: async () => ({ id: 'sharer', username: 'sharer', displayName: 'Sharer', email: 'sharer@example.com' }) },
     getLocalProfile: async () => ({ deviceId: 'sharer', deviceSecret: 'a'.repeat(64), displayName: 'Sharer', friendCodes: [] }),
     getEnvironment: async () => ({ signalingUrl: 'http://localhost' }),
   } })

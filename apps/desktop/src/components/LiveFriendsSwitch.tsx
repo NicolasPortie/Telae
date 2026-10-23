@@ -20,7 +20,7 @@ export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDevic
     <div className="telae-live-switch">
       {options.length > 0 && (
         <>
-          <span className="telae-live-switch-label">{t('Ao vivo agora')}</span>
+          <span className="telae-live-switch-label">{t('Em cartaz')}</span>
           <ul className="telae-live-switch-list" aria-label={t('Amigos ao vivo')}>
             {options.map(friend => (
               <li key={friend.deviceId}>

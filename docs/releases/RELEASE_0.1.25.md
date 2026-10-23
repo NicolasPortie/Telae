@@ -1,4 +1,4 @@
-# Telae 0.1.25 — áudio e captura contínua
+# Telaê 0.1.25 — áudio e captura contínua
 
 Correção de 14/10/2026 para o relato de áudio atrasando e vídeo com travadas, incluindo a comparação entre 1080p e 1440p.
 
@@ -41,6 +41,6 @@ As métricas resumidas estão em [stream-2026-10-14.metrics.json](../evidence/st
 
 ## Atualização
 
-Atualize emissor e espectador. No Telae, use **Buscar atualização**. A instalação aguarda o encerramento da transmissão; não é necessário interromper uma sessão para baixar a atualização.
+Atualize emissor e espectador. No Telaê, use **Buscar atualização**. A instalação aguarda o encerramento da transmissão; não é necessário interromper uma sessão para baixar a atualização.
 
 Nenhuma mudança no servidor de sinalização ou reinicialização de serviço é necessária para esta correção.

@@ -1,4 +1,4 @@
-# Telae 0.1.14
+# Telaê 0.1.14
 
 Corrige o visualizador que mantinha a transmissão em uma coluna estreita ao maximizar a janela e cortava as laterais por padrão. O vídeo agora usa toda a área disponível abaixo do cabeçalho, acompanha o redimensionamento e começa em modo Ajustar, preservando a imagem completa. Preencher continua disponível como escolha do espectador.
 

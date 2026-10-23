@@ -1,26 +1,31 @@
 import { expect, type Page } from '@playwright/test'
 
-/** Código de amigo exibido na Home (6 caracteres, sem ambiguidade). */
+/** O @usuário da conta, como aparece no trilho de amigos (sem o @). */
 export async function friendCodeOf(page: Page): Promise<string> {
-  const code = page.getByTestId('my-friend-code')
-  await expect(code).toHaveText(/^[A-Z2-9]{6}$/, { timeout: 30_000 })
-  return ((await code.textContent()) ?? '').trim()
+  const handle = page.getByTestId('my-handle')
+  await expect(handle).toHaveText(/^@[a-z0-9_]{3,20}$/, { timeout: 30_000 })
+  return ((await handle.textContent()) ?? '').trim().replace(/^@/, '')
 }
 
-/** Adiciona um amigo pelo código de 6 caracteres a partir da Home. */
-export async function addFriend(page: Page, friendCode: string, displayName: string) {
+/** Digita o @ no formulário de adicionar amigo e envia. */
+export async function submitFriend(page: Page, username: string) {
   await page.getByRole('button', { name: 'Adicionar', exact: true }).first().click()
-  await page.getByLabel('Código do amigo (6 caracteres)').fill(friendCode)
-  await page.getByRole('button', { name: 'Adicionar', exact: true }).last().click()
-  await expect(page.getByRole('status').filter({ hasText: `Amigo ${displayName} adicionado!` })).toBeVisible({ timeout: 30_000 })
+  await page.getByLabel('@ do amigo').fill(username)
+  await page.getByLabel('@ do amigo').locator('xpath=ancestor::form').getByRole('button', { name: 'Adicionar', exact: true }).click()
 }
 
-/** Amizade mútua: cada lado adiciona o código do outro (a amizade só vale quando ambos declaram). */
+/** Adiciona um amigo pelo @usuário a partir da Home. */
+export async function addFriend(page: Page, username: string, displayName: string) {
+  await submitFriend(page, username)
+  await expect(page.getByRole('status').filter({ hasText: `${displayName} adicionado!` })).toBeVisible({ timeout: 30_000 })
+}
+
+/** Amizade mútua: cada lado adiciona o @ do outro (a amizade só vale quando ambos adicionam). */
 export async function befriend(first: { page: Page; name: string }, second: { page: Page; name: string }) {
-  const firstCode = await friendCodeOf(first.page)
-  const secondCode = await friendCodeOf(second.page)
-  await addFriend(first.page, secondCode, second.name)
-  await addFriend(second.page, firstCode, first.name)
+  const firstHandle = await friendCodeOf(first.page)
+  const secondHandle = await friendCodeOf(second.page)
+  await addFriend(first.page, secondHandle, second.name)
+  await addFriend(second.page, firstHandle, first.name)
 }
 
 /** Assiste a um amigo que está ao vivo, pela lista da Home ou pela troca rápida no player. */

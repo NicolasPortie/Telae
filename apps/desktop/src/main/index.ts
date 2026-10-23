@@ -11,12 +11,16 @@ import type {
   AudioBridgeState,
   AudioProcess,
   AudioStreamMetadata,
+  AccountInfo,
   AppSettings,
   CaptureSource,
   LocalProfile,
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
 import { readLocalProfile, writeJsonAtomically, writeLocalProfile, type SecretCipher } from './profile-store.ts'
+import { AuthServerClient } from './auth-client.ts'
+import { AuthSession } from './auth-session.ts'
+import { createSessionStorage } from './auth-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
 
 // Sharing remains active when the main window is minimized or covered.
@@ -51,20 +55,20 @@ const DEFAULT_SIGNALING_URL = app.isPackaged ? PUBLIC_SIGNALING_URL : LOCAL_SIGN
 
 function normalizeSignalingUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
-  if (!trimmed) throw new Error(t('Informe o endereço do servidor de sinalização.'))
+  if (!trimmed) throw new Error(t('Falta o endereço do servidor.'))
 
   let parsed: URL
   try {
     parsed = new URL(trimmed)
   } catch {
-    throw new Error(t('Informe uma URL válida, como https://telae.seudominio.com.'))
+    throw new Error(t('Esse endereço não parece válido. Use algo como https://telae.seudominio.com.'))
   }
 
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(t('O servidor de sinalização deve usar http:// ou https://.'))
+    throw new Error(t('O endereço precisa começar com http:// ou https://.'))
   }
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error(t('Use somente o endereço base do servidor, sem credenciais, parâmetros ou fragmentos.'))
+    throw new Error(t('Use só o endereço do servidor, sem usuário nem senha.'))
   }
 
   return trimmed
@@ -157,8 +161,27 @@ function persistProfile(profile: LocalProfile): LocalProfile {
   return profile
 }
 
-function normalizeFriendCode(value: string): string {
-  return value.trim().replaceAll('-', '').toUpperCase()
+const authSessionPath = () => path.join(app.getPath('userData'), 'session.json')
+let authSession: AuthSession | null = null
+
+/** Alinha o perfil local à conta (nome vindo do servidor) e avisa a interface. */
+function syncProfileWithAccount(account: AccountInfo | null) {
+  if (account) {
+    const profile = readProfile()
+    profile.accountId = account.id
+    profile.displayName = account.displayName
+    persistProfile(profile)
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('auth:changed', account)
+}
+
+function getAuth(): AuthSession {
+  authSession ??= new AuthSession(
+    new AuthServerClient(readSignalingUrl),
+    createSessionStorage(authSessionPath(), profileCipher),
+    syncProfileWithAccount,
+  )
+  return authSession
 }
 
 function findAudioBridge(): string {
@@ -184,21 +207,9 @@ function registerIpc() {
   ipcMain.handle('profile:get', () => persistProfile(readProfile()))
   ipcMain.handle('profile:set-name', (_event, displayName: string) => {
     const normalized = displayName.trim().slice(0, 32)
-    if (!normalized) throw new Error(t('Informe seu nome.'))
+    if (!normalized) throw new Error(t('Escreva seu nome.'))
     const profile = readProfile()
     profile.displayName = normalized
-    return persistProfile(profile)
-  })
-  ipcMain.handle('profile:add-friend', (_event, friendCode: string) => {
-    const code = normalizeFriendCode(friendCode)
-    if (!/^[A-Z2-9]{6}$/.test(code)) throw new Error(t('Código de amigo inválido.'))
-    const profile = readProfile()
-    if (!profile.friendCodes.includes(code)) profile.friendCodes.push(code)
-    return persistProfile(profile)
-  })
-  ipcMain.handle('profile:remove-friend', (_event, friendCode: string) => {
-    const profile = readProfile()
-    profile.friendCodes = profile.friendCodes.filter((code) => code !== normalizeFriendCode(friendCode))
     return persistProfile(profile)
   })
 
@@ -217,14 +228,14 @@ function registerIpc() {
   })
 
   ipcMain.handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
-    if (!sourceId?.trim()) throw new Error(t('Escolha uma Capture Source antes de iniciar.'))
+    if (!sourceId?.trim()) throw new Error(t('Escolha uma tela ou janela antes de começar.'))
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 0, height: 0 },
       fetchWindowIcons: false,
     })
     if (!sources.some((source) => source.id === sourceId)) {
-      throw new Error(t('A Capture Source escolhida não está mais disponível.'))
+      throw new Error(t('Essa tela ou janela não está mais disponível.'))
     }
     selectedCaptureSourceId = sourceId
   })
@@ -233,11 +244,11 @@ function registerIpc() {
     if (sourceId !== selectedCaptureSourceId || !sourceId.startsWith('window:'))
       throw new Error(t('Selecione uma janela válida para capturar seu áudio.'))
     const match = /^window:(\d+):/.exec(sourceId)
-    if (!match) throw new Error(t('Não foi possível identificar esta janela.'))
+    if (!match) throw new Error(t('Não consegui identificar essa janela.'))
     const result = await execFileAsync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     const processId = Number(result.stdout.trim())
     if (!Number.isInteger(processId) || processId <= 0)
-      throw new Error(t('Não foi possível identificar o áudio deste aplicativo.'))
+      throw new Error(t('Não consegui identificar o áudio desse app.'))
     return processId
   })
 
@@ -318,6 +329,23 @@ function registerIpc() {
     void updates.check(saved)
     return { version: app.getVersion(), platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
   })
+  ipcMain.handle('auth:session', async () => {
+    const auth = getAuth()
+    const account = await auth.restore()
+    if (account) syncProfileWithAccount(account)
+    return account
+  })
+  ipcMain.handle('auth:register', (_event, input: { email: string; username: string; password: string; language: string }) => getAuth().register(input))
+  ipcMain.handle('auth:verify-email', (_event, identifier: string, code: string) => getAuth().verifyEmail(String(identifier), String(code)))
+  ipcMain.handle('auth:resend-verification', (_event, identifier: string) => getAuth().resendVerification(String(identifier)))
+  ipcMain.handle('auth:login', (_event, identifier: string, password: string) => getAuth().login(String(identifier), String(password)))
+  ipcMain.handle('auth:logout', () => getAuth().logout())
+  ipcMain.handle('auth:forgot-password', (_event, identifier: string) => getAuth().forgotPassword(String(identifier)))
+  ipcMain.handle('auth:reset-password', (_event, identifier: string, code: string, newPassword: string) => getAuth().resetPassword(String(identifier), String(code), String(newPassword)))
+  ipcMain.handle('auth:update-display-name', (_event, displayName: string) => getAuth().updateDisplayName(String(displayName)))
+  ipcMain.handle('auth:change-password', (_event, current: string, next: string) => getAuth().changePassword(String(current), String(next)))
+  ipcMain.handle('auth:delete-account', (_event, password: string) => getAuth().deleteAccount(String(password)))
+  ipcMain.handle('auth:access-token', () => getAuth().getAccessToken())
   ipcMain.handle('settings:get', () => readSettings())
   ipcMain.handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
   ipcMain.handle('update:status', () => updates.getStatus())
@@ -357,13 +385,13 @@ async function createWindow() {
     height: 790,
     minWidth: 640,
     minHeight: 560,
-    backgroundColor: '#0b0b0d',
-    title: 'Telae',
+    backgroundColor: '#0a0908',
+    title: 'Telaê',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../public/icon.png') }),
     autoHideMenuBar: true,
     // Barra de título integrada: a interface desenha o cabeçalho e o Windows mantém os controles da janela.
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0e0e11', symbolColor: '#b6b5af', height: 48 },
+    titleBarOverlay: { color: '#0d0c0a', symbolColor: '#bdb6aa', height: 40 },
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

@@ -1,92 +1,109 @@
-import type { ReactNode } from 'react'
-import { ArrowRight, Monitor, RefreshCw, Volume2, Zap } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { t } from '../i18n'
+import type { FriendsState } from '../hooks/useFriends'
+import type { DeviceSnapshot } from '../services/types'
 import type { UpdateStatus } from '../shared/contracts'
-import { ShareIllustration } from './ShareIllustration'
+import { FriendsRail } from './FriendsRail'
 
-const UPDATE_BUSY_PHASES = ['checking', 'downloading', 'ready', 'installing']
+/** Saudação pelo horário: pequena, mas faz o app parecer ter notado que você chegou. */
+function greeting(name: string, hour = new Date().getHours()): string {
+  if (hour >= 5 && hour < 12) return t('Bom dia, {name}', { name })
+  if (hour >= 12 && hour < 18) return t('Boa tarde, {name}', { name })
+  return t('Boa noite, {name}', { name })
+}
 
-const steps = () => [
-  { title: t('Escolha o que mostrar'), text: t('Uma tela inteira ou só uma janela, com a qualidade que preferir.') },
-  { title: t('Seus amigos veem "Ao vivo"'), text: t('Quem está na sua lista é avisado na hora, sem enviar link nem código.') },
-  { title: t('Assistem com 1 clique'), text: t('Imagem nítida e som sincronizado, direto entre os computadores.') },
-]
+function Poster({ friend, busy, disabled, onWatch }: {
+  friend: DeviceSnapshot
+  busy: boolean
+  disabled: boolean
+  onWatch: (friend: DeviceSnapshot) => void
+}) {
+  return (
+    <article aria-label={t('{name} está ao vivo', { name: friend.displayName })} className="telae-poster">
+      <div className="flex items-start justify-between gap-3">
+        <span className="badge-live"><span aria-hidden="true" className="tally" /> {t('No ar')}</span>
+        {friend.activeQualityProfile && <span className="tnum font-mono text-[11px] text-ink-3">{friend.activeQualityProfile}</span>}
+      </div>
+      <span aria-hidden="true" className="telae-poster-initial">{friend.displayName.trim().slice(0, 1).toLocaleUpperCase() || '?'}</span>
+      <div className="mt-auto flex items-end justify-between gap-3">
+        <p className="display min-w-0 truncate text-[30px]">{friend.displayName}</p>
+        <button type="button" onClick={() => onWatch(friend)} disabled={disabled} aria-busy={busy} aria-label={t('Assistir {name}', { name: friend.displayName })} className="telae-press btn btn-primary shrink-0">
+          {busy ? t('Entrando…') : t('Assistir')}
+        </button>
+      </div>
+    </article>
+  )
+}
 
-const highlights = () => [
-  { icon: Monitor, label: t('Até 1440p60') },
-  { icon: Volume2, label: t('Áudio do sistema') },
-  { icon: Zap, label: t('Baixa latência') },
-]
-
-/** Tela inicial: ação principal à esquerda; o painel de amigos (aside) fica sempre visível à direita. */
-export function HomeScreen({ displayName, canShare, onChooseScreen, updateStatus, canCheckUpdate, onCheckUpdate, aside }: {
+/** Tela inicial: trilho de amigos à esquerda e, à direita, o palco: quem está em cartaz e a sua vez de transmitir. */
+export function HomeScreen({ displayName, friendsState, online, canWatch, watchingDeviceId, watchError, onWatch, onChooseScreen, updateStatus, canCheckUpdate, onCheckUpdate }: {
   displayName: string | undefined
-  canShare: boolean
+  friendsState: FriendsState
+  online: boolean
+  canWatch: boolean
+  watchingDeviceId: string | null
+  watchError: string | null
+  onWatch: (friend: DeviceSnapshot) => void
   onChooseScreen: () => void
   updateStatus: UpdateStatus | null
   canCheckUpdate: boolean
   onCheckUpdate: () => void
-  aside: ReactNode
 }) {
-  const checking = updateStatus?.phase === 'checking'
-  return (
-    <section aria-labelledby="home-title" className="telae-panel-enter telae-home">
-      <div className="telae-home-grid">
-        <div className="telae-home-primary">
-          <p className="eyebrow">{t('Olá, {name}', { name: displayName?.split(' ')[0] || t('bem-vindo') })}</p>
-          <h1 id="home-title" className="mt-3 text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.08] tracking-[-0.045em]">
-            {t('Compartilhar a tela ficou simples.')}
-          </h1>
-          <p className="mt-3 max-w-[48ch] text-[15px] leading-relaxed text-ink-2">
-            {t('Mostre sua tela para seus amigos ou assista a quem estiver ao vivo.')}
-          </p>
+  const live = friendsState.friends.filter(friend => friend.isSharing)
+  const hasFriends = friendsState.friends.length > 0
+  const headline = live.length === 0
+    ? t('Ninguém ao vivo agora.')
+    : live.length === 1 ? t('{name} está ao vivo', { name: live[0].displayName }) : t('{count} amigos ao vivo', { count: live.length })
 
-          <div className="telae-home-actions mt-8">
-            <section aria-labelledby="share-title" className="telae-share-card">
-              <div className="telae-share-body">
-                <div className="min-w-0">
-                  <h2 id="share-title" className="text-[22px] font-semibold tracking-[-0.03em]">{t('Mostrar minha tela')}</h2>
-                  <p className="mt-2 max-w-[38ch] text-sm leading-relaxed text-ink-2">
-                    {t('Escolha uma tela ou janela. Seus amigos verão que você está ao vivo e poderão assistir em 1 clique.')}
-                  </p>
-                  <button type="button" onClick={onChooseScreen} disabled={!canShare} className="telae-press telae-primary-action btn btn-primary btn-lg mt-6">
-                    {t('Escolher tela')} <ArrowRight size={17} aria-hidden="true" />
-                  </button>
-                </div>
-                <ShareIllustration />
-              </div>
-              <ul className="telae-share-highlights" aria-label={t('Recursos')}>
-                {highlights().map(({ icon: Icon, label }) => (
-                  <li key={label} className="flex items-center gap-2"><Icon size={14} aria-hidden="true" className="text-signal" />{label}</li>
-                ))}
-              </ul>
-            </section>
+  return (
+    <section data-testid="home-screen" aria-labelledby="home-title" className="telae-panel-enter telae-home">
+      <FriendsRail
+        state={friendsState}
+        online={online}
+        canWatch={canWatch}
+        watchingDeviceId={watchingDeviceId}
+        watchError={watchError}
+        onWatch={onWatch}
+        updateStatus={updateStatus}
+        canCheckUpdate={canCheckUpdate}
+        onCheckUpdate={onCheckUpdate}
+      />
+
+      <div className="telae-stage">
+        <div className="telae-stage-inner">
+          <p className="eyebrow">{greeting(displayName?.split(' ')[0] || t('você'))}</p>
+          <h1 id="home-title" className="display mt-3 text-[clamp(36px,4.4vw,54px)]">{headline}</h1>
+          {live.length === 0 && (
+            <p className="mt-3 max-w-[46ch] text-[15px] leading-relaxed text-ink-2">
+              {hasFriends ? t('Quando alguém transmitir, o cartaz aparece aqui.') : t('Você ainda não tem amigos por aqui. Adicione o primeiro pelo @ dele.')}
+            </p>
+          )}
+
+          <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <button type="button" onClick={onChooseScreen} disabled={!online} className="telae-press telae-primary-action btn btn-primary btn-lg">
+              {t('Escolher tela')} <ArrowRight size={17} aria-hidden="true" />
+            </button>
+            <p className="max-w-[30ch] text-[13px] leading-snug text-ink-3">{t('Seus amigos recebem o aviso na hora.')}</p>
           </div>
 
-          <ol className="telae-steps" aria-label={t('Como funciona')}>
-            {steps().map((step, index) => (
-              <li key={step.title}>
-                <span aria-hidden="true" className="telae-step-number tnum">{index + 1}</span>
-                <p className="mt-3 text-[13px] font-medium">{step.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-ink-3">{step.text}</p>
-              </li>
-            ))}
-          </ol>
-
-          <div className="telae-home-footer">
-            <p className="text-xs text-ink-3">{updateStatus?.phase === 'current' ? t('Você está na versão mais recente.') : t('As atualizações são instaladas automaticamente pelo app.')}</p>
-            <button
-              type="button"
-              onClick={onCheckUpdate}
-              disabled={!canCheckUpdate || UPDATE_BUSY_PHASES.includes(updateStatus?.phase ?? '')}
-              className="telae-press telae-check-update"
-            >
-              <RefreshCw size={14} aria-hidden="true" className={checking ? 'telae-update-spinner' : ''} />
-              {checking ? t('Buscando atualização…') : t('Buscar atualização')}
-            </button>
+          <div className="mt-10">
+            {live.length > 0 ? (
+              <>
+                <h2 className="eyebrow mb-3">{t('Em cartaz')}</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {live.map(friend => (
+                    <Poster key={friend.deviceId} friend={friend} busy={watchingDeviceId === friend.deviceId} disabled={!canWatch} onWatch={onWatch} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="telae-darkscreen" role="img" aria-label={t('Tela apagada')}>
+                <p className="display text-[30px] text-ink-3">{t('Tela apagada.')}</p>
+                <p className="text-[13px] text-ink-4">{t('Nenhuma transmissão em cartaz.')}</p>
+              </div>
+            )}
           </div>
         </div>
-        {aside}
       </div>
     </section>
   )

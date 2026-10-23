@@ -1,4 +1,4 @@
-# Telae 0.1.15
+# Telaê 0.1.15
 
 Player com ocultação do cursor local em tela cheia, saída por Esc, atalhos F/M e controles acessíveis por teclado. Interface de transmissão reorganizada, prévia enquanto aguarda espectadores e seleção de fontes pelas setas.
 

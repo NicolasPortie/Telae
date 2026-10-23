@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { befriend, watchFriend } from './friends.ts'
 import { diagnosticSnapshot } from './diagnostics.ts'
+import { signUp } from './auth.ts'
 
 // Local, real window/process-loopback capture. The source encodes wall time in
 // large black/white cells; a simultaneous flash and quiet tone measure A/V offset.
@@ -23,9 +24,7 @@ test('latência: movimento com áudio não acumula atraso após uma pausa do emi
     })
     apps.push(app)
     const page = await app.firstWindow()
-    await page.getByLabel('Seu nome').fill(name)
-    await page.getByRole('button', { name: 'Continuar' }).click()
-    await expect(page.getByRole('heading', { name: /Compartilhar a tela ficou simples/ })).toBeVisible()
+    await signUp(page, name)
     return { app, page, name }
   }
   async function measure(page: Page) {
@@ -112,8 +111,8 @@ test('latência: movimento com áudio não acumula atraso após uma pausa do emi
     const source = sender.page.getByRole('radiogroup', { name: 'Janelas', exact: true }).getByRole('radio', { name: /Telae Latency Pattern/ })
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()
-    await sender.page.getByRole('button', { name: 'Começar a compartilhar' }).click()
-    await expect(sender.page.getByRole('heading', { name: /Você está compartilhando/ })).toBeVisible({ timeout: 30_000 })
+    await sender.page.getByRole('button', { name: 'Começar a transmitir' }).click()
+    await expect(sender.page.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible({ timeout: 30_000 })
     await watchFriend(receiver.page, sender.name)
     const video = receiver.page.getByLabel('Transmissão do seu amigo')
     await expect.poll(() => video.evaluate(element => (element as HTMLVideoElement).getVideoPlaybackQuality().totalVideoFrames), { timeout: 30_000 }).toBeGreaterThan(10)
