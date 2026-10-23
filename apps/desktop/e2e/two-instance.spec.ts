@@ -146,7 +146,7 @@ test.describe('duas instâncias Telae', () => {
       await sharer.emulateMedia({ reducedMotion: 'no-preference' })
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'installing', version: '0.1.17' }))
       await expect(progress).toHaveCount(0)
-      await expect(sharer.getByRole('status')).toContainText('O Telae reabre sozinho.')
+      await expect(sharer.getByRole('status')).toContainText('O Telaê reabre sozinho.')
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'error', version: '0.1.16', message: 'Falha de conexão durante a atualização.' }))
       await expect(sharer.getByRole('button', { name: 'Tentar novamente', exact: true })).toBeVisible()
       await expect.poll(insideViewport).toBe(true)
