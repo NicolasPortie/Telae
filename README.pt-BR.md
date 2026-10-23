@@ -48,6 +48,14 @@ O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assisti
     <td align="center"><sub>Quem transmite: prévia, espectadores e telemetria</sub></td>
     <td align="center"><sub>Quem assiste: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pt-BR/sign-in.png" alt="Tela de entrar com a prévia da lista de amigos" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/create-account.png" alt="Tela de criar conta com e-mail, nome de usuário e senha" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Entrar</sub></td>
+    <td align="center"><sub>Criar conta: o @usuário é como os amigos te encontram</sub></td>
+  </tr>
 </table>
 
 ## Arquitetura

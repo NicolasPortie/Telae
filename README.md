@@ -49,6 +49,14 @@ Telae does one thing well: pick a screen or window and let a friend watch it wit
     <td align="center"><sub>Sharer: preview, viewers and telemetry</sub></td>
     <td align="center"><sub>Viewer: player with controls and statistics (key <code>I</code>)</sub></td>
   </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/sign-in.png" alt="Sign in screen with the friends preview" /></td>
+    <td width="50%"><img src="docs/screenshots/create-account.png" alt="Create account screen with email, username and password" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Sign in</sub></td>
+    <td align="center"><sub>Create account: your @username is how friends find you</sub></td>
+  </tr>
 </table>
 
 ## Architecture
