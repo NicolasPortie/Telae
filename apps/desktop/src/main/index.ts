@@ -386,7 +386,7 @@ async function createWindow() {
     minWidth: 640,
     minHeight: 560,
     backgroundColor: '#0a0908',
-    title: 'Telae',
+    title: 'Telaê',
     ...(app.isPackaged ? {} : { icon: path.join(__dirname, '../../public/icon.png') }),
     autoHideMenuBar: true,
     // Barra de título integrada: a interface desenha o cabeçalho e o Windows mantém os controles da janela.

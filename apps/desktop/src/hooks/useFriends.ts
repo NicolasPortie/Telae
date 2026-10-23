@@ -90,7 +90,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       return
     }
     if (!desktopApiAvailable) {
-      setError(t('Abra o aplicativo Telae para adicionar amigos.'))
+      setError(t('Abra o aplicativo Telaê para adicionar amigos.'))
       return
     }
     if (username === myUsername) {

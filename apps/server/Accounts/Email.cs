@@ -51,20 +51,20 @@ public static class EmailTemplates
 {
     public static EmailMessage VerifyEmail(string to, string username, string code, int minutes, string language) =>
         Build(to, language,
-            pt: ("Seu código do Telae", $"Oi, {username}!", "Esse é o código pra confirmar seu e-mail:", $"Vale por {minutes} minutos. Se não foi você, ignora este e-mail."),
-            en: ("Your Telae code", $"Hi {username}!", "Here is the code to confirm your email:", $"It's good for {minutes} minutes. If this wasn't you, just ignore this email."),
+            pt: ("Seu código do Telaê", $"Oi, {username}!", "Esse é o código pra confirmar seu e-mail:", $"Vale por {minutes} minutos. Se não foi você, ignora este e-mail."),
+            en: ("Your Telaê code", $"Hi {username}!", "Here is the code to confirm your email:", $"It's good for {minutes} minutes. If this wasn't you, just ignore this email."),
             code);
 
     public static EmailMessage ResetPassword(string to, string username, string code, int minutes, string language) =>
         Build(to, language,
-            pt: ("Código pra trocar sua senha do Telae", $"Oi, {username}.", "Use este código pra criar uma senha nova:", $"Vale por {minutes} minutos. Se você não pediu, ignora este e-mail: sua senha continua a mesma."),
-            en: ("Code to reset your Telae password", $"Hi {username}.", "Use this code to set a new password:", $"It's good for {minutes} minutes. If you didn't ask for it, ignore this email: your password stays the same."),
+            pt: ("Código pra trocar sua senha do Telaê", $"Oi, {username}.", "Use este código pra criar uma senha nova:", $"Vale por {minutes} minutos. Se você não pediu, ignora este e-mail: sua senha continua a mesma."),
+            en: ("Code to reset your Telaê password", $"Hi {username}.", "Use this code to set a new password:", $"It's good for {minutes} minutes. If you didn't ask for it, ignore this email: your password stays the same."),
             code);
 
     public static EmailMessage AlreadyRegistered(string to, string language) =>
         Build(to, language,
-            pt: ("Você já tem conta no Telae", "Oi!", "Alguém tentou criar uma conta com este e-mail, mas ele já tem uma. Entra normalmente no app ou usa \"Esqueci minha senha\".", "Se não foi você, não precisa fazer nada."),
-            en: ("You already have a Telae account", "Hi!", "Someone tried to create an account with this email, but it is already registered. Sign in normally in the app or use \"Forgot password\".", "If this wasn't you, no action is needed."),
+            pt: ("Você já tem conta no Telaê", "Oi!", "Alguém tentou criar uma conta com este e-mail, mas ele já tem uma. Entra normalmente no app ou usa \"Esqueci minha senha\".", "Se não foi você, não precisa fazer nada."),
+            en: ("You already have a Telaê account", "Hi!", "Someone tried to create an account with this email, but it is already registered. Sign in normally in the app or use \"Forgot password\".", "If this wasn't you, no action is needed."),
             code: null);
 
     private static EmailMessage Build(string to, string language,
@@ -72,11 +72,11 @@ public static class EmailTemplates
         (string Subject, string Greeting, string Lead, string Footer) en, string? code)
     {
         var text = language.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? en : pt;
-        var plain = $"{text.Greeting}\n\n{text.Lead}\n{(code is null ? "" : $"\n    {code}\n")}\n{text.Footer}\n\n— Telae";
+        var plain = $"{text.Greeting}\n\n{text.Lead}\n{(code is null ? "" : $"\n    {code}\n")}\n{text.Footer}\n\n— Telaê";
         var codeBlock = code is null ? "" : $"<p style=\"font:600 32px ui-monospace,Consolas,monospace;letter-spacing:.3em;margin:24px 0;color:#111\">{code}</p>";
         var html = $"""
             <div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#222;max-width:480px;margin:auto;padding:24px">
-              <p style="font-weight:600;font-size:18px;margin:0 0 16px">Telae</p>
+              <p style="font-weight:600;font-size:18px;margin:0 0 16px">Telaê</p>
               <p>{System.Net.WebUtility.HtmlEncode(text.Greeting)}</p>
               <p>{System.Net.WebUtility.HtmlEncode(text.Lead)}</p>
               {codeBlock}

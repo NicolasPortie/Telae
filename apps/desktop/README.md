@@ -1,6 +1,6 @@
-# Telae Desktop
+# Telaê Desktop
 
-Aplicativo Electron do Telae: captura de tela e janela, WebRTC, qualidade adaptativa e a interface em React.
+Aplicativo Electron do Telaê: captura de tela e janela, WebRTC, qualidade adaptativa e a interface em React.
 
 ## Scripts
 

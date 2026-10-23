@@ -28,7 +28,7 @@ export function AppHeader({ version, displayName, signedIn, connection, profileL
     <header className="telae-header shrink-0">
       <div className="telae-header-bar flex items-center gap-3 pl-5 pr-3">
         <span aria-hidden="true" className="telae-mark" />
-        <p className="telae-wordmark">Telae</p>
+        <p className="telae-wordmark">Telaê</p>
         {version && <span aria-label={t('Versão instalada')} title={t('Versão instalada')} className="tnum font-mono text-[10px] text-ink-4">v{version}</span>}
         <span className="ml-auto" />
         {signedIn && <span className={`telae-connection ${CONNECTION[connection].className}`}>

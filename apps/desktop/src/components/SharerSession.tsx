@@ -81,8 +81,8 @@ export function SharerSession({
           {snapshot.state === 'live' && (snapshot.diagnostics.qualityLimitationReason === 'cpu' || snapshot.diagnostics.qualityLimitationReason === 'bandwidth') && (
             <p role="status" className="notice mt-3">
               {snapshot.diagnostics.qualityLimitationReason === 'cpu'
-                ? t('O Telae baixou a qualidade pra aliviar o processador. Um perfil mais leve segura melhor a imagem.')
-                : t('O Telae baixou a qualidade porque a rede não deu conta. Um perfil mais leve segura melhor a imagem.')}
+                ? t('O Telaê baixou a qualidade pra aliviar o processador. Um perfil mais leve segura melhor a imagem.')
+                : t('O Telaê baixou a qualidade porque a rede não deu conta. Um perfil mais leve segura melhor a imagem.')}
             </p>
           )}
           {snapshot.hasLocalStream && !snapshot.includeAudio && snapshot.state !== 'ended' && (

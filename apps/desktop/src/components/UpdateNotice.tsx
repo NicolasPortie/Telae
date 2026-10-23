@@ -16,7 +16,7 @@ export function UpdateNotice({ status, sessionActive, onRetry }: {
     : downloading ? t('Baixando a versão {version}', { version: status.version })
     : failed ? status.message
     : waiting ? t('A versão {version} está pronta. Instalo quando você parar de transmitir.', { version: status.version })
-    : t('Instalando a versão {version}. O Telae reabre sozinho.', { version: status.version })
+    : t('Instalando a versão {version}. O Telaê reabre sozinho.', { version: status.version })
   return (
     <div className="shrink-0 border-t border-line bg-warm">
       <div className="px-5 py-2.5">

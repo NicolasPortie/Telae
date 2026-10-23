@@ -175,7 +175,7 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
       const environment = await window.telae.setSignalingUrl(serverUrl)
       setServerUrl(environment.signalingUrl)
       setSavedServerUrl(environment.signalingUrl)
-      setServerMessage({ kind: 'ok', text: t('Endereço salvo. Reinicie o Telae pra usar o novo servidor.') })
+      setServerMessage({ kind: 'ok', text: t('Endereço salvo. Reinicie o Telaê pra usar o novo servidor.') })
     } catch (error) {
       setServerMessage({ kind: 'error', text: error instanceof Error ? error.message : t('Não deu pra salvar o endereço.') })
     } finally {
@@ -241,7 +241,7 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
                     {LANGUAGES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
-                <Toggle label={t('Me avisar quando um amigo entrar ao vivo')} hint={t('Só aparece com o Telae em segundo plano.')} checked={settings?.notifyFriendLive ?? true} disabled={!settings} onChange={value => updateSetting({ notifyFriendLive: value })} />
+                <Toggle label={t('Me avisar quando um amigo entrar ao vivo')} hint={t('Só aparece com o Telaê em segundo plano.')} checked={settings?.notifyFriendLive ?? true} disabled={!settings} onChange={value => updateSetting({ notifyFriendLive: value })} />
                 <Toggle label={t('Abrir com o Windows')} hint={t('Abre minimizado, sem atrapalhar.')} checked={settings?.launchAtLogin ?? false} disabled={!settings} onChange={value => updateSetting({ launchAtLogin: value })} />
               </div>
             </Section>

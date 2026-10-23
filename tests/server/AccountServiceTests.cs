@@ -73,7 +73,7 @@ public sealed class AccountServiceTests : IDisposable
         Assert.Equal("ana", session.Account.Username);
         Assert.Equal("ana", session.Account.DisplayName);
         Assert.False(string.IsNullOrEmpty(session.AccessToken));
-        Assert.Contains("Seu código do Telae", _email.Sent.Single().Subject);
+        Assert.Contains("Seu código do Telaê", _email.Sent.Single().Subject);
     }
 
     [Theory]
@@ -118,7 +118,7 @@ public sealed class AccountServiceTests : IDisposable
         var result = await Service(db).RegisterAsync("ANA@example.com", "outra_ana", Password, "en", null, default);
         Assert.True(result.VerificationRequired);
         Assert.Null(result.Session);
-        Assert.Equal("You already have a Telae account", _email.Sent.Last().Subject);
+        Assert.Equal("You already have a Telaê account", _email.Sent.Last().Subject);
         Assert.False(await db.Accounts.AnyAsync(a => a.Username == "outra_ana"));
     }
 

@@ -52,7 +52,7 @@ it('saves a new server address only when it changed', async () => {
   await userEvent.type(input, 'https://meu-servidor.dev')
   await userEvent.click(save)
   expect(api.setSignalingUrl).toHaveBeenCalledWith('https://meu-servidor.dev')
-  expect(await screen.findByRole('status')).toHaveTextContent('Reinicie o Telae')
+  expect(await screen.findByRole('status')).toHaveTextContent('Reinicie o Telaê')
 })
 
 it('shows who is signed in and lets the user sign out', async () => {

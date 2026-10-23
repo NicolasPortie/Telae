@@ -266,7 +266,7 @@ export class ShareSessionController {
   /** Conecta com a conta da sessão atual; o servidor confirma a identidade pelo token de acesso. */
   async connect(): Promise<DeviceSnapshot> {
     if (typeof window === 'undefined' || typeof window.telae === 'undefined') {
-      throw new Error('Abra o Telae pelo Electron para conectar.')
+      throw new Error('Abra o Telaê pelo Electron para conectar.')
     }
     this.detachSignaling()
     const account = await window.telae.auth.getSession()
@@ -299,7 +299,7 @@ export class ShareSessionController {
       } catch { /* presença e amizade são restauradas na próxima conexão */ }
       return device
     } catch (error) {
-      throw new Error(toUserMessage(error, t('Não deu pra conectar ao Telae. Confere sua internet e tenta de novo.')))
+      throw new Error(toUserMessage(error, t('Não deu pra conectar ao Telaê. Confere sua internet e tenta de novo.')))
     }
   }
 

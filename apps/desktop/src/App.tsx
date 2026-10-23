@@ -96,7 +96,7 @@ export default function App() {
     try {
       await controller.connect()
     } catch (error) {
-      setConnectError(error instanceof Error ? error.message : t('Não deu pra conectar ao Telae.'))
+      setConnectError(error instanceof Error ? error.message : t('Não deu pra conectar ao Telaê.'))
     }
   }, [controller])
 
@@ -171,7 +171,7 @@ export default function App() {
 
   const saveName = useCallback(async () => {
     if (!desktopApiAvailable) {
-      setFormError(t('Abra o aplicativo Telae para continuar.'))
+      setFormError(t('Abra o aplicativo Telaê para continuar.'))
       return
     }
     setBusy(true)
@@ -196,7 +196,7 @@ export default function App() {
 
   const loadSources = useCallback(async () => {
     if (!desktopApiAvailable) {
-      setSourcesError(t('Abra o Telae pelo Electron para listar telas e janelas.'))
+      setSourcesError(t('Abra o Telaê pelo Electron para listar telas e janelas.'))
       return
     }
     setSourcesLoading(true)
@@ -366,7 +366,7 @@ export default function App() {
           {formError ?? snapshot.error ?? sourcesError ?? ''}
         </div>
 
-        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">{t('Abrindo Telae…')}</p>}
+        {visibleScreen === 'boot' && <p className="mt-10 text-sm text-ink-3">{t('Abrindo Telaê…')}</p>}
 
         {visibleScreen === 'auth' && (
           <AuthScreen desktopApiAvailable={desktopApiAvailable} notice={authNotice} onAuthenticated={signedIn => void handleAuthenticated(signedIn)} />

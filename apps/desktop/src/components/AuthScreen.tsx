@@ -126,7 +126,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
 
   async function run<T>(action: () => Promise<AuthOutcome<T>>, onSuccess: (data: T) => void) {
     if (!desktopApiAvailable) {
-      setError(t('Abra o aplicativo Telae para continuar.'))
+      setError(t('Abra o aplicativo Telaê para continuar.'))
       return
     }
     setBusy(true)
@@ -280,7 +280,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
 
           <h1 id="auth-title" className="display text-[34px]">{title}</h1>
           {subtitle && <p className="mt-2 text-sm leading-relaxed text-ink-2">{subtitle}</p>}
-          {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abra o aplicativo Telae para continuar.')}</p>}
+          {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abra o aplicativo Telaê para continuar.')}</p>}
           {info && <p role="status" className="notice mt-5">{info}</p>}
           {error && <p role="alert" className="mt-5 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] leading-relaxed text-danger-soft"><CircleAlert size={15} aria-hidden="true" className="mt-0.5 shrink-0" />{error}</p>}
           <div role={tabbed ? 'tabpanel' : undefined}>{form}</div>
