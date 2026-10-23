@@ -4,7 +4,7 @@
 
 ## Contexto
 
-O Telae precisa saber quem é cada pessoa para listar amigos, mostrar presença e autorizar quem pode assistir a uma transmissão. A alternativa convencional seria cadastro com e-mail e senha (ou login social).
+O Telaê precisa saber quem é cada pessoa para listar amigos, mostrar presença e autorizar quem pode assistir a uma transmissão. A alternativa convencional seria cadastro com e-mail e senha (ou login social).
 
 ## Decisão
 

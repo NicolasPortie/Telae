@@ -1,4 +1,4 @@
-# Telae 0.1.12
+# Telaê 0.1.12
 
 Esta tag foi bloqueada antes da publicação: o E2E no checkout limpo do GitHub revelou que o app em desenvolvimento não encontrava o bridge publicado em `build/audio-bridge`. A correção e a publicação seguem em [0.1.13](RELEASE_0.1.13.md); os comandos abaixo registram o preparo da 0.1.12 e não devem ser usados para implantar a versão que falhou.
 

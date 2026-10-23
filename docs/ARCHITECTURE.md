@@ -1,4 +1,4 @@
-# Telae — Architecture
+# Telaê — Architecture
 
 ## System shape
 

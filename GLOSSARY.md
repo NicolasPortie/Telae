@@ -1,6 +1,6 @@
-# Telae
+# Telaê
 
-Telae is a Windows desktop screen-sharing product focused on watching a friend's screen with high visual quality and very low latency.
+Telaê is a Windows desktop screen-sharing product focused on watching a friend's screen with high visual quality and very low latency.
 
 ## Language
 
@@ -33,7 +33,7 @@ The period in which the Viewer is actively receiving playable media from the Sha
 _Avoid_: Connected state, streaming state
 
 **Account**:
-A person's identity in Telae: email, password and a unique @username. Friendships and sessions belong to the account, not to a computer.
+A person's identity in Telaê: email, password and a unique @username. Friendships and sessions belong to the account, not to a computer.
 _Avoid_: Profile, device
 
 **Friend**:

@@ -1,8 +1,8 @@
-# Telae — Project Spec
+# Telaê — Project Spec
 
 ## Problem Statement
 
-Watching something together through a friend's screen is useful, but general-purpose communication apps often mix screen sharing with channels, messaging, calls and communities. Telae focuses on the single job: select a screen or window and let a friend watch it with excellent image quality, synchronized system audio, and latency low enough that interaction still feels immediate.
+Watching something together through a friend's screen is useful, but general-purpose communication apps often mix screen sharing with channels, messaging, calls and communities. Telaê focuses on the single job: select a screen or window and let a friend watch it with excellent image quality, synchronized system audio, and latency low enough that interaction still feels immediate.
 
 Literal zero latency is physically impossible because capture, encoding, network transit, decoding, and rendering all take time. The product goal is therefore low and stable glass-to-glass latency with graceful quality adaptation rather than buffering.
 
@@ -44,9 +44,9 @@ Media is sent from the Sharer to each Viewer over its own WebRTC connection, up 
 - Prefer hardware-friendly H.264 for the first production codec path. AV1 can be introduced when both peers and the encoder path prove capable without increasing latency or CPU usage.
 - Use Opus for transmitted audio and avoid voice-oriented audio processing on system-audio capture where the platform allows it.
 - Treat capture, signaling, peer connection, quality control, and diagnostics as deep modules with small interfaces.
-- Source selection is explicit per Share Session. Telae never starts sharing silently.
+- Source selection is explicit per Share Session. Telaê never starts sharing silently.
 - Joining a stream requires mutual friendship. Legacy invite codes remain only for clients released before accounts.
-- DRM/HDCP-protected applications may intentionally block screen capture. Telae does not attempt to bypass those protections.
+- DRM/HDCP-protected applications may intentionally block screen capture. Telaê does not attempt to bypass those protections.
 
 ## Quality Targets
 

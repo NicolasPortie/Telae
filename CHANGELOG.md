@@ -4,6 +4,15 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+### Marca
+- O nome do produto passa a ser escrito **Telaê**, com acento, na interface, nos e-mails e na documentação. Identificadores técnicos (pacotes, namespaces, domínio, nome do instalador) continuam `Telae`.
+
+### Projeto
+- READMEs em inglês e português reescritos: demonstração em GIF, sumário, diagrama de sequência, tecnologias, hospedagem própria com tabela de variáveis, testes, segurança e limitações conhecidas.
+- Novas capturas de tela (início, transmissão, player, entrar e criar conta) nos dois idiomas.
+- `CODE_OF_CONDUCT.md`, modelo de sugestão de recurso, configuração de issues e `CODEOWNERS`.
+- Especificação, diagrama de arquitetura, glossário e ADRs atualizados para contas, amigos e vários espectadores; metadados do `package.json`.
+
 ### Interface
 - **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Geist em peso forte nos títulos e na marca, grão de filme e facho de luz.
 - **Tela inicial nova:** trilho de amigos agrupado por Ao vivo, Online e Offline, e um palco com os cartazes de quem está transmitindo ("Em cartaz") ou a "tela apagada" quando ninguém está.
@@ -33,7 +42,7 @@ Novo visual, interface em português e inglês, configurações e avisos de amig
 - A navegação foi dividida em componentes (`HomeScreen`, `FriendsPanel`, `PickerScreen`, `AppHeader`, `NameForm`) e o estado de amigos foi isolado no hook `useFriends`, sem mudança de comportamento.
 
 - **Configurações:** perfil, avisos, início com o Windows, endereço do servidor de sinalização e informações da instalação.
-- **Aviso do Windows** quando um amigo começa a transmitir e o Telae não está em foco.
+- **Aviso do Windows** quando um amigo começa a transmitir e o Telaê não está em foco.
 - Indicador de conexão no cabeçalho, esqueleto de carregamento na lista de amigos e passos de "Como funciona" na tela inicial.
 - Texto terciário com contraste mínimo de 4,5:1 e botão de configurações no lugar do botão de perfil.
 - O player do espectador virou o componente `ViewerSession`; `App.tsx` caiu de mais de 1000 para cerca de 450 linhas.

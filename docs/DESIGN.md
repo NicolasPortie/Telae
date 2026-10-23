@@ -1,12 +1,12 @@
 # Design da interface
 
-O Telae é um utilitário de desktop para assistir à tela de um amigo. A imagem compartilhada é o objeto principal; todo o resto existe para começar, entender ou encerrar essa experiência.
+O Telaê é um utilitário de desktop para assistir à tela de um amigo. A imagem compartilhada é o objeto principal; todo o resto existe para começar, entender ou encerrar essa experiência.
 
 ## Direção visual: sala escura
 
 Uma sala de cinema pequena, só para os amigos. O app é quase preto, com tons quentes de projetor: o âmbar é a luz que sai do projetor (ações e destaques) e o vermelho é a luz de "no ar", usado apenas para quem está transmitindo. Quem está ao vivo aparece como um **cartaz** em "Em cartaz"; quando ninguém transmite, o palco mostra uma **tela apagada**.
 
-- **Marca:** a palavra *Telae* em Geist negrito, com espaçamento justo, ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
+- **Marca:** a palavra *Telaê* em Geist negrito, com espaçamento justo, ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
 - **Barra de título integrada:** o Windows mantém os controles da janela (`titleBarOverlay`) e a interface desenha o cabeçalho de 40 px. Fora da conta (tela de entrada) o cabeçalho mostra só a marca.
 - **Atmosfera:** facho de luz âmbar no canto superior, filme de grão por cima de tudo (`.telae-shell::after`, 7% de opacidade) e uma tira de fotograma na tela de entrada. No player não há decoração.
 - **Composição:** a tela inicial é um trilho de amigos à esquerda (agrupados por Ao vivo, Online e Offline) e o palco à direita. A tela de entrada divide-se em painel da marca (com uma amostra do próprio produto: lista de amigos e cartaz "no ar") e formulário, com abas Entrar e Criar conta, campos com ícone, medidor de força da senha e o código de verificação em seis casas. As configurações têm navegação lateral com um painel por seção.

@@ -1,4 +1,4 @@
-# Telae 0.1.13
+# Telaê 0.1.13
 
 Inclui todas as correções de segurança, reconexão, áudio, qualidade, atualizador e persistência descritas na [versão preparada 0.1.12](RELEASE_0.1.12.md), além da localização correta do bridge de áudio no checkout limpo e em builds com runtime `win-x64`.
 

@@ -2,93 +2,149 @@
 
 [English](README.md) · **Português**
 
-<img src="apps/desktop/public/icon.svg" alt="Telae" width="88" height="88" />
+<img src="apps/desktop/public/icon.svg" alt="Telaê" width="88" height="88" />
 
-# Telae
+# Telaê
 
-**Compartilhe sua tela com amigos em alta qualidade e baixa latência.**
+**Compartilhe sua tela com os amigos, com alta qualidade e baixa latência.**
 
-Aplicativo desktop para Windows (interface em português e inglês) com vídeo até 1440p60, áudio do sistema ou do aplicativo escolhido e transporte WebRTC peer-to-peer.
+Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema ou de um aplicativo específico e transporte WebRTC ponto a ponto. Sem salas e sem links: quem está transmitindo aparece na sua lista de amigos e você entra com um clique.
 
 [![CI](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml/badge.svg)](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml)
-![License](https://img.shields.io/badge/license-MIT-green)
+[![Release](https://img.shields.io/github/v/release/NicolasPortie/Telae?label=release&color=E0AE5E)](https://github.com/NicolasPortie/Telae/releases)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
+![Plataforma](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
-![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-SignalR-512BD4?logo=dotnet&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-P2P-E0AE5E)
+
+[Demonstração](#demonstração) · [Recursos](#recursos) · [Como funciona](#como-funciona) · [Primeiros passos](#primeiros-passos) · [Hospedagem própria](#hospedagem-própria) · [Documentação](#documentação)
 
 </div>
 
+## Demonstração
+
 <p align="center">
-  <img src="docs/screenshots/pt-BR/home.png" alt="Tela inicial do Telae com o cartão de compartilhamento e a lista de amigos" width="860" />
+  <img src="docs/media/demo.pt-BR.gif" alt="Demonstração do Telaê: uma amiga escolhe uma janela e começa a transmitir, e outro amigo assiste ao vivo com o painel de estatísticas aberto" width="720" />
 </p>
+
+<p align="center"><sub>A Ana escolhe uma janela e entra ao vivo; o Bruno a vê na lista de amigos, assiste com um clique e abre as estatísticas ao vivo (rota direta, 1 ms de RTT, sem perda de pacotes).</sub></p>
+
+## Sumário
+
+- [Visão geral](#visão-geral)
+- [Recursos](#recursos)
+- [Capturas de tela](#capturas-de-tela)
+- [Como funciona](#como-funciona)
+- [Tecnologias](#tecnologias)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Primeiros passos](#primeiros-passos)
+- [Hospedagem própria](#hospedagem-própria)
+- [Testes e qualidade](#testes-e-qualidade)
+- [Segurança](#segurança)
+- [Limitações conhecidas](#limitações-conhecidas)
+- [Documentação](#documentação)
+- [Contribuindo](#contribuindo) · [Licença](#licença) · [Autor](#autor)
 
 ## Visão geral
 
-O Telae faz uma coisa bem: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e latência baixa. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na lista de amigos e entra com um clique.
+O Telaê faz uma coisa bem feita: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e baixa latência. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na sua lista de amigos, e você entra com um clique.
+
+O objetivo do projeto é um produto de compartilhamento de tela realmente bom na sua única tarefa, construído de ponta a ponta: captura de áudio nativa, transporte WebRTC adaptativo, backend de contas e amigos, atualização automática e um processo de qualidade com medições.
 
 ## Recursos
 
-- **Até 1440p60** com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou rede.
-- **Áudio sincronizado** do sistema ou apenas do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
-- **Amigos e presença**: adicione pelo @usuário, com amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo. A lista fica no servidor, então acompanha sua conta em qualquer computador.
-- **Até 12 espectadores** por transmissão, cada um com qualidade e recuperação independentes.
-- **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travadas e rota (direta ou via servidor).
-- **Peer-to-peer primeiro**: a mídia vai direto entre os pares e usa TURN somente quando a rede exige.
-- **Avisos do Windows** quando um amigo começa a transmitir, início automático opcional e atualização automática em segundo plano.
-- **Contas**: e-mail e senha com verificação por código, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
+- **Até 1440p60**, com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou de rede.
+- **Áudio sincronizado** do sistema inteiro ou só do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
+- **Amigos e presença**: adicione pessoas pelo @usuário, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo. A lista fica no servidor e acompanha sua conta em qualquer computador.
+- **Até 12 espectadores** por transmissão, cada um com conexão, qualidade e recuperação independentes.
+- **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
+- **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
+- **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
+- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática em segundo plano.
+- **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações.
+
+## Capturas de tela
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de quem transmite, com prévia, espectadores e estatísticas" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/home.png" alt="Tela inicial com a lista de amigos e uma amiga ao vivo" /></td>
     <td width="50%"><img src="docs/screenshots/pt-BR/viewer.png" alt="Player do espectador com controles e painel de estatísticas" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Quem transmite: prévia, espectadores e telemetria</sub></td>
-    <td align="center"><sub>Quem assiste: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
+    <td align="center"><sub>Início: amigos agrupados em Ao vivo, Online e Offline</sub></td>
+    <td align="center"><sub>Espectador: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pt-BR/sign-in.png" alt="Tela de entrar com a prévia da lista de amigos" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de quem transmite, com prévia, espectadores e estatísticas" /></td>
     <td width="50%"><img src="docs/screenshots/pt-BR/create-account.png" alt="Tela de criar conta com e-mail, nome de usuário e senha" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Entrar</sub></td>
+    <td align="center"><sub>Transmissão: prévia, espectadores e telemetria</sub></td>
     <td align="center"><sub>Criar conta: o @usuário é como os amigos te encontram</sub></td>
   </tr>
 </table>
 
-## Arquitetura
+## Como funciona
 
-```text
- Desktop (Electron + React)  ◄── sinalização SignalR ──►  Servidor (ASP.NET Core)
-        │                                                     │
-        └──────────── mídia WebRTC criptografada ─────────────┘
-                 direta (P2P) · relay TURN como alternativa
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Quem transmite (Electron)
+    participant H as Servidor (ASP.NET Core + SignalR)
+    participant V as Espectador (Electron)
+    S->>H: Entra na conta (JWT) e começa a transmitir
+    H-->>V: Presença: o amigo está ao vivo
+    V->>H: Entra na transmissão do amigo (exige amizade mútua)
+    H-->>S: Um espectador está entrando
+    S->>H: SDP offer + candidatos ICE
+    H->>V: Repassa a oferta e os candidatos
+    V->>H: SDP answer + candidatos ICE
+    H->>S: Repassa a resposta e os candidatos
+    S-->>V: Mídia criptografada (DTLS-SRTP), direta ou via TURN
 ```
+
+O servidor cuida só de contas, amizades, presença e sinalização. Depois que a conexão é negociada, vídeo e áudio não passam por ele. Quem transmite codifica a captura uma vez por espectador com a pilha WebRTC do Chromium, e um controlador de qualidade ajusta bitrate, resolução e taxa de quadros a partir das estatísticas ao vivo.
+
+O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em inglês) e os registros de decisão em [docs/adr](docs/adr).
+
+## Tecnologias
+
+| Área | Tecnologia |
+| --- | --- |
+| Casca desktop | Electron 44, electron-vite, electron-builder (NSIS), electron-updater |
+| Interface | React 19, TypeScript 6, Tailwind CSS 3, Geist e Geist Mono |
+| Mídia | WebRTC do Chromium (H.264, Opus), parâmetros do `RTCRtpSender`, caminho PCM com AudioWorklet |
+| Áudio nativo | .NET 10 e NAudio, captura por process loopback do Windows |
+| Backend | ASP.NET Core 10, SignalR, Entity Framework Core, JWT |
+| Dados | PostgreSQL em produção, SQLite em desenvolvimento |
+| Testes | Vitest e Testing Library, xUnit, Playwright (duas instâncias do Electron) |
+| Entrega | GitHub Actions, Docker Compose, releases por tag e canal de atualização automática |
+
+## Estrutura do repositório
 
 | Pasta | Descrição |
 | --- | --- |
-| [`apps/desktop`](apps/desktop) | Aplicativo Electron com React, TypeScript e Tailwind. Captura, WebRTC, qualidade adaptativa e interface. |
-| [`apps/server`](apps/server) | Serviço de sinalização ASP.NET Core/SignalR: dispositivos, amigos, sessões, convites e credenciais TURN efêmeras. |
-| [`apps/audio-bridge`](apps/audio-bridge) | Ponte de áudio nativa (.NET/NAudio) para captura por aplicativo no Windows. |
-| [`tests`](tests) | Testes do servidor e regressão de áudio real. |
-| [`ops`](ops) | Scripts e unidades para implantação do servidor Linux e publicação das atualizações. |
-| [`docs`](docs) | Arquitetura, decisões (ADR), validações de qualidade e notas de versão. |
+| [`apps/desktop`](apps/desktop) | App Electron: captura, WebRTC, qualidade adaptativa e interface. |
+| [`apps/server`](apps/server) | Serviço de sinalização: contas, amigos, sessões e credenciais TURN efêmeras. |
+| [`apps/audio-bridge`](apps/audio-bridge) | Ponte de áudio nativa para captura por aplicativo no Windows. |
+| [`tests`](tests) | Testes do servidor e um teste de regressão com áudio real. |
+| [`ops`](ops) | Scripts e units para publicar o servidor Linux e as atualizações. |
+| [`docs`](docs) | Arquitetura, registros de decisão (ADR), validações de qualidade e notas de versão (em geral em português). |
 
-Detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e nas [decisões de arquitetura](docs/adr).
+## Primeiros passos
 
-## Como executar
+**Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET 10 SDK. O filtro de áudio por aplicativo exige o Windows build 20348 ou superior.
 
-**Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET SDK 10. O filtro de áudio por aplicativo exige Windows build 20348 ou superior.
-
-Servidor de sinalização:
+Servidor de sinalização (usa um arquivo SQLite local e escreve os códigos de verificação no log, então não precisa de banco nem de servidor de e-mail):
 
 ```bash
 dotnet run --project apps/server/Telae.Server.csproj
 ```
 
-Aplicativo desktop:
+App desktop, em outro terminal:
 
 ```bash
 cd apps/desktop
@@ -96,17 +152,33 @@ npm ci
 npm run dev
 ```
 
-## Self-hosting
+Para gerar o instalador do Windows:
 
-O servidor de sinalização e o banco PostgreSQL rodam em containers. Copie `.env.example` para `.env`, defina `POSTGRES_PASSWORD` e `TELAE_JWT_KEY` (e o SMTP, para enviar os e-mails de verificação) e suba:
+```bash
+cd apps/desktop
+npm run dist
+```
+
+## Hospedagem própria
+
+O servidor de sinalização e o PostgreSQL rodam em contêineres. Copie `.env.example` para `.env`, defina `POSTGRES_PASSWORD` e `TELAE_JWT_KEY` (e o SMTP, para enviar os e-mails de verificação) e execute:
 
 ```bash
 docker compose up -d
 ```
 
-Em desenvolvimento (`dotnet run`), as contas usam um arquivo SQLite local e os códigos de verificação aparecem no log do servidor, então não precisa de banco nem de servidor de e-mail.
+No app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor guarda os perfis em um volume e expõe `GET /health`.
 
-Depois, no app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor persiste perfis em um volume e expõe `GET /health`. Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)).
+| Variável | Para que serve |
+| --- | --- |
+| `POSTGRES_PASSWORD` | Senha do banco PostgreSQL. |
+| `TELAE_JWT_KEY` | Chave de assinatura dos tokens de acesso (32+ caracteres). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | E-mail transacional. Sem `SMTP_HOST`, os códigos vão só para o log. |
+| `Auth__AllowLegacyDevices` | Aceita clientes lançados antes das contas. Desligue quando todos tiverem atualizado. |
+| `Auth__StrictRequestsPerMinute`, `Auth__RequestsPerMinute` | Limites por IP do cadastro e das demais chamadas de conta. |
+| `Turn__Secret`, `Turn__Urls__0` | Relay TURN opcional para redes restritivas. |
+
+Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)). Release, deploy e atualizações estão descritos em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ## Testes e qualidade
 
@@ -114,21 +186,48 @@ Depois, no app, abra **Configurações > Servidor de sinalização** e informe o
 cd apps/desktop
 npm run lint        # oxlint
 npm run typecheck   # tsc
-npm test            # testes unitários e de componentes (vitest)
+npm test            # 207 testes unitários e de componentes (vitest)
 npm run test:e2e    # duas instâncias do Electron + servidor local (Playwright)
 ```
 
 ```bash
-dotnet test tests/server/Telae.Server.Tests.csproj
+dotnet test tests/server/Telae.Server.Tests.csproj   # 127 testes do servidor
 ```
 
-O E2E com captura real de tela e áudio é opt-in (`TELAE_E2E_MEDIA=1`). Veja [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md) e [docs/BENCHMARK.md](docs/BENCHMARK.md).
+O E2E com captura real de tela e áudio é opcional (`TELAE_E2E_MEDIA=1`). Resultados medidos, metodologia e evidências brutas estão em [docs/validation](docs/validation), [docs/BENCHMARK.md](docs/BENCHMARK.md) e [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md). A integração contínua roda lint, tipos, testes unitários, testes do servidor e o E2E determinístico a cada push.
+
+## Segurança
+
+- O renderer é isolado (`contextIsolation`, sem Node, sandbox, CSP restrita) e conversa com o processo principal por uma API de preload estreita e tipada.
+- As senhas usam o hasher de senhas do ASP.NET Core. As sessões usam tokens de acesso JWT de vida curta e tokens de renovação com rotação e detecção de reutilização, guardados cifrados no cofre do sistema.
+- Entrar em uma transmissão exige amizade mútua, e o servidor impõe limites de entrada e de taxa por IP e por conexão.
+- A mídia é criptografada entre os pares (DTLS-SRTP); as credenciais TURN são efêmeras.
+
+Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
+
+## Limitações conhecidas
+
+- Só Windows por enquanto (a captura e o áudio dependem de APIs do Windows).
+- Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução.
+- Cada espectador recebe um fluxo codificado só para ele, então upload e CPU crescem com o número de espectadores. Um SFU é uma opção futura.
+- 1440p60 depende da máquina e da rede; os documentos de validação listam o que foi e o que não foi medido.
 
 ## Documentação
 
-- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
-- [Design da interface](docs/DESIGN.md)
+- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md) (em inglês)
+- [Design da interface](docs/DESIGN.md) e [glossário](GLOSSARY.md)
 - [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
-- [Contribuindo](CONTRIBUTING.md) · [Segurança](SECURITY.md) · [Licença MIT](LICENSE)
 - [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
-- [Changelog](CHANGELOG.md) · [Glossário](GLOSSARY.md)
+- [Changelog](CHANGELOG.md)
+
+## Contribuindo
+
+Issues e pull requests são bem-vindos. Leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes e siga o [Código de Conduta](CODE_OF_CONDUCT.md).
+
+## Licença
+
+Distribuído sob a [Licença MIT](LICENSE).
+
+## Autor
+
+Feito por **Nicolas Portie** · [GitHub](https://github.com/NicolasPortie)
