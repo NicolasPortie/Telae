@@ -21,7 +21,7 @@ type RegisterResponse = { verificationRequired: boolean; session: ServerSession 
 const KNOWN_CODES = new Set<string>([
   'invalid_credentials', 'email_not_verified', 'invalid_code', 'weak_password', 'invalid_username', 'username_reserved',
   'username_taken', 'invalid_email', 'email_taken', 'account_locked', 'code_cooldown', 'rate_limited', 'email_unavailable',
-  'invalid_session', 'invalid_display_name',
+  'invalid_session', 'invalid_display_name', 'registration_closed',
 ])
 
 const REQUEST_TIMEOUT_MS = 15_000

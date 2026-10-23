@@ -174,7 +174,9 @@ In the app, open **Settings > Signaling server** and enter its address (for exam
 | `POSTGRES_PASSWORD` | Password of the PostgreSQL database. |
 | `TELAE_JWT_KEY` | Signing key for access tokens (32+ characters). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Transactional email. Without `SMTP_HOST`, codes are only written to the log. |
-| `Auth__AllowLegacyDevices` | Accepts clients released before accounts. Turn it off once everyone has updated. |
+| `TELAE_ALLOWED_EMAILS` | Comma-separated emails that may create an account. Registration is **closed by default**: anyone else is refused. |
+| `TELAE_REGISTRATION_OPEN` | Set to `true` to let anyone create an account (public servers). |
+| `Auth__AllowLegacyDevices` | Accepts clients released before accounts (no sign-in). Off by default. |
 | `Auth__StrictRequestsPerMinute`, `Auth__RequestsPerMinute` | Per-IP limits for sign-up and other account calls. |
 | `Turn__Secret`, `Turn__Urls__0` | Optional TURN relay for restrictive networks. |
 

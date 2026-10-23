@@ -7,7 +7,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 source_dir="$(cd "$1" && pwd)"
-root_dir="${TELAE_ROOT:-/home/usuario/apps/telae}"
+root_dir="${TELAE_ROOT:-$HOME/apps/telae}"
 release_name="${GITHUB_REF_NAME:-manual}-${GITHUB_RUN_ID:-$(date +%Y%m%d%H%M%S)}"
 release_dir="$root_dir/server/releases/$release_name"
 current_link="$root_dir/server/current"
@@ -32,6 +32,5 @@ for attempt in {1..20}; do
 done
 
 echo "O Telae server não respondeu ao health check após o deploy." >&2
-sudo /usr/bin/systemctl --no-pager status telae-server.service || true
 exit 1
 

@@ -48,6 +48,7 @@ public sealed partial class AccountService(
     public async Task<RegisterResult> RegisterAsync(string emailAddress, string username, string password, string? language, string? userAgent, CancellationToken ct)
     {
         var normalizedEmail = NormalizeEmail(emailAddress);
+        if (!Auth.IsRegistrationAllowed(normalizedEmail)) throw new AccountException("registration_closed", 403);
         var normalizedUsername = NormalizeUsername(username);
         ValidatePassword(password, normalizedEmail, normalizedUsername);
         var lang = NormalizeLanguage(language);

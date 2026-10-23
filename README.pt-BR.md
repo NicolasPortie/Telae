@@ -174,7 +174,9 @@ No app, abra **Configurações > Servidor de sinalização** e informe o endere�
 | `POSTGRES_PASSWORD` | Senha do banco PostgreSQL. |
 | `TELAE_JWT_KEY` | Chave de assinatura dos tokens de acesso (32+ caracteres). |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | E-mail transacional. Sem `SMTP_HOST`, os códigos vão só para o log. |
-| `Auth__AllowLegacyDevices` | Aceita clientes lançados antes das contas. Desligue quando todos tiverem atualizado. |
+| `TELAE_ALLOWED_EMAILS` | E-mails (separados por vírgula) que podem criar conta. O cadastro vem **fechado por padrão**: qualquer outra pessoa é recusada. |
+| `TELAE_REGISTRATION_OPEN` | Use `true` para deixar qualquer pessoa criar conta (servidores públicos). |
+| `Auth__AllowLegacyDevices` | Aceita clientes lançados antes das contas (sem login). Desligado por padrão. |
 | `Auth__StrictRequestsPerMinute`, `Auth__RequestsPerMinute` | Limites por IP do cadastro e das demais chamadas de conta. |
 | `Turn__Secret`, `Turn__Urls__0` | Relay TURN opcional para redes restritivas. |
 

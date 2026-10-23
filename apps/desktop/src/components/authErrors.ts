@@ -13,6 +13,7 @@ export function authErrorMessage(code: AuthErrorCode): string {
     case 'username_taken': return t('Esse @ já tem dono. Tenta outro.')
     case 'invalid_email': return t('Esse e-mail não parece certo.')
     case 'email_taken': return t('Já existe uma conta com esse e-mail.')
+    case 'registration_closed': return t('Os cadastros estão fechados neste servidor. Peça pra quem administra liberar o seu e-mail.')
     case 'account_locked': return t('Muitas tentativas erradas. Espera uns minutos e tenta de novo.')
     case 'code_cooldown': return t('Espera um minuto antes de pedir outro código.')
     case 'rate_limited': return t('Calma, foram pedidos demais. Tenta de novo em um minuto.')

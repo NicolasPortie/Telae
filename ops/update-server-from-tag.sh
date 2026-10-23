@@ -7,7 +7,7 @@ if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
   exit 2
 fi
 
-root_dir="${TELAE_ROOT:-/home/usuario/apps/telae}"
+root_dir="${TELAE_ROOT:-$HOME/apps/telae}"
 repo_dir="${TELAE_REPO_DIR:-$root_dir/repo}"
 publish_dir="$(mktemp -d)"
 trap 'rm -rf "$publish_dir"' EXIT

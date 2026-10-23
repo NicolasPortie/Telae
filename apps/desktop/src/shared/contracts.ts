@@ -78,6 +78,7 @@ export type AuthErrorCode =
   | 'username_taken'
   | 'invalid_email'
   | 'email_taken'
+  | 'registration_closed'
   | 'account_locked'
   | 'code_cooldown'
   | 'rate_limited'

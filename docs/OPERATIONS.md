@@ -28,6 +28,13 @@ python tests/audio/verify.py
 
 O teste usa tons discretos de aplicativos separados e valida exclusão de processos filhos, abertura/reinício, preservação do outro aplicativo e silêncio seguro com duas árvores.
 
+## Acesso ao servidor e segurança do CI
+
+- O cadastro vem fechado. Para liberar alguém, acrescente o e-mail em `Auth__AllowedEmails` (separados por vírgula) no arquivo de ambiente do servidor e reinicie o serviço. `Auth__RegistrationOpen=true` abre para qualquer pessoa.
+- O servidor não deve escutar em endereço público: use `ASPNETCORE_URLS=http://127.0.0.1:5015` atrás de um túnel ou proxy reverso com TLS.
+- Como o repositório é público, os logs do GitHub Actions também são. Os jobs de publicação não imprimem caminhos, hosts nem o estado do serviço, e os segredos ficam em *Secrets*.
+- Runners `self-hosted` executam código na sua máquina. Mantenha em Settings > Actions a aprovação para todo contribuidor externo, só ações oficiais da GitHub liberadas e permissão de leitura por padrão, e só crie tags `v*` você mesmo (há uma regra de proteção para elas).
+
 ## Versões e publicação
 
 As versões usam tags SemVer (`v0.1.0`, `v0.1.1`, ...). Ao enviar uma tag `v*`, o GitHub Actions valida o servidor, gera o instalador Windows, publica os arquivos em um GitHub Release e os entrega ao servidor de atualizações por um runner dedicado. O backend pode ser atualizado separadamente pela tag:

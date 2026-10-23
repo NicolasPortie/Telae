@@ -4,6 +4,11 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+### Segurança
+- **Cadastro fechado por padrão.** O servidor só cria conta para e-mails liberados em `Auth__AllowedEmails` (ou `TELAE_ALLOWED_EMAILS` no Docker Compose); `Auth__RegistrationOpen=true` reabre para qualquer pessoa. Quem não está na lista recebe o erro `registration_closed`, traduzido na interface.
+- **Clientes sem conta desligados por padrão** (`Auth__AllowLegacyDevices=false`): sem entrar numa conta, não há acesso ao servidor. Antes de publicar este servidor, distribua o desktop com contas, ou ligue a opção temporariamente.
+- Arquivos de operação (`ops/`) sem usuário nem caminhos pessoais, e o unit de exemplo escuta só em `127.0.0.1`. Removida a nota de implantação da 0.1.16.
+
 ### Marca
 - O nome do produto passa a ser escrito **Telaê**, com acento, na interface, nos e-mails e na documentação. Identificadores técnicos (pacotes, namespaces, domínio, nome do instalador) continuam `Telae`.
 

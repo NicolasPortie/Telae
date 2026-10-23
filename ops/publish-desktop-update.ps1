@@ -16,12 +16,14 @@ foreach ($file in @($installer, $blockmap, $publisher)) {
     if (-not (Test-Path -LiteralPath $file)) { throw "Arquivo ausente: $file" }
 }
 
-$remoteDir = "/home/usuario/apps/telae/data/updates/staging-$version"
-& ssh $Server "mkdir -p '$remoteDir'"
+# Pasta no servidor (o SSH expande $HOME). Defina TELAE_REMOTE_ROOT se o app não estiver em ~/apps/telae.
+$remoteRoot = if ($env:TELAE_REMOTE_ROOT) { $env:TELAE_REMOTE_ROOT } else { '$HOME/apps/telae' }
+$remoteDir = "$remoteRoot/data/updates/staging-$version"
+& ssh $Server "mkdir -p `"$remoteDir`""
 if ($LASTEXITCODE -ne 0) { throw 'Não foi possível preparar o servidor.' }
 & scp -p $installer $blockmap $manifest $publisher "${Server}:$remoteDir/"
 if ($LASTEXITCODE -ne 0) { throw 'Não foi possível enviar os arquivos.' }
-& ssh $Server "bash '$remoteDir/publish-desktop-update.sh' '$remoteDir'"
+& ssh $Server "bash `"$remoteDir/publish-desktop-update.sh`" `"$remoteDir`""
 if ($LASTEXITCODE -ne 0) { throw 'A publicação falhou.' }
 
 Write-Host "Atualização $version publicada. Os aplicativos verificarão na próxima abertura."

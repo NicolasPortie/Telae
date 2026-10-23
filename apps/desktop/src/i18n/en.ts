@@ -133,6 +133,7 @@ export const en: Record<string, string> = {
   "Esse @ não pode ser usado.": "That @ can't be used.",
   "Esse amigo já está na sua lista.": "That friend is already on your list.",
   "Esse código não confere ou já venceu. Pede outro.": "That code doesn't match or has expired. Ask for another.",
+  "Os cadastros estão fechados neste servidor. Peça pra quem administra liberar o seu e-mail.": "Sign-ups are closed on this server. Ask whoever runs it to allow your email.",
   "Esse e-mail não parece certo.": "That email doesn't look right.",
   "Esse endereço não parece válido. Use algo como https://telae.seudominio.com.": "That address doesn't look valid. Use something like https://telae.yourdomain.com.",
   "Esta conexão já pertence a outro dispositivo.": "This connection already belongs to another device.",

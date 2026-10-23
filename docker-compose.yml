@@ -32,6 +32,10 @@ services:
       ConnectionStrings__Telae: "Host=postgres;Database=telae;Username=telae;Password=${POSTGRES_PASSWORD}"
       # Chave de assinatura dos tokens (mínimo de 32 caracteres): openssl rand -base64 48
       Auth__JwtKey: ${TELAE_JWT_KEY:?defina TELAE_JWT_KEY no .env}
+      # Cadastro fechado por padrão: só os e-mails em TELAE_ALLOWED_EMAILS criam conta.
+      Auth__RegistrationOpen: ${TELAE_REGISTRATION_OPEN:-false}
+      Auth__AllowedEmails: ${TELAE_ALLOWED_EMAILS:-}
+      Auth__AllowLegacyDevices: "false"
       # E-mail transacional (verificação e recuperação de senha). Sem Smtp__Host, os códigos vão só para o log.
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}

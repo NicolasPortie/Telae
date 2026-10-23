@@ -166,6 +166,8 @@ Since the account release, identity is an account (see [ADR 0004](adr/0004-user-
 
 The friend list is server-side. Each row of `Friendships` is a directed edge (who added whom); `DismissedRequests` records ignored requests. `GetFriends` loads the list from the database for the connection's account (the argument is ignored), subscribes the connection to its friends' presence groups and refreshes the in-memory mutual-friendship view used to authorize watching. `AddFriend` and `RemoveFriend` change the database, then run the same synchronization, which also ends sessions that stop being mutual. Pending requests are computed from the database (edges pointing at me that I have not reciprocated or dismissed), so they survive restarts and reach people who were offline when the request was made.
 
+Access to a server is controlled by configuration, not by the code being public. Registration is closed by default (`Auth:RegistrationOpen=false`): only the emails in `Auth:AllowedEmails` can create an account, and anyone else gets `registration_closed` before any account or email is created. Clients without an account (`Auth:AllowLegacyDevices`) are refused by default, so every connection to the hub carries a validated account token. A self-hosted or public server opts in explicitly with `Auth__RegistrationOpen=true`.
+
 The legacy device-credential path described below remains for clients released before accounts, behind `Auth:AllowLegacyDevices`.
 
 ## Device credentials and migration

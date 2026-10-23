@@ -67,6 +67,41 @@ public sealed class AccountServiceTests : IDisposable
         await Assert.ThrowsAsync<AccountException>(action);
 
     [Fact]
+    public async Task Closed_registration_rejects_anyone_who_is_not_allowed()
+    {
+        _options.RegistrationOpen = false;
+        _options.AllowedEmails = "owner@example.com";
+        using var db = NewDb();
+        var failure = await FailureAsync(() => Service(db).RegisterAsync("stranger@example.com", "stranger", Password, "pt-BR", null, default));
+        Assert.Equal("registration_closed", failure.Code);
+        Assert.Equal(403, failure.Status);
+        Assert.Empty(_email.Sent);
+        Assert.False(await db.Accounts.AnyAsync());
+    }
+
+    [Fact]
+    public async Task Closed_registration_with_no_allowed_emails_rejects_everyone()
+    {
+        _options.RegistrationOpen = false;
+        using var db = NewDb();
+        var failure = await FailureAsync(() => Service(db).RegisterAsync("ana@example.com", "ana", Password, "pt-BR", null, default));
+        Assert.Equal("registration_closed", failure.Code);
+    }
+
+    [Theory]
+    [InlineData("owner@example.com")]
+    [InlineData("  Owner@Example.COM ")]
+    public async Task Closed_registration_accepts_allowed_emails_in_any_case(string email)
+    {
+        _options.RegistrationOpen = false;
+        _options.AllowedEmails = "friend@example.com; owner@example.com";
+        using var db = NewDb();
+        var result = await Service(db).RegisterAsync(email, "owner", Password, "pt-BR", null, default);
+        Assert.True(result.VerificationRequired);
+        Assert.Single(_email.Sent);
+    }
+
+    [Fact]
     public async Task Register_sends_a_code_and_verification_returns_a_session()
     {
         var session = await SignedUpAsync();
