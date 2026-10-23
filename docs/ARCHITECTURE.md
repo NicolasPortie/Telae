@@ -3,31 +3,33 @@
 ## System shape
 
 ```text
-┌────────────────────────── Sharer / Windows ──────────────────────────┐
-│ Electron                                                       │
-│  React UI                                                      │
-│     │                                                          │
-│  StreamController                                              │
-│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio│
-│     ├─ PeerTransport ─── WebRTC RTCPeerConnection              │
-│     ├─ QualityController                                       │
-│     └─ Diagnostics                                             │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │ encrypted media
-                     Direct P2P│        │TURN relay fallback
-                               ▼        ▼
-┌────────────────────────── Viewer / Windows ──────────────────────────┐
+┌───────────────────────── Sharer / Windows ─────────────────────────┐
+│ Electron                                                           │
+│  React UI                                                          │
+│     │                                                              │
+│  StreamController                                                  │
+│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio   │
+│     ├─ PeerTransport ─── WebRTC RTCPeerConnection                  │
+│     ├─ QualityController                                           │
+│     └─ Diagnostics                                                 │
+└──────────────────────────────────┬─────────────────────────────────┘
+                                   │ encrypted media
+                                   │ direct P2P · TURN relay as fallback
+                                   ▼
+┌───────────────────────── Viewer / Windows ─────────────────────────┐
 │ Electron + React                                                   │
 │  PeerTransport ──> Playback surface ──> Diagnostics                │
-└─────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────┘
 
-                ▲                                   ▲
-                └──────── SignalR / WSS ────────────┘
-                          ASP.NET Core
-                    Share Session signaling
+        Both apps connect to the server over SignalR / WSS:
+
+┌────────────────────────────── Server ──────────────────────────────┐
+│ ASP.NET Core · accounts · friends · Share Session signaling        │
+│ (SDP and ICE only; no media passes through here)                   │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-The ASP.NET Core service coordinates presence, short-lived invite tokens, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
+The ASP.NET Core service coordinates accounts, friendships, presence, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
 
 ## Why this stack
 
@@ -128,7 +130,7 @@ The Viewer must never need inbound port forwarding.
 - Narrow, typed preload IPC surface.
 - Strict Content Security Policy.
 - TLS for signaling and TURN credentials with short lifetimes.
-- Share Session invite tokens are high-entropy and expire.
+- Joining a stream requires mutual friendship; legacy invite tokens (clients before accounts) are high-entropy and expire.
 - A Viewer joining a session becomes visible to the Sharer before media is considered live.
 - Capture stops when the Share Session ends or the app exits unexpectedly.
 

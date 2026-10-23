@@ -8,7 +8,7 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 - **Redesenho completo ("sala escura"):** paleta de projetor (âmbar para ações, vermelho para "no ar"), Geist em peso forte nos títulos e na marca, grão de filme e facho de luz.
 - **Tela inicial nova:** trilho de amigos agrupado por Ao vivo, Online e Offline, e um palco com os cartazes de quem está transmitindo ("Em cartaz") ou a "tela apagada" quando ninguém está.
 - **Entrada em duas colunas**, com painel da marca; configurações com navegação lateral por seção (Conta, Geral, Segurança, Servidor, Sobre).
-- **Textos reescritos em tom de conversa** (pt-BR e inglês), revisados com o humanizador. Erros agora dizem o que aconteceu e o que fazer.
+- **Textos reescritos em tom de conversa** (pt-BR e inglês). Erros agora dizem o que aconteceu e o que fazer.
 - A luz vermelha de "no ar" passa a marcar quem transmite; saudação por horário na tela inicial.
 
 ### Amigos
@@ -51,7 +51,7 @@ Novo visual, interface em português e inglês, configurações e avisos de amig
 - Testes de componentes (Testing Library) para o painel de amigos e as configurações.
 - Dependências atualizadas dentro das faixas atuais (React 19.3.1, Electron 44.9, Playwright, Vitest, oxlint, lucide).
 - Notas de versão e validações movidas para `docs/releases` e `docs/validation`.
-- Removidos resíduos do template (logos do Vite e do React, README e favicon padrão) e documentos de planejamento interno.
+- Removidos arquivos de exemplo do projeto inicial (logos do Vite e do React, README e favicon padrão).
 - Documentação reorganizada: README com visão geral e capturas de tela, `docs/OPERATIONS.md` (release, deploy e atualizações) e `docs/DESIGN.md`.
 
 ## [0.1.25] - 2026-10-14
