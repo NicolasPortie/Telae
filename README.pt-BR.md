@@ -140,7 +140,7 @@ O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em ing
 
 Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. O app se atualiza sozinho em segundo plano.
 
-É preciso ter uma conta para entrar. O servidor padrão é privado e só aceita e-mails convidados; para testar o Telaê, [hospede o seu servidor](#hospedagem-própria) e aponte o app para ele em **Configurações > Servidor de sinalização**.
+O instalador oficial já vem apontado para o servidor do mantenedor, que é só por convite. É preciso ter uma conta para entrar. O Telaê é código aberto: para usar com os seus amigos, [hospede o seu servidor](#hospedagem-própria). Um build feito a partir deste repositório não vem com servidor nenhum, e você define o seu na tela de entrada (**Servidor > Alterar**) ou em **Configurações > Servidor de sinalização**. Para embutir um padrão no seu próprio instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
 
 ### Compilar a partir do código
 

@@ -50,8 +50,9 @@ const updates = new DesktopUpdates((status) => {
 const profilePath = () => path.join(app.getPath('userData'), 'profile.json')
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
 const LOCAL_SIGNALING_URL = 'http://localhost:5015'
-const PUBLIC_SIGNALING_URL = 'https://telae.nicolasportie.com'
-const DEFAULT_SIGNALING_URL = app.isPackaged ? PUBLIC_SIGNALING_URL : LOCAL_SIGNALING_URL
+// Definido na compilação dos instaladores oficiais (TELAE_DEFAULT_SERVER_URL). Vazio em builds do código aberto.
+const BUILT_IN_SIGNALING_URL = typeof __TELAE_DEFAULT_SERVER_URL__ === 'string' ? __TELAE_DEFAULT_SERVER_URL__.replace(/\/+$/, '') : ''
+const DEFAULT_SIGNALING_URL = app.isPackaged && BUILT_IN_SIGNALING_URL ? BUILT_IN_SIGNALING_URL : LOCAL_SIGNALING_URL
 
 function normalizeSignalingUrl(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, '')
@@ -80,7 +81,7 @@ function readSignalingUrl(): string {
     if (settings.signalingUrl) {
       const saved = normalizeSignalingUrl(settings.signalingUrl)
       // Instaladores antigos apontavam para o localhost mesmo fora do servidor.
-      if (app.isPackaged && saved === LOCAL_SIGNALING_URL) return PUBLIC_SIGNALING_URL
+      if (app.isPackaged && BUILT_IN_SIGNALING_URL && saved === LOCAL_SIGNALING_URL) return BUILT_IN_SIGNALING_URL
       return saved
     }
   } catch {

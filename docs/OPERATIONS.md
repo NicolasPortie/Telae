@@ -34,6 +34,12 @@ O teste usa tons discretos de aplicativos separados e valida exclusão de proces
 - Clientes sem conta ficam desligados (`Auth__AllowLegacyDevices=false`).
 - O servidor não deve escutar em endereço público: use `ASPNETCORE_URLS=http://127.0.0.1:5015` atrás de um túnel ou proxy reverso com TLS (veja o [unit de exemplo](../ops/telae-server.service)).
 
+## Servidor padrão do instalador
+
+O servidor que o app usa por padrão **não está no código**. O instalador oficial recebe o endereço na compilação, pela variável `TELAE_DEFAULT_SERVER_URL`: o `release.yml` lê a variável de Actions de mesmo nome do repositório (Settings > Secrets and variables > Actions > Variables). Quem compila o código aberto sem essa variável tem um app sem servidor padrão e escolhe o seu na tela de entrada ou em Configurações. Para um instalador próprio: `TELAE_DEFAULT_SERVER_URL=https://telae.seudominio.com npm run dist`.
+
+A verificação de atualizações usa sempre o servidor configurado (`<servidor>/updates/windows/`), então um build próprio atualiza a partir do próprio servidor.
+
 ## Repositórios e CI
 
 O código fica neste repositório público e roda só em runners da GitHub, sem segredos de infraestrutura. A parte que mexe em máquinas próprias vive num repositório de operação **privado**: os runners `self-hosted`, a entrega do instalador ao servidor, a validação física de mídia e os scripts de deploy com o layout do servidor.
