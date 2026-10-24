@@ -4,6 +4,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.3.1] - 2026-10-24
+
+- Corrigido o aviso permanente de falha de atualização em instalações sem assinatura. Elas verificam a versão normalmente e só oferecem download manual quando há versão nova, sem baixar ou executar instaladores automaticamente.
+- Builds genéricos sem feed próprio oferecem acesso à página pública de releases sem apresentar erro ao iniciar.
+- Instaladores oficiais podem migrar o endereço padrão anterior para o novo endereço definido na compilação, preservando servidores personalizados. Notas em [docs/releases/RELEASE_0.3.1.md](docs/releases/RELEASE_0.3.1.md).
+
 ## [0.3.0] - 2026-10-24
 
 Nova identidade verde, prévias ao vivo dos amigos e proteção de contas e do desktop. Notas em [docs/releases/RELEASE_0.3.0.md](docs/releases/RELEASE_0.3.0.md). **Atualize o servidor antes do desktop** e entre novamente na conta após a migração.

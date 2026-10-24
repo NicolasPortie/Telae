@@ -16,6 +16,7 @@ export class DesktopUpdates {
   private checking = false
   private sessionActive = false
   private installing = false
+  private automaticInstall = false
   private installTimer: ReturnType<typeof setTimeout> | null = null
   private status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
   private readonly onStatus: StatusListener
@@ -28,6 +29,12 @@ export class DesktopUpdates {
 
   getStatus(): UpdateStatus {
     return this.status
+  }
+
+  getManualDownloadUrl(): string | null {
+    if (this.status.phase === 'unavailable') return 'https://github.com/NicolasPortie/Telae/releases/latest'
+    if (this.status.phase !== 'manual' || !this.feedUrl) return null
+    return new URL(`Telae-Setup-${this.status.version}.exe`, this.feedUrl).toString()
   }
 
   setSessionActive(active: boolean): void {
@@ -45,17 +52,24 @@ export class DesktopUpdates {
     if (!app.isPackaged || process.platform !== 'win32' || this.checking || this.installing) return
     if (this.status.phase === 'downloading' || this.status.phase === 'ready') return
 
+    // A generic build has no trusted feed. This is a capability, not a startup error.
+    if (!this.trustedServerUrl) {
+      this.publish({ phase: 'unavailable', version: app.getVersion() })
+      return
+    }
+
     this.checking = true
     this.publish({ phase: 'checking', version: app.getVersion() })
     try {
       const server = new URL(this.trustedServerUrl)
-      if (server.protocol !== 'https:' || server.username || server.password || server.search || server.hash) throw new Error('manual_update')
+      if (server.protocol !== 'https:' || server.username || server.password || server.search || server.hash) throw new Error('invalid_update_feed')
       const configPath = path.join(process.resourcesPath, 'app-update.yml')
       const config = load(readFileSync(configPath, 'utf8')) as { publisherName?: unknown } | null
       const names = typeof config?.publisherName === 'string' ? [config.publisherName] : config?.publisherName
-      if (!Array.isArray(names) || !names.length || names.some(name => typeof name !== 'string' || !name.trim())) {
-        throw new Error('manual_update')
+      if (names !== undefined && (!Array.isArray(names) || !names.length || names.some(name => typeof name !== 'string' || !name.trim()))) {
+        throw new Error('invalid_update_publisher')
       }
+      this.automaticInstall = Array.isArray(names)
       const feedUrl = new URL('updates/windows/', `${server.toString().replace(/\/+$/, '')}/`).toString()
       if (this.feedUrl !== feedUrl) this.configure(feedUrl, configPath)
       const updater = this.updater
@@ -65,7 +79,7 @@ export class DesktopUpdates {
       this.publish({
         phase: 'error',
         version: app.getVersion(),
-        message: !this.updater ? t('Essa instalação não atualiza sozinha. Baixa o instalador mais novo na página do projeto.') : this.errorMessage(error),
+        message: this.errorMessage(error),
       })
     } finally {
       this.checking = false
@@ -76,11 +90,20 @@ export class DesktopUpdates {
     this.feedUrl = feedUrl
     const updater = new NsisUpdater({ provider: 'generic', url: feedUrl })
     updater.updateConfigPath = configPath
+    // updateConfigPath resets electron-updater's provider; restore the pinned feed afterwards.
+    updater.setFeedURL({ provider: 'generic', url: feedUrl })
     updater.disableWebInstaller = true
-    updater.autoDownload = true
-    updater.autoInstallOnAppQuit = true
+    // Unsigned builds may check metadata, but never download or execute it automatically.
+    updater.autoDownload = this.automaticInstall
+    updater.autoInstallOnAppQuit = this.automaticInstall
     updater.on('update-available', (info) => {
-      this.publish({ phase: 'downloading', version: info.version, percent: 0 })
+      if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(info.version)) {
+        this.publish({ phase: 'error', version: app.getVersion(), message: this.errorMessage(new Error('invalid_version')) })
+        return
+      }
+      this.publish(this.automaticInstall
+        ? { phase: 'downloading', version: info.version, percent: 0 }
+        : { phase: 'manual', version: info.version })
     })
     updater.on('update-not-available', () => {
       this.publish({ phase: 'current', version: app.getVersion() })
@@ -90,6 +113,7 @@ export class DesktopUpdates {
       this.publish({ phase: 'downloading', version, percent: Math.round(progress.percent) })
     })
     updater.on('update-downloaded', (info) => {
+      if (!this.automaticInstall) return
       this.publish({ phase: 'ready', version: info.version })
       if (!this.sessionActive) this.install()
     })
@@ -103,7 +127,7 @@ export class DesktopUpdates {
   }
 
   private install(): void {
-    if (this.installing || this.sessionActive || this.status.phase !== 'ready') return
+    if (!this.automaticInstall || this.installing || this.sessionActive || this.status.phase !== 'ready') return
     this.installing = true
     this.publish({ phase: 'installing', version: this.status.version })
     // Deixa o aviso de reinício chegar à janela antes de encerrá-la.

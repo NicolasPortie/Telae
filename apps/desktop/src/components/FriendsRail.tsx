@@ -77,6 +77,7 @@ export function FriendsRail({ state, online, updateStatus, canCheckUpdate, onChe
   const available = friends.filter(friend => !friend.isSharing && friend.status === 'online')
   const offline = friends.filter(friend => !friend.isSharing && friend.status !== 'online')
   const checking = updateStatus?.phase === 'checking'
+  const manual = updateStatus?.phase === 'manual' || updateStatus?.phase === 'unavailable'
 
   const rows = (list: DeviceSnapshot[]) => (
     <ul className="grid gap-0.5">
@@ -206,8 +207,8 @@ export function FriendsRail({ state, online, updateStatus, canCheckUpdate, onChe
           type="button"
           onClick={onCheckUpdate}
           disabled={!canCheckUpdate || UPDATE_BUSY_PHASES.includes(updateStatus?.phase ?? '')}
-          aria-label={checking ? t('Buscando atualização…') : t('Buscar atualização')}
-          title={updateStatus?.phase === 'current' ? t('Tudo em dia') : t('Buscar atualização')}
+          aria-label={checking ? t('Buscando atualização…') : manual ? t('Baixar atualização') : t('Buscar atualização')}
+          title={updateStatus?.phase === 'current' ? t('Tudo em dia') : manual ? t('Baixar atualização') : t('Buscar atualização')}
           className="telae-press telae-icon-button !h-7 !w-7 !border-0"
         >
           <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" className={checking ? 'telae-update-spinner' : ''} />

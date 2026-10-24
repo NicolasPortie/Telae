@@ -7,7 +7,10 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     // Servidor padrão dos instaladores oficiais, definido só na compilação (veja docs/OPERATIONS.md).
     // Sem a variável, o app não aponta para servidor nenhum: quem compila o código aberto usa o próprio.
-    define: { __TELAE_DEFAULT_SERVER_URL__: JSON.stringify(process.env.TELAE_DEFAULT_SERVER_URL?.trim() ?? '') },
+    define: {
+      __TELAE_DEFAULT_SERVER_URL__: JSON.stringify(process.env.TELAE_DEFAULT_SERVER_URL?.trim() ?? ''),
+      __TELAE_PREVIOUS_SERVER_URL__: JSON.stringify(process.env.TELAE_PREVIOUS_SERVER_URL?.trim() ?? ''),
+    },
     build: {
       rollupOptions: {
         input: resolve(__dirname, 'src/main/index.ts'),
