@@ -36,3 +36,14 @@ export class SignalingServerSettings {
     return url
   }
 }
+
+/** Only migrate the exact former default of an official build; custom servers stay selected. */
+export function migrateBuiltInServer(saved: string, currentDefault: string, previousDefault: string): string {
+  if (!currentDefault || !previousDefault) return saved
+  try {
+    return normalizeSignalingUrl(saved) === normalizeSignalingUrl(previousDefault)
+      ? normalizeSignalingUrl(currentDefault) : saved
+  } catch {
+    return saved
+  }
+}

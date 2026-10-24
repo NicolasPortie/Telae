@@ -54,7 +54,7 @@ export type DesktopEnvironment = {
 }
 
 export type UpdateStatus =
-  | { phase: 'idle' | 'checking' | 'current'; version: string }
+  | { phase: 'idle' | 'checking' | 'current' | 'unavailable' | 'manual'; version: string }
   | { phase: 'downloading'; version: string; percent: number }
   | { phase: 'ready' | 'installing'; version: string }
   | { phase: 'error'; version: string; message: string }

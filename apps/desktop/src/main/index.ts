@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
-import { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session, shell } from 'electron'
 import type {
   AudioBridgeState,
   AudioProcess,
@@ -22,7 +22,7 @@ import { AuthServerClient } from './auth-client.ts'
 import { AuthSession } from './auth-session.ts'
 import { createSessionStorage } from './auth-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
-import { normalizeSignalingUrl, SignalingServerSettings } from './signaling-url.ts'
+import { migrateBuiltInServer, normalizeSignalingUrl, SignalingServerSettings } from './signaling-url.ts'
 import { allowsPermission, isRendererOrigin, isTrustedFrame, secureIpcHandler } from './ipc-security.ts'
 import { guardRendererNavigation, PACKAGED_RENDERER_URL, packagedRendererResponse, rendererContentSecurityPolicy, withRendererCsp } from './renderer-security.ts'
 
@@ -54,6 +54,7 @@ const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
 const LOCAL_SIGNALING_URL = 'http://localhost:5015'
 // Definido na compilação dos instaladores oficiais (TELAE_DEFAULT_SERVER_URL). Vazio em builds do código aberto.
 const BUILT_IN_SIGNALING_URL = typeof __TELAE_DEFAULT_SERVER_URL__ === 'string' ? __TELAE_DEFAULT_SERVER_URL__.replace(/\/+$/, '') : ''
+const PREVIOUS_SIGNALING_URL = typeof __TELAE_PREVIOUS_SERVER_URL__ === 'string' ? __TELAE_PREVIOUS_SERVER_URL__ : ''
 const DEFAULT_SIGNALING_URL = app.isPackaged && BUILT_IN_SIGNALING_URL ? BUILT_IN_SIGNALING_URL : LOCAL_SIGNALING_URL
 
 const updates = new DesktopUpdates((status) => {
@@ -65,6 +66,11 @@ function readSignalingUrl(): string {
     const settings = JSON.parse(readFileSync(settingsPath(), 'utf8')) as { signalingUrl?: string }
     if (settings.signalingUrl) {
       const saved = normalizeSignalingUrl(settings.signalingUrl)
+      const migrated = app.isPackaged ? migrateBuiltInServer(saved, BUILT_IN_SIGNALING_URL, PREVIOUS_SIGNALING_URL) : saved
+      if (migrated !== saved) {
+        writeJsonAtomically(settingsPath(), { ...readStoredSettings(), signalingUrl: migrated })
+        return migrated
+      }
       // Instaladores antigos apontavam para o localhost mesmo fora do servidor.
       if (app.isPackaged && BUILT_IN_SIGNALING_URL && saved === LOCAL_SIGNALING_URL) return BUILT_IN_SIGNALING_URL
       return saved
@@ -365,7 +371,11 @@ function registerIpc() {
   handle('settings:get', () => readSettings())
   handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
   handle('update:status', () => updates.getStatus())
-  handle('update:check', () => updates.check())
+  handle('update:check', async () => {
+    const downloadUrl = updates.getManualDownloadUrl()
+    if (downloadUrl) await shell.openExternal(downloadUrl)
+    else await updates.check()
+  })
   handle('update:session-active', (_event, active: boolean) => updates.setSessionActive(active === true))
 }
 

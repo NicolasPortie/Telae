@@ -6,6 +6,9 @@ const updaterInstances = vi.hoisted(() => [] as Array<{
   emit(event: string, ...args: unknown[]): boolean
   checkForUpdates: ReturnType<typeof vi.fn>
   quitAndInstall: ReturnType<typeof vi.fn>
+  autoDownload: boolean
+  autoInstallOnAppQuit: boolean
+  setFeedURL: ReturnType<typeof vi.fn>
 }>)
 
 const updateConfig = vi.hoisted(() => ({ value: 'publisherName: Telae' }))
@@ -15,7 +18,14 @@ vi.mock('electron', () => ({ app: { getVersion: () => '0.1.5', isPackaged: true 
 vi.mock('electron-updater', () => ({
   default: {
     NsisUpdater: class extends EventEmitter {
-      readonly feed: { provider: string; url: string }
+      autoDownload = true
+      autoInstallOnAppQuit = true
+      feed: { provider: string; url: string }
+      setFeedURL = vi.fn((feed: { provider: string; url: string }) => { this.feed = feed })
+      set updateConfigPath(_value: string) {
+        // Match the real library: setting its disk config clears the constructor's provider.
+        this.feed = { provider: 'generic', url: 'https://placeholder.invalid/updates/' }
+      }
       checkForUpdates = vi.fn(async () => null)
       quitAndInstall = vi.fn()
       constructor(feed: { provider: string; url: string }) {
@@ -50,6 +60,7 @@ describe('DesktopUpdates', () => {
       url: 'https://updates.example.com/updates/windows/',
     })
     expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
+    expect(updaterInstances[0].setFeedURL).toHaveBeenCalledWith(updaterInstances[0].feed)
   })
 
   it('waits for a live session to end before installing a downloaded update', async () => {
@@ -103,18 +114,54 @@ describe('DesktopUpdates', () => {
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
-  it.each(['', 'invalid', 'http://updates.example.com', 'http://localhost:5015'])('never starts an updater without a trusted HTTPS feed (%s)', async feed => {
+  it('treats a generic build as manual, without a persistent startup error', async () => {
+    const updates = new DesktopUpdates(vi.fn(), '')
+    await updates.check()
+    expect(updaterInstances).toHaveLength(0)
+    expect(updates.getStatus().phase).toBe('unavailable')
+    expect(updates.getManualDownloadUrl()).toBe('https://github.com/NicolasPortie/Telae/releases/latest')
+  })
+
+  it.each(['invalid', 'http://updates.example.com', 'http://localhost:5015'])('never starts an updater without a trusted HTTPS feed (%s)', async feed => {
     const updates = new DesktopUpdates(vi.fn(), feed)
     await expect(updates.check()).resolves.toBeUndefined()
     expect(updaterInstances).toHaveLength(0)
-    expect(updates.getStatus()).toMatchObject({ phase: 'error', message: expect.stringContaining('não atualiza sozinha') })
+    expect(updates.getStatus().phase).toBe('error')
   })
 
-  it.each(['', 'publisherName: []', 'publisherName: ""', 'publisherName: [Telae, ""]', 'publisherName: 123'])('refuses unsigned or malformed publisher configuration (%s)', async config => {
+  it.each(['publisherName: []', 'publisherName: ""', 'publisherName: [Telae, ""]', 'publisherName: 123'])('refuses malformed publisher configuration (%s)', async config => {
     updateConfig.value = config
     const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
     await updates.check()
     expect(updaterInstances).toHaveLength(0)
-    expect(updates.getStatus()).toMatchObject({ phase: 'error', message: expect.stringContaining('não atualiza sozinha') })
+    expect(updates.getStatus().phase).toBe('error')
+  })
+
+  it('checks unsigned installations quietly and offers a trusted manual download only for a newer version', async () => {
+    updateConfig.value = 'provider: generic'
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
+    const updater = updaterInstances[0]
+    expect(updater.autoDownload).toBe(false)
+    expect(updater.autoInstallOnAppQuit).toBe(false)
+    updater.emit('update-not-available')
+    expect(updates.getStatus()).toEqual({ phase: 'current', version: '0.1.5' })
+    expect(updates.getManualDownloadUrl()).toBeNull()
+    updater.emit('update-available', { version: '0.3.2' })
+    expect(updates.getStatus()).toEqual({ phase: 'manual', version: '0.3.2' })
+    expect(updates.getManualDownloadUrl()).toBe('https://updates.example.com/updates/windows/Telae-Setup-0.3.2.exe')
+    updater.emit('update-downloaded', { version: '0.3.2' })
+    updates.setSessionActive(false)
+    vi.advanceTimersByTime(5000)
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('does not derive a download link from a malformed release version', async () => {
+    updateConfig.value = ''
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
+    updaterInstances[0].emit('update-available', { version: '../../attacker.exe' })
+    expect(updates.getStatus().phase).toBe('error')
+    expect(updates.getManualDownloadUrl()).toBeNull()
   })
 })
