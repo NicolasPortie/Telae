@@ -6,6 +6,7 @@ import { passwordStrength } from '../ui/password-strength'
 import { AuthShowcase } from './AuthShowcase'
 import { authErrorMessage } from './authErrors'
 import { CodeInput } from './CodeInput'
+import { ServerPicker } from './ServerPicker'
 
 type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset'
 
@@ -284,6 +285,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
           {info && <p role="status" className="notice mt-5">{info}</p>}
           {error && <p role="alert" className="mt-5 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] leading-relaxed text-danger-soft"><CircleAlert size={15} aria-hidden="true" className="mt-0.5 shrink-0" />{error}</p>}
           <div role={tabbed ? 'tabpanel' : undefined}>{form}</div>
+          <ServerPicker disabled={!desktopApiAvailable || busy} />
         </div>
       </div>
     </section>

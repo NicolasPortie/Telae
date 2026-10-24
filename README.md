@@ -140,7 +140,7 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 
 Grab the Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). The installers are not code-signed yet, so Windows SmartScreen may warn on the first run: choose **More info > Run anyway**. The app updates itself in the background.
 
-An account is needed to sign in. The default server is private and only accepts invited emails, so to try Telaê yourself [run your own server](#self-hosting) and point the app to it in **Settings > Signaling server**.
+The installers published here are generic: they do not come with any server. Telaê is open source, so to use it with your friends [run your own server](#self-hosting) and set its address on the sign-in screen (**Server > Change**) or in **Settings > Signaling server**. To bake a default into your own installer, set `TELAE_DEFAULT_SERVER_URL` when running `npm run dist`.
 
 ### Build from source
 

@@ -3,9 +3,11 @@ productName: Telae
 copyright: Copyright © 2026 Telaê
 artifactName: "${productName}-Setup-${version}.${ext}"
 
+# O app confere atualizações no servidor configurado pelo usuário (<servidor>/updates/windows/); este endereço é só o modelo
+# do app-update.yml e é substituído em tempo de execução.
 publish:
   provider: generic
-  url: https://telae.nicolasportie.com/updates/windows/
+  url: https://telae.example.invalid/updates/windows/
 
 directories:
   output: dist
