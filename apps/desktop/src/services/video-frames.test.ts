@@ -112,7 +112,7 @@ describe('capture frames without a compositor surface', () => {
     const abort = new AbortController()
     const pending = scaleDesktopVideo(f.source, hd, abort.signal)
     abort.abort()
-    await expect(pending).rejects.toThrow('encerrada')
+    await expect(pending).rejects.toThrow('A captura parou')
     expect(f.raw.stop).toHaveBeenCalledOnce()
     expect(f.output.stop).toHaveBeenCalledOnce()
     expect(f.cancel).toHaveBeenCalledOnce()

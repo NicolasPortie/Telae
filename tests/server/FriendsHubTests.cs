@@ -36,7 +36,7 @@ public sealed class FriendsHubTests : IAsyncLifetime
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddTrustedClientAddress(builder.Configuration);
         builder.Services.AddTelaeAccounts(builder.Configuration, builder.Environment);
-        builder.Services.AddSignalR(options => { options.EnableDetailedErrors = true; options.AddFilter(typeof(DomainErrorFilter)); });
+        builder.Services.AddSignalR(options => { options.EnableDetailedErrors = true; options.AddFilter(typeof(DomainErrorFilter)); options.AddFilter<InputLimitFilter>(); });
         builder.Services.AddSingleton(new TelaeRegistry());
         builder.Services.AddSingleton<PresenceSubscriptions>();
         builder.Services.AddSingleton<DisconnectCoordinator>();
@@ -102,7 +102,7 @@ public sealed class FriendsHubTests : IAsyncLifetime
 
         var added = await ana.InvokeAsync<DeviceSnapshot>("AddFriend", " @BIA ");
         Assert.Equal("bia", added.FriendCode);
-        Assert.Equal("online", added.Status);
+        Assert.Equal("offline", added.Status);
         Assert.Equal(["bia"], (await FriendsOf(ana)).Select(friend => friend.FriendCode));
 
         // Outro aparelho da mesma conta vê a mesma lista: ela está no banco, não no computador.
@@ -127,7 +127,7 @@ public sealed class FriendsHubTests : IAsyncLifetime
         await ana.InvokeAsync<DeviceSnapshot>("AddFriend", "bia");
 
         Assert.Contains("não parece certo", (await Assert.ThrowsAsync<HubException>(() => ana.InvokeAsync<DeviceSnapshot>("AddFriend", "a!"))).Message);
-        Assert.Contains("Não achei ninguém", (await Assert.ThrowsAsync<HubException>(() => ana.InvokeAsync<DeviceSnapshot>("AddFriend", "ninguem"))).Message);
+        Assert.Contains("Não deu pra achar ninguém", (await Assert.ThrowsAsync<HubException>(() => ana.InvokeAsync<DeviceSnapshot>("AddFriend", "ninguem"))).Message);
         Assert.Contains("se adicionar", (await Assert.ThrowsAsync<HubException>(() => ana.InvokeAsync<DeviceSnapshot>("AddFriend", "@ana"))).Message);
         Assert.Contains("já está na sua lista", (await Assert.ThrowsAsync<HubException>(() => ana.InvokeAsync<DeviceSnapshot>("AddFriend", "bia"))).Message);
     }
@@ -193,6 +193,29 @@ public sealed class FriendsHubTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Screen_preview_reaches_mutual_friends_and_is_served_to_latecomers()
+    {
+        var (ana, anaSession) = await SignedInAsync("ana");
+        var (bia, _) = await SignedInAsync("bia");
+        var (caio, _) = await SignedInAsync("caio");
+        await ana.InvokeAsync<DeviceSnapshot>("AddFriend", "bia");
+        await ana.InvokeAsync<DeviceSnapshot>("AddFriend", "caio");
+        await bia.InvokeAsync<DeviceSnapshot>("AddFriend", "ana");
+        await FriendsOf(caio);
+        await ana.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest(anaSession.Account.Id.ToString(), "1080p30"));
+
+        var received = new TaskCompletionSource<SharePreviewEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bia.On<SharePreviewEvent>("SharePreview", preview => received.TrySetResult(preview));
+        var image = SharePreviewTests.Jpeg;
+        await ana.InvokeAsync("PublishSharePreview", image);
+
+        Assert.Equal(image, (await received.Task.WaitAsync(TimeSpan.FromSeconds(5))).Image);
+        Assert.Single(await bia.InvokeAsync<IReadOnlyList<SharePreviewEvent>>("GetFriendPreviews"));
+        // Caio foi adicionado, mas não adicionou de volta: não vê a tela.
+        Assert.Empty(await caio.InvokeAsync<IReadOnlyList<SharePreviewEvent>>("GetFriendPreviews"));
+    }
+
+    [Fact]
     public async Task Reconnecting_does_not_resend_friend_request_notifications()
     {
         var (ana, anaSession) = await SignedInAsync("ana");
@@ -241,5 +264,67 @@ public sealed class FriendsHubTests : IAsyncLifetime
         var seen = await presence.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("bia", seen.FriendCode);
         Assert.True(seen.IsSharing);
+    }
+
+    [Fact]
+    public async Task Presence_queries_and_subscriptions_require_mutual_friendship_and_stop_after_removal()
+    {
+        var (ana, _) = await SignedInAsync("ana");
+        var (bia, biaSession) = await SignedInAsync("bia");
+        await ana.InvokeAsync<DeviceSnapshot>("AddFriend", "bia");
+        await bia.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest(biaSession.Account.Id.ToString(), "auto"));
+        var events = System.Threading.Channels.Channel.CreateUnbounded<DeviceSnapshot>();
+        ana.On<DeviceSnapshot>("PresenceChanged", device => events.Writer.TryWrite(device));
+
+        var lookup = await ana.InvokeAsync<DeviceSnapshot>("LookupFriend", "bia");
+        Assert.Equal("offline", lookup.Status);
+        Assert.False(lookup.IsSharing);
+        Assert.Null(lookup.ActiveQualityProfile);
+        Assert.Equal("offline", (await FriendsOf(ana)).Single().Status);
+        await bia.InvokeAsync<ShareSessionSnapshot>("UpdateShareQuality", "720p60");
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => events.Reader.ReadAsync(timeout.Token).AsTask());
+
+        await bia.InvokeAsync<DeviceSnapshot>("AddFriend", "ana");
+        Assert.True((await FriendsOf(ana)).Single().IsSharing);
+        await bia.InvokeAsync<ShareSessionSnapshot>("UpdateShareQuality", "1080p30");
+        Assert.True((await events.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).IsSharing);
+        await ana.InvokeAsync("RemoveFriend", "bia");
+        await bia.InvokeAsync<ShareSessionSnapshot>("UpdateShareQuality", "720p60");
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => events.Reader.ReadAsync(timeout.Token).AsTask());
+        Assert.Equal("offline", (await ana.InvokeAsync<DeviceSnapshot>("LookupFriend", "bia")).Status);
+    }
+
+    [Fact]
+    public async Task Removing_a_viewer_revokes_live_and_cached_screen_previews()
+    {
+        var (ana, anaSession) = await SignedInAsync("ana");
+        var (bia, _) = await SignedInAsync("bia");
+        await ana.InvokeAsync<DeviceSnapshot>("AddFriend", "bia");
+        await bia.InvokeAsync<DeviceSnapshot>("AddFriend", "ana");
+        await ana.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest(anaSession.Account.Id.ToString(), "auto"));
+        await bia.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ana");
+        var previews = System.Threading.Channels.Channel.CreateUnbounded<SharePreviewEvent>();
+        bia.On<SharePreviewEvent>("SharePreview", preview => previews.Writer.TryWrite(preview));
+        var viewerId = (await bia.InvokeAsync<DeviceSnapshot>("LookupFriend", "bia")).DeviceId;
+
+        await ana.InvokeAsync<ShareSessionSnapshot>("RemoveViewer", viewerId);
+        await ana.InvokeAsync("PublishSharePreview", SharePreviewTests.Jpeg);
+
+        Assert.Empty(await bia.InvokeAsync<IReadOnlyList<SharePreviewEvent>>("GetFriendPreviews"));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => previews.Reader.ReadAsync(timeout.Token).AsTask());
+    }
+
+    [Fact]
+    public async Task Reconnecting_does_not_reset_the_account_command_budget()
+    {
+        var (ana, session) = await SignedInAsync("ana");
+        for (var index = 0; index < 120; index++)
+            await ana.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
+        var reconnected = await ConnectAsync(session);
+
+        Assert.Contains("Muitos pedidos em pouco tempo", (await Assert.ThrowsAsync<HubException>(() => reconnected.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"))).Message);
     }
 }

@@ -7,7 +7,7 @@ namespace Telae.Server.Accounts;
 
 public sealed record RegisterRequest(string Email, string Username, string Password, string? Language);
 public sealed record LoginRequest(string Identifier, string Password);
-public sealed record VerifyRequest(string Identifier, string Code);
+public sealed record VerifyRequest(string Identifier, string Code, string Password);
 public sealed record IdentifierRequest(string Identifier);
 public sealed record ResetRequest(string Identifier, string Code, string NewPassword);
 public sealed record RefreshRequest(string RefreshToken);
@@ -55,7 +55,7 @@ public static class AuthEndpoints
             })).RequireRateLimiting(Strict);
 
         auth.MapPost("/verify-email", (VerifyRequest request, AccountService accounts, HttpContext http, CancellationToken ct) =>
-            Run(async () => Results.Ok(await accounts.VerifyEmailAsync(request.Identifier, request.Code, UserAgent(http), ct))))
+            Run(async () => Results.Ok(await accounts.VerifyEmailAsync(request.Identifier, request.Code, request.Password, UserAgent(http), ct))))
             .RequireRateLimiting(Standard);
 
         auth.MapPost("/resend-verification", (IdentifierRequest request, AccountService accounts, CancellationToken ct) =>
@@ -63,7 +63,7 @@ public static class AuthEndpoints
             .RequireRateLimiting(Strict);
 
         auth.MapPost("/login", (LoginRequest request, AccountService accounts, HttpContext http, CancellationToken ct) =>
-            Run(async () => Results.Ok(await accounts.LoginAsync(request.Identifier, request.Password, UserAgent(http), ct))))
+            Run(async () => Results.Ok(await accounts.LoginAsync(request.Identifier, request.Password, UserAgent(http), ct, ClientAddress(http)))))
             .RequireRateLimiting(Standard);
 
         auth.MapPost("/refresh", (RefreshRequest request, AccountService accounts, HttpContext http, CancellationToken ct) =>
@@ -91,13 +91,13 @@ public static class AuthEndpoints
             Run(async () => Results.Ok(await accounts.UpdateDisplayNameAsync(AccountId(user), request.DisplayName, ct))));
 
         signedIn.MapPost("/change-password", (ChangePasswordRequest request, ClaimsPrincipal user, AccountService accounts, HttpContext http, CancellationToken ct) =>
-            Run(async () => Results.Ok(await accounts.ChangePasswordAsync(AccountId(user), request.CurrentPassword, request.NewPassword, UserAgent(http), ct))));
+            Run(async () => Results.Ok(await accounts.ChangePasswordAsync(AccountId(user), request.CurrentPassword, request.NewPassword, UserAgent(http), ct, ClientAddress(http)))));
 
         signedIn.MapPost("/delete-account", (PasswordConfirmRequest request, ClaimsPrincipal user, AccountService accounts, HttpContext http, CancellationToken ct) =>
             Run(async () =>
             {
                 var id = AccountId(user);
-                await accounts.DeleteAsync(id, request.Password, ct);
+                await accounts.DeleteAsync(id, request.Password, ct, ClientAddress(http));
                 // Libera o @usuário também no registro de presença em memória.
                 http.RequestServices.GetService<Telae.Server.Core.TelaeRegistry>()?.ForgetAccount(id.ToString());
                 return Results.NoContent();
@@ -106,6 +106,8 @@ public static class AuthEndpoints
 
     internal static Guid AccountId(ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirstValue(TokenService.AccountIdClaim), out var id) ? id : throw new AccountException("invalid_session", 401);
+
+    private static string ClientAddress(HttpContext http) => http.Connection.RemoteIpAddress?.MapToIPv6().ToString() ?? "unknown";
 
     private static string? UserAgent(HttpContext http) => http.Request.Headers.UserAgent.ToString() is { Length: > 0 } agent ? agent : null;
 

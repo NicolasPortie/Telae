@@ -107,6 +107,28 @@ namespace Telae.Server.Accounts.Migrations
                     b.ToTable("DismissedRequests");
                 });
 
+            modelBuilder.Entity("Telae.Server.Accounts.FailedCodeAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Purpose")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "Purpose", "CreatedAt");
+
+                    b.ToTable("FailedCodeAttempts");
+                });
+
             modelBuilder.Entity("Telae.Server.Accounts.Friendship", b =>
                 {
                     b.Property<Guid>("AccountId")
@@ -161,6 +183,33 @@ namespace Telae.Server.Accounts.Migrations
                     b.ToTable("OneTimeCodes");
                 });
 
+            modelBuilder.Entity("Telae.Server.Accounts.PasswordAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AppliesToPair")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ClientAddressHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "CreatedAt");
+
+                    b.ToTable("PasswordAttempts");
+                });
+
             modelBuilder.Entity("Telae.Server.Accounts.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -182,6 +231,9 @@ namespace Telae.Server.Accounts.Migrations
                     b.Property<DateTimeOffset?>("RevokedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -194,6 +246,8 @@ namespace Telae.Server.Accounts.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("SessionId");
 
                     b.HasIndex("TokenHash")
                         .IsUnique();
@@ -218,6 +272,15 @@ namespace Telae.Server.Accounts.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("From");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.FailedCodeAttempt", b =>
+                {
+                    b.HasOne("Telae.Server.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Telae.Server.Accounts.Friendship", b =>
@@ -248,6 +311,15 @@ namespace Telae.Server.Accounts.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.PasswordAttempt", b =>
+                {
+                    b.HasOne("Telae.Server.Accounts.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Telae.Server.Accounts.RefreshToken", b =>

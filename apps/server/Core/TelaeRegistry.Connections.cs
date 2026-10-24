@@ -19,6 +19,19 @@ public sealed partial class TelaeRegistry
         lock (_gate) return _deviceByConnection.ContainsKey(connectionId);
     }
 
+    public DisconnectResult RevokeDevice(string deviceId, string? expectedConnectionId = null)
+    {
+        lock (_gate)
+        {
+            if (expectedConnectionId is not null && _connectionByDevice.GetValueOrDefault(deviceId) != expectedConnectionId)
+                return new DisconnectResult(null, null, null, null);
+            if (_connectionByDevice.Remove(deviceId, out var connectionId)) _deviceByConnection.Remove(connectionId);
+            var generation = NextDisconnectGenerationLocked();
+            _disconnectGenerationByDevice[deviceId] = generation;
+            return FinalizeDisconnect(deviceId, generation);
+        }
+    }
+
     public PendingDisconnect BeginDisconnect(string connectionId)
     {
         lock (_gate)
@@ -29,7 +42,7 @@ public sealed partial class TelaeRegistry
             if (_connectionByDevice.TryGetValue(deviceId, out var mapped) && mapped == connectionId)
                 _connectionByDevice.Remove(deviceId);
 
-            var generation = NextDisconnectGenerationLocked(deviceId);
+            var generation = NextDisconnectGenerationLocked();
             _disconnectGenerationByDevice[deviceId] = generation;
             return new PendingDisconnect(deviceId, generation);
         }
@@ -73,15 +86,14 @@ public sealed partial class TelaeRegistry
         }
     }
 
-    private long NextDisconnectGenerationLocked(string deviceId) =>
-        _disconnectGenerationByDevice.TryGetValue(deviceId, out var current) ? current + 1 : 1;
+    private long NextDisconnectGenerationLocked() => ++_disconnectGeneration;
 
     public string GetConnectionId(string deviceId)
     {
         lock (_gate)
         {
             if (!_connectionByDevice.TryGetValue(deviceId, out var connectionId))
-                throw new TelaeDomainException("device_offline", "O dispositivo não está online.");
+                throw new TelaeDomainException("device_offline", "Essa pessoa está offline agora.");
             return connectionId;
         }
     }
@@ -91,7 +103,7 @@ public sealed partial class TelaeRegistry
         lock (_gate)
         {
             if (!_deviceByConnection.TryGetValue(connectionId, out var deviceId))
-                throw new TelaeDomainException("device_not_registered", "Registre o dispositivo antes de usar esta operação.");
+                throw new TelaeDomainException("device_not_registered", "Esse aparelho ainda não está conectado. Reinicia o app e tenta de novo.");
             return deviceId;
         }
     }

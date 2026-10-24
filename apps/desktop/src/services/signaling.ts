@@ -10,6 +10,7 @@ import type {
   IceServerDto,
   QualityProfile,
   ShareAccessResult,
+  SharePreviewEvent,
   ShareSessionSnapshot,
   SignalingEnvelope,
   ViewerJoinedEvent,
@@ -19,6 +20,7 @@ import type {
 type Events = {
   presenceChanged: (device: DeviceSnapshot) => void
   friendRequestReceived: (device: DeviceSnapshot) => void
+  sharePreview: (preview: SharePreviewEvent) => void
   viewerJoined: (event: ViewerJoinedEvent) => void
   viewerLeft: (event: ViewerLeftEvent) => void
   signalReceived: (envelope: SignalingEnvelope) => void
@@ -45,6 +47,7 @@ export class SignalingClient {
 
     this.connection.on('PresenceChanged', (device: DeviceSnapshot) => this.emit('presenceChanged', device))
     this.connection.on('FriendRequestReceived', (device: DeviceSnapshot) => this.emit('friendRequestReceived', device))
+    this.connection.on('SharePreview', (preview: SharePreviewEvent) => this.emit('sharePreview', preview))
     this.connection.on('ViewerJoined', (event: ViewerJoinedEvent) => this.emit('viewerJoined', event))
     this.connection.on('ViewerLeft', (event: ViewerLeftEvent) => this.emit('viewerLeft', event))
     this.connection.on('SignalReceived', (envelope: SignalingEnvelope) => this.emit('signalReceived', envelope))
@@ -141,6 +144,15 @@ export class SignalingClient {
 
   getActiveShare() {
     return this.connection.invoke<ShareAccessResult['session'] | null>('GetActiveShare')
+  }
+
+  /** Miniatura da tela atual; o servidor só repassa a amigos mútuos. */
+  publishSharePreview(image: string) {
+    return this.connection.invoke('PublishSharePreview', image)
+  }
+
+  getFriendPreviews() {
+    return this.connection.invoke<SharePreviewEvent[]>('GetFriendPreviews')
   }
 
   stopShare() {

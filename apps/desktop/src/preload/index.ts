@@ -5,7 +5,7 @@ const api: TelaeDesktopApi = {
   auth: {
     getSession: () => ipcRenderer.invoke('auth:session'),
     register: input => ipcRenderer.invoke('auth:register', input),
-    verifyEmail: (identifier, code) => ipcRenderer.invoke('auth:verify-email', identifier, code),
+    verifyEmail: (identifier, code, password) => ipcRenderer.invoke('auth:verify-email', identifier, code, password),
     resendVerification: identifier => ipcRenderer.invoke('auth:resend-verification', identifier),
     login: (identifier, password) => ipcRenderer.invoke('auth:login', identifier, password),
     logout: () => ipcRenderer.invoke('auth:logout'),

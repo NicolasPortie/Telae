@@ -5,6 +5,8 @@ namespace Telae.Server.Accounts;
 
 public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : DbContext(options)
 {
+    public DbSet<FailedCodeAttempt> FailedCodeAttempts => Set<FailedCodeAttempt>();
+    public DbSet<PasswordAttempt> PasswordAttempts => Set<PasswordAttempt>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OneTimeCode> OneTimeCodes => Set<OneTimeCode>();
@@ -36,6 +38,7 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
         {
             token.HasIndex(t => t.TokenHash).IsUnique();
             token.HasIndex(t => t.AccountId);
+            token.HasIndex(t => t.SessionId);
             token.Property(t => t.TokenHash).HasMaxLength(64);
             token.Property(t => t.UserAgent).HasMaxLength(256);
             token.HasOne(t => t.Account).WithMany(a => a.RefreshTokens).HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Cascade);
@@ -54,6 +57,18 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
             dismissed.HasKey(d => new { d.AccountId, d.FromId });
             dismissed.HasOne(d => d.Account).WithMany().HasForeignKey(d => d.AccountId).OnDelete(DeleteBehavior.Cascade);
             dismissed.HasOne(d => d.From).WithMany().HasForeignKey(d => d.FromId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<FailedCodeAttempt>(attempt =>
+        {
+            attempt.HasIndex(a => new { a.AccountId, a.Purpose, a.CreatedAt });
+            attempt.HasOne<Account>().WithMany().HasForeignKey(a => a.AccountId).OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<PasswordAttempt>(attempt =>
+        {
+            attempt.HasIndex(a => new { a.AccountId, a.CreatedAt });
+            attempt.Property(a => a.ClientAddressHash).HasMaxLength(64);
+            attempt.HasOne<Account>().WithMany().HasForeignKey(a => a.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<OneTimeCode>(code =>

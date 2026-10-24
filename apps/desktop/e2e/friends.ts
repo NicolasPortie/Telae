@@ -17,7 +17,7 @@ export async function submitFriend(page: Page, username: string) {
 /** Adiciona um amigo pelo @usuário a partir da Home. */
 export async function addFriend(page: Page, username: string, displayName: string) {
   await submitFriend(page, username)
-  await expect(page.getByRole('status').filter({ hasText: `${displayName} adicionado!` })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByRole('status').filter({ hasText: `${displayName} adicionado.` })).toBeVisible({ timeout: 30_000 })
 }
 
 /** Amizade mútua: cada lado adiciona o @ do outro (a amizade só vale quando ambos adicionam). */
@@ -28,8 +28,7 @@ export async function befriend(first: { page: Page; name: string }, second: { pa
   await addFriend(second.page, firstHandle, first.name)
 }
 
-/** Assiste a um amigo que está ao vivo, pela lista da Home ou pela troca rápida no player. */
+/** Assiste a um amigo que está ao vivo pelo cartão dele no palco da Home. */
 export async function watchFriend(page: Page, friendName: string) {
-  const row = page.getByRole('listitem').filter({ hasText: friendName })
-  await row.getByRole('button', { name: 'Assistir', exact: true }).click()
+  await page.getByRole('button', { name: `Assistir ${friendName}`, exact: true }).click()
 }

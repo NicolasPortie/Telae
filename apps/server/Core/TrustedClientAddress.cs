@@ -6,7 +6,7 @@ namespace Telae.Server.Core;
 
 public sealed class ClientAddressConfiguration
 {
-    // Empty means forwarding is disabled, including ASP.NET's default loopback trust.
+    // Sem proxies explícitos, nenhum cabeçalho encaminhado é aceito.
     public string[] KnownProxies { get; set; } = [];
     public string HeaderName { get; set; } = "CF-Connecting-IP";
 }
@@ -39,9 +39,9 @@ public static class TrustedClientAddress
             options.KnownIPNetworks.Clear();
             options.ForwardLimit = 1;
             options.ForwardedForHeaderName = settings.HeaderName;
-            // Never enable forwarding with empty trust lists: that would trust every peer.
+            // Só o proxy autorizado pode informar o IP e o esquema externos.
             options.ForwardedHeaders = settings.KnownProxies.Length == 0
-                ? ForwardedHeaders.None : ForwardedHeaders.XForwardedFor;
+                ? ForwardedHeaders.None : ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
             foreach (var proxy in settings.KnownProxies)
                 options.KnownProxies.Add(IPAddress.Parse(proxy));
         });

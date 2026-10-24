@@ -1,10 +1,12 @@
 using System.Globalization;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Telae.Server.Core;
 
 namespace Telae.Server.Accounts;
 
@@ -17,9 +19,11 @@ public sealed partial class AccountService(
     TokenService tokens,
     IEmailSender email,
     IOptions<AuthOptions> options,
-    TimeProvider clock)
+    TimeProvider clock,
+    PresenceSubscriptions? presence = null)
 {
-    private static readonly PasswordHasher<Account> Hasher = new();
+    private static readonly PasswordHasher<Account> Hasher = new(Options.Create(new PasswordHasherOptions { IterationCount = 220_000 }));
+    private static readonly SemaphoreSlim[] AccountLocks = Enumerable.Range(0, 256).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
     private static readonly string DummyHash = Hasher.HashPassword(new Account(), "telae-dummy-password-for-timing");
     private static readonly TimeSpan CodeCooldown = TimeSpan.FromSeconds(60);
 
@@ -52,18 +56,22 @@ public sealed partial class AccountService(
         var normalizedUsername = NormalizeUsername(username);
         ValidatePassword(password, normalizedEmail, normalizedUsername);
         var lang = NormalizeLanguage(language);
+        // Sem como mandar o código, nada é gravado e a resposta é a mesma para e-mail novo ou já cadastrado.
+        if (Auth.RequireEmailVerification && email is UnavailableEmailSender) throw new AccountException("email_unavailable", 503);
+
+        if (await db.Accounts.AnyAsync(a => a.NormalizedUsername == normalizedUsername, ct))
+            throw new AccountException("username_taken", 409);
 
         var existing = await db.Accounts.FirstOrDefaultAsync(a => a.NormalizedEmail == normalizedEmail, ct);
         if (existing is not null && !Auth.RequireEmailVerification) throw new AccountException("email_taken", 409);
         if (existing is not null)
         {
-            if (existing.EmailVerified) await email.SendAsync(EmailTemplates.AlreadyRegistered(existing.Email, lang), ct);
+            using var held = await LockAccountAsync(existing, ct);
+            Hasher.VerifyHashedPassword(new Account(), DummyHash, password);
+            if (existing.EmailVerified) await SendCodeAsync(existing, OneTimeCodePurpose.RegistrationNotice, ct, ignoreCooldown: false, swallowCooldown: true, language: lang);
             else await SendCodeAsync(existing, OneTimeCodePurpose.VerifyEmail, ct, ignoreCooldown: false, swallowCooldown: true);
             return new RegisterResult(true, null);
         }
-
-        if (await db.Accounts.AnyAsync(a => a.NormalizedUsername == normalizedUsername, ct))
-            throw new AccountException("username_taken", 409);
 
         var account = new Account
         {
@@ -81,17 +89,26 @@ public sealed partial class AccountService(
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException) { throw new AccountException("username_taken", 409); }
         if (!Auth.RequireEmailVerification) return new RegisterResult(false, await IssueSessionAsync(account, userAgent, ct));
-        await SendCodeAsync(account, OneTimeCodePurpose.VerifyEmail, ct, ignoreCooldown: true);
+        using var initialCodeLock = await LockAccountAsync(account, ct);
+        await SendCodeAsync(account, OneTimeCodePurpose.VerifyEmail, ct, ignoreCooldown: false, swallowCooldown: true);
         return new RegisterResult(true, null);
     }
 
-    public async Task<AuthResult> VerifyEmailAsync(string identifier, string code, string? userAgent, CancellationToken ct)
+    public async Task<AuthResult> VerifyEmailAsync(string identifier, string code, string password, string? userAgent, CancellationToken ct)
     {
+        // Versões antigas não mandam a senha: recusa antes de gastar uma tentativa do código.
+        if (string.IsNullOrEmpty(password)) throw new AccountException("invalid_request");
         var account = await FindByIdentifierAsync(identifier, ct) ?? throw new AccountException("invalid_code");
+        using var held = await LockAccountAsync(account, ct);
         // Conta já verificada: o código não vale mais como credencial.
         if (account.EmailVerified) throw new AccountException("invalid_code");
-        await ConsumeCodeAsync(account, OneTimeCodePurpose.VerifyEmail, code, ct);
+        await ConsumeCodeAsync(account, OneTimeCodePurpose.VerifyEmail, code, ct,
+            () => ValidatePassword(password, account.NormalizedEmail, account.NormalizedUsername));
+        account.PasswordHash = Hasher.HashPassword(account, password);
         account.EmailVerified = true;
+        account.FailedLoginCount = 0;
+        account.LockedUntil = null;
+        await InvalidateCodesAsync(account.Id, ct);
         account.LastLoginAt = clock.GetUtcNow();
         return await IssueSessionAsync(account, userAgent, ct);
     }
@@ -101,13 +118,17 @@ public sealed partial class AccountService(
         var account = await FindByIdentifierAsync(identifier, ct);
         // Sem revelar se a conta existe ou já foi verificada.
         if (account is null || account.EmailVerified) return;
-        await SendCodeAsync(account, OneTimeCodePurpose.VerifyEmail, ct, ignoreCooldown: false);
+        using var held = await LockAccountAsync(account, ct);
+        if (account.EmailVerified) return;
+        try { await SendCodeAsync(account, OneTimeCodePurpose.VerifyEmail, ct, ignoreCooldown: false, swallowCooldown: true); }
+        catch (AccountException error) when (error.Code == "email_unavailable") { }
     }
 
     // ── Login e sessão ────────────────────────────────────────────────────
 
-    public async Task<AuthResult> LoginAsync(string identifier, string password, string? userAgent, CancellationToken ct)
+    public async Task<AuthResult> LoginAsync(string identifier, string password, string? userAgent, CancellationToken ct, string? clientAddress = null)
     {
+        if (password is null || password.Length is < 1 or > 128) throw new AccountException("invalid_credentials", 401);
         var account = await FindByIdentifierAsync(identifier, ct);
         var now = clock.GetUtcNow();
         if (account is null)
@@ -116,24 +137,8 @@ public sealed partial class AccountService(
             Hasher.VerifyHashedPassword(new Account(), DummyHash, password ?? "");
             throw new AccountException("invalid_credentials", 401);
         }
-        if (account.LockedUntil is { } until && until > now)
-            throw new AccountException("account_locked", 429);
-
-        var verdict = Hasher.VerifyHashedPassword(account, account.PasswordHash, password ?? "");
-        if (verdict == PasswordVerificationResult.Failed)
-        {
-            account.FailedLoginCount++;
-            if (account.FailedLoginCount >= Auth.MaxFailedLogins)
-            {
-                account.LockedUntil = now.AddMinutes(Auth.LockoutMinutes);
-                account.FailedLoginCount = 0;
-            }
-            await db.SaveChangesAsync(ct);
-            throw new AccountException("invalid_credentials", 401);
-        }
-
-        account.FailedLoginCount = 0;
-        account.LockedUntil = null;
+        using var held = await LockAccountAsync(account, ct);
+        var verdict = await VerifyPasswordAsync(account, password, clientAddress, ct);
         if (verdict == PasswordVerificationResult.SuccessRehashNeeded)
             account.PasswordHash = Hasher.HashPassword(account, password!);
 
@@ -154,22 +159,30 @@ public sealed partial class AccountService(
         var hash = TokenService.Hash(refreshToken);
         var token = await db.RefreshTokens.Include(t => t.Account).FirstOrDefaultAsync(t => t.TokenHash == hash, ct)
             ?? throw new AccountException("invalid_session", 401);
+        using var held = await LockAccountAsync(token.Account!, ct);
+        await db.Entry(token).ReloadAsync(ct);
         var now = clock.GetUtcNow();
 
         if (token.RevokedAt is not null)
         {
             // Token já trocado sendo reutilizado: possível roubo. Encerra todas as sessões da conta.
-            await RevokeAllAsync(token.AccountId, ct);
+            if (token.ReplacedById is not null && await db.RefreshTokens.AnyAsync(t =>
+                t.AccountId == token.AccountId && t.SessionId == token.SessionId && t.RevokedAt == null && t.ExpiresAt > now, ct))
+            {
+                await RevokeAllAsync(token.AccountId, ct);
+                if (presence is not null) await presence.RevokeAccountAsync(token.AccountId.ToString());
+            }
             throw new AccountException("invalid_session", 401);
         }
-        if (token.ExpiresAt <= now || token.Account is null) throw new AccountException("invalid_session", 401);
+        if (token.ExpiresAt <= now || token.SessionId == Guid.Empty || token.Account is null) throw new AccountException("invalid_session", 401);
 
         var (next, raw) = NewRefreshRecord(token.Account, userAgent);
+        next.SessionId = token.SessionId;
         token.RevokedAt = now;
         token.ReplacedById = next.Id;
         db.RefreshTokens.Add(next);
         await db.SaveChangesAsync(ct);
-        var (access, expires) = tokens.CreateAccessToken(token.Account);
+        var (access, expires) = tokens.CreateAccessToken(token.Account, next.SessionId);
         return new AuthResult(access, expires, raw, ToDto(token.Account));
     }
 
@@ -177,10 +190,13 @@ public sealed partial class AccountService(
     {
         if (string.IsNullOrWhiteSpace(refreshToken) || refreshToken.Length > 128) return;
         var hash = TokenService.Hash(refreshToken);
-        var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash && t.RevokedAt == null, ct);
+        var token = await db.RefreshTokens.Include(t => t.Account).FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
         if (token is null) return;
-        token.RevokedAt = clock.GetUtcNow();
-        await db.SaveChangesAsync(ct);
+        using var held = await LockAccountAsync(token.Account!, ct);
+        var now = clock.GetUtcNow();
+        await db.RefreshTokens.Where(t => t.AccountId == token.AccountId && t.SessionId == token.SessionId && t.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(t => t.RevokedAt, now), ct);
+        if (presence is not null) await presence.RevokeSessionAsync(token.AccountId.ToString(), token.SessionId.ToString());
     }
 
     // ── Senha ─────────────────────────────────────────────────────────────
@@ -188,31 +204,41 @@ public sealed partial class AccountService(
     public async Task ForgotPasswordAsync(string identifier, CancellationToken ct)
     {
         var account = await FindByIdentifierAsync(identifier, ct);
-        if (account is null || !account.EmailVerified) return;
-        await SendCodeAsync(account, OneTimeCodePurpose.ResetPassword, ct, ignoreCooldown: false, swallowCooldown: true);
+        if (account is null) return;
+        using var held = await LockAccountAsync(account, ct);
+        try { await SendCodeAsync(account, OneTimeCodePurpose.ResetPassword, ct, ignoreCooldown: false, swallowCooldown: true); }
+        catch (AccountException error) when (error.Code == "email_unavailable") { }
     }
 
     public async Task ResetPasswordAsync(string identifier, string code, string newPassword, CancellationToken ct)
     {
         var account = await FindByIdentifierAsync(identifier, ct) ?? throw new AccountException("invalid_code");
-        ValidatePassword(newPassword, account.NormalizedEmail, account.NormalizedUsername);
-        await ConsumeCodeAsync(account, OneTimeCodePurpose.ResetPassword, code, ct);
+        using var held = await LockAccountAsync(account, ct);
+        await ConsumeCodeAsync(account, OneTimeCodePurpose.ResetPassword, code, ct,
+            () => ValidatePassword(newPassword, account.NormalizedEmail, account.NormalizedUsername));
         account.PasswordHash = Hasher.HashPassword(account, newPassword);
+        account.EmailVerified = true;
         account.FailedLoginCount = 0;
         account.LockedUntil = null;
+        await InvalidateCodesAsync(account.Id, ct);
         await RevokeAllAsync(account.Id, ct, save: false);
         await db.SaveChangesAsync(ct);
+        if (presence is not null) await presence.RevokeAccountAsync(account.Id.ToString());
     }
 
-    public async Task<AuthResult> ChangePasswordAsync(Guid accountId, string currentPassword, string newPassword, string? userAgent, CancellationToken ct)
+    public async Task<AuthResult> ChangePasswordAsync(Guid accountId, string currentPassword, string newPassword, string? userAgent, CancellationToken ct, string? clientAddress = null)
     {
         var account = await GetAsync(accountId, ct);
-        if (Hasher.VerifyHashedPassword(account, account.PasswordHash, currentPassword ?? "") == PasswordVerificationResult.Failed)
-            throw new AccountException("invalid_credentials", 401);
+        using var held = await LockAccountAsync(account, ct);
+        if (currentPassword is null || currentPassword.Length is < 1 or > 128) throw new AccountException("invalid_credentials", 401);
+        await VerifyPasswordAsync(account, currentPassword, clientAddress, ct);
         ValidatePassword(newPassword, account.NormalizedEmail, account.NormalizedUsername);
         account.PasswordHash = Hasher.HashPassword(account, newPassword);
+        await InvalidateCodesAsync(account.Id, ct);
         await RevokeAllAsync(account.Id, ct, save: false);
-        return await IssueSessionAsync(account, userAgent, ct);
+        var session = await IssueSessionAsync(account, userAgent, ct);
+        if (presence is not null) await presence.RevokeAccountAsync(account.Id.ToString());
+        return session;
     }
 
     // ── Perfil e exclusão ─────────────────────────────────────────────────
@@ -230,13 +256,15 @@ public sealed partial class AccountService(
     }
 
     /// <summary>Exclusão definitiva (LGPD): remove a conta, as sessões e os códigos em cascata.</summary>
-    public async Task DeleteAsync(Guid accountId, string password, CancellationToken ct)
+    public async Task DeleteAsync(Guid accountId, string password, CancellationToken ct, string? clientAddress = null)
     {
         var account = await GetAsync(accountId, ct);
-        if (Hasher.VerifyHashedPassword(account, account.PasswordHash, password ?? "") == PasswordVerificationResult.Failed)
-            throw new AccountException("invalid_credentials", 401);
+        using var held = await LockAccountAsync(account, ct);
+        if (password is null || password.Length is < 1 or > 128) throw new AccountException("invalid_credentials", 401);
+        await VerifyPasswordAsync(account, password, clientAddress, ct);
         db.Accounts.Remove(account);
         await db.SaveChangesAsync(ct);
+        if (presence is not null) await presence.RevokeAccountAsync(account.Id.ToString());
     }
 
     /// <summary>Usado pelo hub: confirma que a conta do token ainda existe e devolve o nome atual.</summary>
@@ -248,13 +276,31 @@ public sealed partial class AccountService(
 
     // ── Manutenção ────────────────────────────────────────────────────────
 
+    /// <param name="requireUnexpiredToken">
+    /// Falso para conexões do hub já abertas: o token foi validado ao conectar e uma transmissão longa
+    /// não deve cair quando ele vence. A revogação da sessão continua valendo na hora.
+    /// </param>
+    public async Task<bool> IsSessionActiveAsync(ClaimsPrincipal user, CancellationToken ct, bool requireUnexpiredToken = true)
+    {
+        if (!Guid.TryParse(user.FindFirstValue(TokenService.AccountIdClaim), out var accountId) ||
+            !Guid.TryParse(user.FindFirstValue(TokenService.SessionIdClaim), out var sessionId) || sessionId == Guid.Empty) return false;
+        if (requireUnexpiredToken && (!long.TryParse(user.FindFirstValue("exp"), out var expiration) ||
+            expiration <= clock.GetUtcNow().ToUnixTimeSeconds())) return false;
+        var now = clock.GetUtcNow();
+        return await db.RefreshTokens.AsNoTracking().AnyAsync(t =>
+            t.AccountId == accountId && t.SessionId == sessionId && t.RevokedAt == null && t.ExpiresAt > now &&
+            t.Account != null && t.Account.EmailVerified, ct);
+    }
+
     public async Task<int> PurgeExpiredAsync(CancellationToken ct)
     {
         var now = clock.GetUtcNow();
         var codes = await db.OneTimeCodes.Where(c => c.ExpiresAt < now.AddDays(-1)).ExecuteDeleteAsync(ct);
         var refresh = await db.RefreshTokens.Where(t => t.ExpiresAt < now.AddDays(-7)).ExecuteDeleteAsync(ct);
         var stale = await db.Accounts.Where(a => !a.EmailVerified && a.CreatedAt < now.AddDays(-7)).ExecuteDeleteAsync(ct);
-        return codes + refresh + stale;
+        var failedCodes = await db.FailedCodeAttempts.Where(a => a.CreatedAt <= now.AddDays(-1)).ExecuteDeleteAsync(ct);
+        var passwordAttempts = await db.PasswordAttempts.Where(a => a.CreatedAt <= now.AddDays(-1)).ExecuteDeleteAsync(ct);
+        return codes + refresh + stale + failedCodes + passwordAttempts;
     }
 
     // ── Auxiliares ────────────────────────────────────────────────────────
@@ -264,7 +310,8 @@ public sealed partial class AccountService(
 
     private async Task<Account?> FindByIdentifierAsync(string identifier, CancellationToken ct)
     {
-        var value = (identifier ?? "").Trim().ToLowerInvariant();
+        if (identifier is null || identifier.Length > 320) return null;
+        var value = identifier.Trim().ToLowerInvariant();
         if (value.Length is 0 or > 254) return null;
         return value.Contains('@')
             ? await db.Accounts.FirstOrDefaultAsync(a => a.NormalizedEmail == value, ct)
@@ -276,7 +323,7 @@ public sealed partial class AccountService(
         var (record, raw) = NewRefreshRecord(account, userAgent);
         db.RefreshTokens.Add(record);
         await db.SaveChangesAsync(ct);
-        var (access, expires) = tokens.CreateAccessToken(account);
+        var (access, expires) = tokens.CreateAccessToken(account, record.SessionId);
         return new AuthResult(access, expires, raw, ToDto(account));
     }
 
@@ -302,7 +349,14 @@ public sealed partial class AccountService(
         if (save) await db.SaveChangesAsync(ct);
     }
 
-    private async Task SendCodeAsync(Account account, OneTimeCodePurpose purpose, CancellationToken ct, bool ignoreCooldown, bool swallowCooldown = false)
+    private Task<int> InvalidateCodesAsync(Guid accountId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        return db.OneTimeCodes.Where(code => code.AccountId == accountId && code.ConsumedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(code => code.ConsumedAt, now), ct);
+    }
+
+    private async Task SendCodeAsync(Account account, OneTimeCodePurpose purpose, CancellationToken ct, bool ignoreCooldown, bool swallowCooldown = false, string? language = null)
     {
         var now = clock.GetUtcNow();
         var open = await db.OneTimeCodes.Where(c => c.AccountId == account.Id && c.Purpose == purpose && c.ConsumedAt == null).ToListAsync(ct);
@@ -311,7 +365,13 @@ public sealed partial class AccountService(
             if (swallowCooldown) return;
             throw new AccountException("code_cooldown", 429);
         }
-        db.OneTimeCodes.RemoveRange(open);
+        var issued = await db.OneTimeCodes.CountAsync(c => c.AccountId == account.Id && c.Purpose == purpose && c.CreatedAt > now.AddDays(-1), ct);
+        if (issued >= Auth.MaxCodesPerDay)
+        {
+            if (swallowCooldown) return;
+            throw new AccountException("code_cooldown", 429);
+        }
+        foreach (var previous in open) previous.ConsumedAt = now;
 
         var code = TokenService.NewCode();
         db.OneTimeCodes.Add(new OneTimeCode
@@ -324,9 +384,12 @@ public sealed partial class AccountService(
         });
         await db.SaveChangesAsync(ct);
 
-        var message = purpose == OneTimeCodePurpose.VerifyEmail
-            ? EmailTemplates.VerifyEmail(account.Email, account.Username, code, Auth.CodeMinutes, account.Language)
-            : EmailTemplates.ResetPassword(account.Email, account.Username, code, Auth.CodeMinutes, account.Language);
+        var message = purpose switch
+        {
+            OneTimeCodePurpose.VerifyEmail => EmailTemplates.VerifyEmail(account.Email, account.Username, code, Auth.CodeMinutes, account.Language),
+            OneTimeCodePurpose.ResetPassword => EmailTemplates.ResetPassword(account.Email, account.Username, code, Auth.CodeMinutes, account.Language),
+            _ => EmailTemplates.AlreadyRegistered(account.Email, language ?? account.Language),
+        };
         try { await email.SendAsync(message, ct); }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -335,38 +398,109 @@ public sealed partial class AccountService(
         }
     }
 
-    private async Task ConsumeCodeAsync(Account account, OneTimeCodePurpose purpose, string code, CancellationToken ct)
+    private async Task ConsumeCodeAsync(Account account, OneTimeCodePurpose purpose, string code, CancellationToken ct, Action? validate = null)
     {
         var now = clock.GetUtcNow();
-        var stored = await db.OneTimeCodes
+        if (await db.FailedCodeAttempts.CountAsync(a => a.AccountId == account.Id && a.Purpose == purpose && a.CreatedAt > now.AddDays(-1), ct)
+            >= Auth.MaxFailedCodeAttemptsPerDay) throw new AccountException("invalid_code");
+        if (code is null || code.Length != 6 || !code.All(char.IsAsciiDigit))
+            await RejectCodeAsync(account.Id, purpose, now, ct);
+        var stored = await db.OneTimeCodes.AsNoTracking()
             .Where(c => c.AccountId == account.Id && c.Purpose == purpose && c.ConsumedAt == null && c.ExpiresAt > now)
             .OrderByDescending(c => c.CreatedAt)
             .FirstOrDefaultAsync(ct);
-        if (stored is null || stored.Attempts >= Auth.MaxCodeAttempts) throw new AccountException("invalid_code");
+        if (stored is null || stored.Attempts >= Auth.MaxCodeAttempts)
+        {
+            await RejectCodeAsync(account.Id, purpose, now, ct);
+            return;
+        }
 
-        stored.Attempts++;
+        var attempted = await db.OneTimeCodes.Where(c => c.Id == stored.Id && c.ConsumedAt == null && c.ExpiresAt > now && c.Attempts < Auth.MaxCodeAttempts)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(c => c.Attempts, c => c.Attempts + 1), ct);
+        if (attempted != 1) throw new AccountException("invalid_code");
         var expected = Encoding.UTF8.GetBytes(stored.CodeHash);
         var actual = Encoding.UTF8.GetBytes(tokens.HashCode(account.Id, purpose, (code ?? "").Trim()));
         if (!CryptographicOperations.FixedTimeEquals(expected, actual))
+            await RejectCodeAsync(account.Id, purpose, now, ct);
+        validate?.Invoke();
+        var consumed = await db.OneTimeCodes.Where(c => c.Id == stored.Id && c.ConsumedAt == null && c.ExpiresAt > now)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(c => c.ConsumedAt, now), ct);
+        if (consumed != 1) throw new AccountException("invalid_code");
+    }
+
+    private async Task RejectCodeAsync(Guid accountId, OneTimeCodePurpose purpose, DateTimeOffset now, CancellationToken ct)
+    {
+        db.FailedCodeAttempts.Add(new FailedCodeAttempt { AccountId = accountId, Purpose = purpose, CreatedAt = now });
+        await db.SaveChangesAsync(ct);
+        throw new AccountException("invalid_code");
+    }
+
+    private async Task<PasswordVerificationResult> VerifyPasswordAsync(Account account, string password, string? clientAddress, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        // O endereço já passou pelos proxies confiáveis.
+        var address = System.Net.IPAddress.TryParse(clientAddress, out var ip) ? ip.MapToIPv6().ToString() : "unknown";
+        var addressHash = TokenService.Hash(address);
+        var recent = db.PasswordAttempts.Where(a => a.AccountId == account.Id && a.CreatedAt > now.AddMinutes(-Auth.LoginFailureWindowMinutes));
+        var total = await recent.CountAsync(ct);
+        var pair = recent.Where(a => a.ClientAddressHash == addressHash && a.AppliesToPair);
+        var failures = await pair.CountAsync(ct);
+        var last = await pair.OrderByDescending(a => a.CreatedAt).FirstOrDefaultAsync(ct);
+        var backoff = TimeSpan.FromSeconds(Math.Min(Auth.LockoutMinutes * 60,
+            Auth.LoginBackoffSeconds * Math.Pow(2, Math.Min(30, failures - Auth.MaxFailedLogins))));
+        if (total >= Auth.MaxAccountFailedLogins ||
+            (failures >= Auth.MaxFailedLogins && last is not null && last.CreatedAt + backoff > now))
         {
-            await db.SaveChangesAsync(ct);
-            throw new AccountException("invalid_code");
+            Hasher.VerifyHashedPassword(new Account(), DummyHash, password);
+            throw new AccountException("invalid_credentials", 401);
         }
-        stored.ConsumedAt = now;
+        var verdict = Hasher.VerifyHashedPassword(account, account.PasswordHash, password);
+        if (verdict == PasswordVerificationResult.Failed)
+        {
+            db.PasswordAttempts.Add(new PasswordAttempt { AccountId = account.Id, ClientAddressHash = addressHash, CreatedAt = now });
+            await db.SaveChangesAsync(ct);
+            throw new AccountException("invalid_credentials", 401);
+        }
+        // O sucesso zera só o par; o teto global mantém as falhas.
+        await db.PasswordAttempts.Where(a => a.AccountId == account.Id && a.ClientAddressHash == addressHash && a.AppliesToPair)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(a => a.AppliesToPair, false), ct);
+        account.FailedLoginCount = 0;
+        account.LockedUntil = null;
+        return verdict;
+    }
+
+    private async Task<IDisposable> LockAccountAsync(Account account, CancellationToken ct)
+    {
+        var gate = AccountLocks[(account.Id.GetHashCode() & int.MaxValue) % AccountLocks.Length];
+        await gate.WaitAsync(ct);
+        try
+        {
+            await db.Entry(account).ReloadAsync(ct);
+            if (db.Entry(account).State == EntityState.Detached) throw new AccountException("invalid_session", 401);
+            return new AccountLock(gate);
+        }
+        catch { gate.Release(); throw; }
+    }
+
+    private sealed class AccountLock(SemaphoreSlim gate) : IDisposable
+    {
+        public void Dispose() => gate.Release();
     }
 
     private static AccountDto ToDto(Account account) => new(account.Id, account.Username, account.DisplayName, account.Email);
 
     private static string NormalizeEmail(string value)
     {
-        var normalized = (value ?? "").Trim().ToLowerInvariant();
+        if (value is null || value.Length > 320) throw new AccountException("invalid_email");
+        var normalized = value.Trim().ToLowerInvariant();
         if (normalized.Length > 254 || !EmailPattern().IsMatch(normalized)) throw new AccountException("invalid_email");
         return normalized;
     }
 
     private static string NormalizeUsername(string value)
     {
-        var normalized = (value ?? "").Trim().ToLowerInvariant();
+        if (value is null || value.Length > 64) throw new AccountException("invalid_username");
+        var normalized = value.Trim().ToLowerInvariant();
         if (!UsernamePattern().IsMatch(normalized)) throw new AccountException("invalid_username");
         if (ReservedUsernames.Contains(normalized)) throw new AccountException("username_reserved");
         return normalized;

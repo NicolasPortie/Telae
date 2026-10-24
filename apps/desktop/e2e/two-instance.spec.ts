@@ -58,10 +58,11 @@ test.describe('duas instâncias Telae', () => {
     try {
       const page = await firstWindow(app)
       await enterWithName(page, 'JanelaE2E')
-      await expect(page.locator('header svg')).toHaveCount(1) // Somente o ícone de configurações.
+      await expect(page.locator('header svg:not([data-brand])')).toHaveCount(1) // Fora a marca, só o ícone de configurações.
       await expect(page.locator('header').getByText(/Pronto|Aguardando seu amigo/)).toHaveCount(0)
       await page.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(page.getByRole('heading', { name: /O que você quer mostrar/ })).toBeVisible()
+      await page.getByRole('tab', { name: /Janelas/ }).click()
       await expect(page.getByRole('radiogroup', { name: 'Janelas' })).toBeVisible({ timeout: 15_000 })
       const windowChoices = page.getByRole('radiogroup', { name: 'Janelas' }).getByRole('radio')
       await windowChoices.first().focus()
@@ -148,7 +149,7 @@ test.describe('duas instâncias Telae', () => {
       await expect(progress).toHaveCount(0)
       await expect(sharer.getByRole('status')).toContainText('O Telaê reabre sozinho.')
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'error', version: '0.1.16', message: 'Falha de conexão durante a atualização.' }))
-      await expect(sharer.getByRole('button', { name: 'Tentar novamente', exact: true })).toBeVisible()
+      await expect(sharer.getByRole('button', { name: 'Tentar de novo', exact: true })).toBeVisible()
       await expect.poll(insideViewport).toBe(true)
       await sharerApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('update:status', { phase: 'current', version: '0.1.16' }))
       await sharer.screenshot({ path: test.info().outputPath('layout-picker-minimum.png'), fullPage: true, style: 'img { visibility: hidden !important; }' })
@@ -168,7 +169,7 @@ test.describe('duas instâncias Telae', () => {
       }
 
       await submitFriend(viewer, 'ninguem_aqui')
-      await expect(viewer.getByRole('alert')).toContainText(/Não achei ninguém/, { timeout: 30_000 })
+      await expect(viewer.getByRole('alert')).toContainText(/Não deu pra achar ninguém/, { timeout: 30_000 })
     } finally {
       await sharerApp.close()
       await viewerApp.close()
@@ -285,11 +286,12 @@ test.describe('duas instâncias Telae', () => {
         }, bounds)
         await expect.poll(() => remoteVideo.evaluate((video) => {
           const rect = video.getBoundingClientRect()
-          const header = document.querySelector('header')!.getBoundingClientRect()
+          const frame = video.closest('.telae-viewer-canvas')!.getBoundingClientRect()
           return {
             fit: getComputedStyle(video).objectFit,
-            fullWidth: Math.abs(rect.width - (window.innerWidth - 26)) < 2,
-            fullHeight: Math.abs(rect.height - (window.innerHeight - header.height - 26)) < 2,
+            // O vídeo preenche a moldura do player, e a moldura usa a largura da janela (menos as margens).
+            fullWidth: Math.abs(rect.width - frame.width) < 4 && frame.width >= window.innerWidth - 56,
+            fullHeight: Math.abs(rect.height - frame.height) < 4 && frame.height > window.innerHeight * 0.45,
             noOverflow: document.documentElement.scrollHeight <= window.innerHeight,
           }
         })).toEqual({ fit: 'contain', fullWidth: true, fullHeight: true, noOverflow: true })

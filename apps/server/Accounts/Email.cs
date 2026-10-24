@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Options;
@@ -27,7 +28,7 @@ public sealed class SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpE
         var security = Enum.TryParse<SecureSocketOptions>(smtp.Security, ignoreCase: true, out var parsed)
             ? parsed
             : SecureSocketOptions.StartTls;
-        using var client = new SmtpClient();
+        using var client = new SmtpClient { Timeout = 10_000 };
         await client.ConnectAsync(smtp.Host, smtp.Port, security, cancellationToken);
         if (!string.IsNullOrWhiteSpace(smtp.User))
             await client.AuthenticateAsync(smtp.User, smtp.Password, cancellationToken);
@@ -37,13 +38,49 @@ public sealed class SmtpEmailSender(IOptions<SmtpOptions> options, ILogger<SmtpE
     }
 }
 
-/// <summary>Sem SMTP configurado (desenvolvimento): o código vai para o log do servidor em vez de ser enviado.</summary>
-public sealed class LogEmailSender(ILogger<LogEmailSender> logger) : IEmailSender
+public sealed class UnavailableEmailSender : IEmailSender
 {
+    public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default) =>
+        throw new AccountException("email_unavailable", 503);
+}
+
+/// <summary>Só para desenvolvimento sem SMTP: grava cada mensagem num arquivo local, fora dos logs.</summary>
+public sealed class DevelopmentFileEmailSender(string directory) : IEmailSender
+{
+    public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(directory);
+        var file = Path.Combine(directory, $"{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss-fff}-{Guid.NewGuid():N}.txt");
+        await File.WriteAllTextAsync(file, $"Para: {message.To}\nAssunto: {message.Subject}\n\n{message.TextBody}", cancellationToken);
+    }
+}
+
+public sealed class QueuedEmailSender(SmtpEmailSender sender, ILogger<QueuedEmailSender> logger) : BackgroundService, IEmailSender
+{
+    private readonly Channel<EmailMessage> _messages = Channel.CreateBounded<EmailMessage>(new BoundedChannelOptions(256)
+    {
+        SingleReader = true,
+        FullMode = BoundedChannelFullMode.Wait,
+    });
+
     public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
     {
-        logger.LogWarning("SMTP não configurado. E-mail para {To}: {Subject}\n{Body}", message.To, message.Subject, message.TextBody);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!_messages.Writer.TryWrite(message)) throw new AccountException("email_unavailable", 503);
         return Task.CompletedTask;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var message in _messages.Reader.ReadAllAsync(stoppingToken))
+        {
+            try { await sender.SendAsync(message, stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception)
+            {
+                logger.LogWarning("Falha no envio de e-mail transacional.");
+            }
+        }
     }
 }
 
@@ -72,7 +109,7 @@ public static class EmailTemplates
         (string Subject, string Greeting, string Lead, string Footer) en, string? code)
     {
         var text = language.StartsWith("en", StringComparison.OrdinalIgnoreCase) ? en : pt;
-        var plain = $"{text.Greeting}\n\n{text.Lead}\n{(code is null ? "" : $"\n    {code}\n")}\n{text.Footer}\n\n— Telaê";
+        var plain = $"{text.Greeting}\n\n{text.Lead}\n{(code is null ? "" : $"\n    {code}\n")}\n{text.Footer}\n\nTelaê";
         var codeBlock = code is null ? "" : $"<p style=\"font:600 32px ui-monospace,Consolas,monospace;letter-spacing:.3em;margin:24px 0;color:#111\">{code}</p>";
         var html = $"""
             <div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#222;max-width:480px;margin:auto;padding:24px">

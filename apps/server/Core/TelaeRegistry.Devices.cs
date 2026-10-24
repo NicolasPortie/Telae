@@ -10,10 +10,10 @@ public sealed partial class TelaeRegistry
     public DeviceSnapshot RegisterDevice(string deviceId, string displayName, string connectionId, string deviceSecret)
     {
         if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128)
-            throw new TelaeDomainException("device_id_required", "O dispositivo não possui um identificador válido.");
+            throw new TelaeDomainException("device_id_required", "Não deu pra identificar este aparelho. Reinicia o app e tenta de novo.");
 
         if (deviceSecret is null || deviceSecret.Length != 64 || !deviceSecret.All(Uri.IsHexDigit))
-            throw new TelaeDomainException("device_unauthorized", "Atualize o aplicativo para registrar este dispositivo com segurança.");
+            throw new TelaeDomainException("device_unauthorized", "Atualiza o app pra registrar este aparelho com segurança.");
         return RegisterCore(deviceId, displayName, connectionId, SHA256.HashData(Convert.FromHexString(deviceSecret)));
     }
 
@@ -21,7 +21,7 @@ public sealed partial class TelaeRegistry
     public DeviceSnapshot RegisterAccountDevice(string accountId, string username, string displayName, string connectionId)
     {
         if (string.IsNullOrWhiteSpace(accountId) || accountId.Length > 128)
-            throw new TelaeDomainException("device_id_required", "O dispositivo não possui um identificador válido.");
+            throw new TelaeDomainException("device_id_required", "Não deu pra identificar este aparelho. Reinicia o app e tenta de novo.");
         return RegisterCore(accountId, displayName, connectionId, secretHash: null, friendCode: NormalizeFriendCode(username));
     }
 
@@ -50,9 +50,23 @@ public sealed partial class TelaeRegistry
     {
         lock (_gate)
         {
-            if (!_profiles.Remove(accountId)) return;
+            if (!_profiles.Remove(accountId, out var profile)) return;
             _declaredFriendsByDevice.Remove(accountId);
+            foreach (var friends in _declaredFriendsByDevice.Values) friends.Remove(profile.FriendCode);
             _dismissedRequests.Remove(accountId);
+            _lastPreviewByDevice.Remove(accountId);
+            if (_connectionByDevice.Remove(accountId, out var connectionId))
+                _deviceByConnection.Remove(connectionId);
+            _disconnectGenerationByDevice.Remove(accountId);
+            _sessionsBySharer.Remove(accountId);
+            foreach (var session in _sessionsBySharer.Values)
+            {
+                session.ViewerDeviceIds.Remove(accountId);
+                session.BlockedViewerDeviceIds.Remove(accountId);
+            }
+            foreach (var dismissed in _dismissedRequests.Values) dismissed.Remove(accountId);
+            foreach (var code in _invitesByCode.Values.Where(invite => invite.SharerDeviceId == accountId).Select(invite => invite.Code).ToArray())
+                _invitesByCode.Remove(code);
             PersistProfiles();
         }
     }
@@ -60,7 +74,7 @@ public sealed partial class TelaeRegistry
     private void EnsureFriendCodeFreeLocked(string deviceId, string friendCode)
     {
         if (_profiles.Values.Any(p => p.DeviceId != deviceId && string.Equals(p.FriendCode, friendCode, StringComparison.OrdinalIgnoreCase)))
-            throw new TelaeDomainException("friend_code_conflict", "Esse @ já está em uso por outro perfil.");
+            throw new TelaeDomainException("friend_code_conflict", "Esse @ já tem dono. Tenta outro.");
     }
 
     private DeviceSnapshot RegisterCore(string deviceId, string displayName, string connectionId, byte[]? secretHash, string? friendCode = null)
@@ -72,9 +86,10 @@ public sealed partial class TelaeRegistry
             var profileChanged = false;
             string? previousName = null;
             if (_deviceByConnection.TryGetValue(connectionId, out var registeredDevice) && registeredDevice != deviceId)
-                throw new TelaeDomainException("device_mismatch", "Esta conexão já pertence a outro dispositivo.");
+                throw new TelaeDomainException("device_mismatch", "Esse aparelho já está sendo usado em outra conexão.");
             if (!_profiles.TryGetValue(deviceId, out var profile))
             {
+                if (secretHash is not null) RequireLegacyCapacityLocked();
                 if (friendCode is not null) EnsureFriendCodeFreeLocked(deviceId, friendCode);
                 profile = new ProfileRecord(deviceId, displayName, friendCode ?? GenerateUniqueFriendCode())
                 {
@@ -91,7 +106,7 @@ public sealed partial class TelaeRegistry
                     : profile.DeviceSecretHash is not null &&
                       CryptographicOperations.FixedTimeEquals(secretHash, Convert.FromHexString(profile.DeviceSecretHash));
                 if (!credentialMatches)
-                    throw new TelaeDomainException("device_unauthorized", "A credencial deste dispositivo é inválida. Atualize o aplicativo e tente novamente.");
+                    throw new TelaeDomainException("device_unauthorized", "Não deu pra confirmar este aparelho. Atualiza o app e tenta de novo.");
                 profileChanged = profile.DisplayName != displayName;
                 previousName = profile.DisplayName;
                 profile.DisplayName = displayName;
@@ -118,7 +133,7 @@ public sealed partial class TelaeRegistry
             if (_connectionByDevice.TryGetValue(deviceId, out var previousConnection))
                 _deviceByConnection.Remove(previousConnection);
 
-            _disconnectGenerationByDevice[deviceId] = NextDisconnectGenerationLocked(deviceId);
+            _disconnectGenerationByDevice[deviceId] = NextDisconnectGenerationLocked();
             _connectionByDevice[deviceId] = connectionId;
             _deviceByConnection[connectionId] = deviceId;
             return ToDeviceSnapshot(profile);
@@ -158,26 +173,45 @@ public sealed partial class TelaeRegistry
         }
     }
 
+    public DeviceSnapshot ForObserver(string observerDeviceId, DeviceSnapshot device)
+    {
+        lock (_gate)
+        {
+            return observerDeviceId == device.DeviceId || AreMutualFriendsLocked(observerDeviceId, device.DeviceId)
+                ? device
+                : device with { Status = "offline", IsSharing = false, ActiveQualityProfile = null };
+        }
+    }
+
+    // O teto vale só para aparelhos legados, que qualquer um cria sem conta. Perfis de conta já são
+    // limitados pelo cadastro; contá-los aqui deixaria quem enche o registro barrar todas as contas.
+    private void RequireLegacyCapacityLocked()
+    {
+        if (_profiles.Values.Count(profile => profile.DeviceSecretHash is not null) >= MaxProfiles)
+            throw new TelaeDomainException("server_full", "O servidor está cheio. Tenta de novo mais tarde.");
+    }
+
     private DeviceSnapshot ToDeviceSnapshot(ProfileRecord profile)
     {
         var online = _connectionByDevice.ContainsKey(profile.DeviceId);
         _sessionsBySharer.TryGetValue(profile.DeviceId, out var activeSession);
-        var status = activeSession is not null ? "transmitting" : online ? "online" : "offline";
+        var sharing = online && activeSession is not null;
+        var status = sharing ? "transmitting" : online ? "online" : "offline";
         return new DeviceSnapshot(
             profile.DeviceId,
             profile.DisplayName,
             profile.FriendCode,
             status,
-            activeSession is not null,
-            activeSession?.QualityProfile);
+            sharing,
+            sharing ? activeSession!.QualityProfile : null);
     }
 
     private void RequireOnlineDevice(string deviceId)
     {
         if (!_profiles.ContainsKey(deviceId))
-            throw new TelaeDomainException("device_not_registered", "O dispositivo ainda não foi registrado.");
+            throw new TelaeDomainException("device_not_registered", "Esse aparelho ainda não está conectado. Reinicia o app e tenta de novo.");
         if (!_connectionByDevice.ContainsKey(deviceId))
-            throw new TelaeDomainException("device_offline", "O dispositivo não está online.");
+            throw new TelaeDomainException("device_offline", "Essa pessoa está offline agora.");
     }
 
     private string GenerateUniqueFriendCode()

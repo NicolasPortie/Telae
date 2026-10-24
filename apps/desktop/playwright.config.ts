@@ -1,3 +1,5 @@
+import os from 'node:os'
+import path from 'node:path'
 import { defineConfig } from '@playwright/test'
 
 const externalSignalingUrl = process.env.TELAE_E2E_SIGNALING_URL?.replace(/\/+$/, '')
@@ -32,7 +34,7 @@ export default defineConfig({
         url: 'http://localhost:5015/health',
         reuseExistingServer: !process.env.CI,
         // Banco SQLite local e cadastro sem código por e-mail: só para testes automatizados.
-        env: { ASPNETCORE_ENVIRONMENT: 'Development', Auth__RequireEmailVerification: 'false', Auth__StrictRequestsPerMinute: '1000', Auth__RequestsPerMinute: '1000' },
+        env: { ASPNETCORE_ENVIRONMENT: 'Development', Accounts__DevelopmentDatabase: path.join(os.tmpdir(), `telae-e2e-${Date.now()}.db`), Auth__RequireEmailVerification: 'false', Auth__StrictRequestsPerMinute: '1000', Auth__RequestsPerMinute: '1000' },
         timeout: 120_000,
       },
 })

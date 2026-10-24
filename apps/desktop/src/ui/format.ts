@@ -19,7 +19,7 @@ export function qualityOptions(): QualityOption[] {
       detail: t('Leve. Roda em PC simples e em internet fraca.') },
     { value: '1080p30', label: '1080p', resolution: '1080p', fps: t('30 FPS'), hint: t('1080p30 filmes'),
       detail: t('Bom pra filme e pra aula. É o padrão.') },
-    { value: '1080p60', label: '1080p60', resolution: '1080p', fps: t('60 FPS'), hint: t('Alta taxa de quadros'),
+    { value: '1080p60', label: '1080p60', resolution: '1080p', fps: t('60 FPS'), hint: t('Mais fluidez'),
       detail: t('Pra jogo e vídeo rápido. Pede mais do PC e do upload.') },
     { value: '1440p30', label: '2K · 1440p', resolution: '2K · 1440p', fps: t('30 FPS'), hint: t('Maior nitidez'),
       detail: t('O mais nítido pra texto em tela grande. Exige PC e rede fortes.') },

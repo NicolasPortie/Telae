@@ -22,6 +22,7 @@ export class AuthSession {
   private refreshToken: string | null = null
   private access: { token: string; expiresAt: number } | null = null
   private renewing: Promise<string | null> | null = null
+  private generation = 0
 
   private readonly server: AuthServerClient
   private readonly storage: SessionStorage
@@ -65,14 +66,19 @@ export class AuthSession {
 
   private async renew(): Promise<string | null> {
     const refreshToken = this.refreshToken
+    const generation = this.generation
     if (!refreshToken) return null
     try {
       const session = await this.server.refresh(refreshToken)
-      this.adopt(session, { notify: false })
+      if (generation !== this.generation) {
+        await this.server.logout(session.refreshToken).catch(() => undefined)
+        return null
+      }
+      this.adopt(session, { notify: false, newSession: false })
       return session.accessToken
     } catch (error) {
       if (error instanceof AuthError && error.code === 'invalid_session') {
-        this.clear()
+        if (generation === this.generation) this.clear()
         return null
       }
       // Rede ou servidor fora do ar: usa o token atual se ainda valer.
@@ -80,7 +86,8 @@ export class AuthSession {
     }
   }
 
-  private adopt(session: ServerSession, { notify }: { notify: boolean }): AccountInfo {
+  private adopt(session: ServerSession, { notify, newSession = true }: { notify: boolean; newSession?: boolean }): AccountInfo {
+    if (newSession) this.generation++
     const changed = notify || this.account?.id !== session.account.id || this.account?.displayName !== session.account.displayName
     this.account = session.account
     this.refreshToken = session.refreshToken
@@ -90,7 +97,21 @@ export class AuthSession {
     return session.account
   }
 
+  private async accept(pending: Promise<ServerSession>, notify: boolean, generation = this.generation): Promise<AccountInfo> {
+    const session = await pending
+    if (generation !== this.generation) {
+      await this.server.logout(session.refreshToken).catch(() => undefined)
+      throw new AuthError('invalid_session')
+    }
+    return this.adopt(session, { notify })
+  }
+
+  private requireCurrent(generation: number): void {
+    if (generation !== this.generation) throw new AuthError('invalid_session')
+  }
+
   private clear() {
+    this.generation++
     this.account = null
     this.refreshToken = null
     this.access = null
@@ -111,14 +132,16 @@ export class AuthSession {
 
   register(input: { email: string; username: string; password: string; language: string }): Promise<AuthOutcome<RegisterOutcome>> {
     return this.outcome(async () => {
+      const generation = this.generation
       const result = await this.server.register(input)
-      const account = result.session ? this.adopt(result.session, { notify: true }) : null
+      const account = result.session ? await this.accept(Promise.resolve(result.session), true, generation) : null
+      if (!result.session) this.requireCurrent(generation)
       return { verificationRequired: result.verificationRequired, account }
     })
   }
 
-  verifyEmail(identifier: string, code: string): Promise<AuthOutcome<AccountInfo>> {
-    return this.outcome(async () => this.adopt(await this.server.verifyEmail(identifier, code), { notify: true }))
+  verifyEmail(identifier: string, code: string, password: string): Promise<AuthOutcome<AccountInfo>> {
+    return this.outcome(() => this.accept(this.server.verifyEmail(identifier, code, password), true))
   }
 
   resendVerification(identifier: string): Promise<AuthOutcome> {
@@ -126,7 +149,7 @@ export class AuthSession {
   }
 
   login(identifier: string, password: string): Promise<AuthOutcome<AccountInfo>> {
-    return this.outcome(async () => this.adopt(await this.server.login(identifier, password), { notify: true }))
+    return this.outcome(() => this.accept(this.server.login(identifier, password), true))
   }
 
   async logout(): Promise<void> {
@@ -145,8 +168,11 @@ export class AuthSession {
 
   updateDisplayName(displayName: string): Promise<AuthOutcome<AccountInfo>> {
     return this.outcome(async () => {
+      const generation = this.generation
       const token = await this.requireToken()
+      this.requireCurrent(generation)
       const account = await this.server.updateDisplayName(token, displayName)
+      this.requireCurrent(generation)
       this.account = account
       if (this.refreshToken) this.storage.save({ refreshToken: this.refreshToken, account })
       this.onChange(account)
@@ -156,16 +182,21 @@ export class AuthSession {
 
   changePassword(currentPassword: string, newPassword: string): Promise<AuthOutcome> {
     return this.outcome(async () => {
+      const generation = this.generation
       const token = await this.requireToken()
+      this.requireCurrent(generation)
       // O servidor encerra as demais sessões e devolve uma nova para este dispositivo.
-      this.adopt(await this.server.changePassword(token, currentPassword, newPassword), { notify: false })
+      await this.accept(this.server.changePassword(token, currentPassword, newPassword), false, generation)
     })
   }
 
   deleteAccount(password: string): Promise<AuthOutcome> {
     return this.outcome(async () => {
+      const generation = this.generation
       const token = await this.requireToken()
+      this.requireCurrent(generation)
       await this.server.deleteAccount(token, password)
+      this.requireCurrent(generation)
       this.clear()
     })
   }

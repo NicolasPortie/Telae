@@ -1,15 +1,18 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Info, LogOut, Server, ShieldCheck, SlidersHorizontal, UserRound, type LucideIcon } from 'lucide-react'
+import { avatarInitial, avatarTone } from '../ui/avatar'
 import { LANGUAGES, resolveLocale, setLocale, t } from '../i18n'
 import type { AccountInfo, AppSettings } from '../shared/contracts'
 import { authErrorMessage } from './authErrors'
+import { BrandMark } from './BrandMark'
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+/** Bloco de ajustes. Quando o título só repetiria a aba escolhida, ele fica apenas para leitores de tela. */
+function Section({ title, description, hideTitle = false, children }: { title: string; description?: string; hideTitle?: boolean; children: ReactNode }) {
   return (
-    <section aria-label={title} className="border-b border-line py-7 first:pt-0 last:border-b-0">
-      <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+    <section aria-label={title} className="telae-settings-section">
+      <h2 className={hideTitle ? 'sr-only' : 'text-[17px] font-semibold tracking-[-0.02em]'}>{title}</h2>
       {description && <p className="mt-1 max-w-[56ch] text-[13px] leading-relaxed text-ink-3">{description}</p>}
-      <div className="mt-5">{children}</div>
+      <div className={hideTitle && !description ? '' : 'mt-5'}>{children}</div>
     </section>
   )
 }
@@ -22,12 +25,12 @@ function Toggle({ label, hint, checked, disabled, onChange }: {
   onChange: (value: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-6 py-4 last:pb-0">
+    <div className="telae-setting-row">
       <div className="min-w-0">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-ink-3">{hint}</p>
+        <p className="text-[15px] font-medium">{label}</p>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-3">{hint}</p>
       </div>
-      <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className="switch shrink-0">
+      <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className="telae-press switch shrink-0">
         <span aria-hidden="true" className="switch-thumb" />
       </button>
     </div>
@@ -107,7 +110,7 @@ function AccountSecurity() {
         ) : (
           <form onSubmit={event => void deleteAccount(event)} className="grid gap-3">
             <div>
-              <label htmlFor="delete-password" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Confirme com sua senha')}</label>
+              <label htmlFor="delete-password" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Confirma com sua senha')}</label>
               <input id="delete-password" type="password" value={deletePassword} onChange={event => setDeletePassword(event.target.value)} autoComplete="current-password" maxLength={128} className="field" />
             </div>
             <div className="flex flex-wrap gap-2">
@@ -124,12 +127,12 @@ function AccountSecurity() {
 
 type Tab = 'account' | 'general' | 'security' | 'server' | 'about'
 
-const tabs = (): { id: Tab; label: string }[] => [
-  { id: 'account', label: t('Conta') },
-  { id: 'general', label: t('Geral') },
-  { id: 'security', label: t('Segurança') },
-  { id: 'server', label: t('Servidor') },
-  { id: 'about', label: t('Sobre') },
+const tabs = (): { id: Tab; label: string; Icon: LucideIcon }[] => [
+  { id: 'account', label: t('Conta'), Icon: UserRound },
+  { id: 'general', label: t('Geral'), Icon: SlidersHorizontal },
+  { id: 'security', label: t('Segurança'), Icon: ShieldCheck },
+  { id: 'server', label: t('Servidor'), Icon: Server },
+  { id: 'about', label: t('Sobre'), Icon: Info },
 ]
 
 /** Configurações em duas colunas: seções à esquerda, painel da seção à direita. */
@@ -175,69 +178,77 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
       const environment = await window.telae.setSignalingUrl(serverUrl)
       setServerUrl(environment.signalingUrl)
       setSavedServerUrl(environment.signalingUrl)
-      setServerMessage({ kind: 'ok', text: t('Endereço salvo. Reinicie o Telaê pra usar o novo servidor.') })
+      setServerMessage({ kind: 'ok', text: t('Endereço salvo. Reinicia o Telaê pra usar o novo servidor.') })
     } catch (error) {
-      setServerMessage({ kind: 'error', text: error instanceof Error ? error.message : t('Não deu pra salvar o endereço.') })
+      setServerMessage({ kind: 'error', text: error instanceof Error ? error.message : t('Não deu pra salvar o endereço. Tenta de novo.') })
     } finally {
       setServerBusy(false)
     }
   }
 
   return (
-    <section aria-labelledby="settings-title" className="telae-panel-enter">
+    <section aria-labelledby="settings-title" className="telae-panel-enter telae-settings">
       <button type="button" onClick={onBack} className="telae-press btn btn-ghost btn-sm -ml-2">
-        <ArrowLeft size={16} aria-hidden="true" /> {t('Voltar')}
+        <ArrowLeft size={16} strokeWidth={1.75} aria-hidden="true" /> {t('Voltar')}
       </button>
-      <h1 id="settings-title" className="display mt-3 text-[44px]">{t('Configurações')}</h1>
+      <h1 id="settings-title" className="telae-session-title mt-3">{t('Configurações')}</h1>
 
-      <div className="mt-8 grid items-start gap-x-12 gap-y-6 md:grid-cols-[190px_minmax(0,1fr)]">
-        <div role="tablist" aria-label={t('Seções')} aria-orientation="vertical" className="flex gap-1 overflow-x-auto md:flex-col md:overflow-visible">
-          {tabs().map(item => (
+      <div className="telae-settings-layout">
+        <div role="tablist" aria-label={t('Seções')} aria-orientation="vertical" className="telae-settings-tabs">
+          {tabs().map(({ id, label, Icon }) => (
             <button
-              key={item.id}
+              key={id}
               type="button"
               role="tab"
-              id={`tab-${item.id}`}
-              aria-selected={tab === item.id}
+              id={`tab-${id}`}
+              aria-selected={tab === id}
               aria-controls="settings-panel"
-              onClick={() => setTab(item.id)}
-              className={`telae-press rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors ${tab === item.id ? 'bg-active text-ink' : 'text-ink-3 hover:text-ink'}`}
+              onClick={() => setTab(id)}
+              className="telae-press telae-settings-tab"
             >
-              {item.label}
+              <Icon size={18} strokeWidth={1.75} aria-hidden="true" />
+              {label}
             </button>
           ))}
         </div>
 
-        <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="min-w-0 max-w-[560px]">
+        <div key={tab} role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="telae-settings-panel">
           {tab === 'account' && (
-            <Section title={t('Conta')} description={account ? t('Você entrou como @{username}.', { username: account.username }) : undefined}>
+            <Section title={t('Conta')} hideTitle>
+              {account && (
+                <div className="telae-identity">
+                  <span aria-hidden="true" className="telae-avatar telae-identity-avatar" style={{ background: avatarTone(name || account.username) }}>{avatarInitial(name || account.username)}</span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[22px] font-semibold tracking-[-0.025em]">{account.displayName}</p>
+                    <p className="mt-1 truncate text-[14px] text-ink-3">@{account.username} · {account.email}</p>
+                  </div>
+                </div>
+              )}
               <form onSubmit={event => { event.preventDefault(); onSaveName() }}>
                 <label htmlFor="profile-name" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Nome de exibição')}</label>
                 <div className="flex flex-wrap gap-2">
                   <input id="profile-name" value={name} onChange={event => onNameChange(event.target.value)} maxLength={32} autoComplete="off" className="field min-w-[200px] flex-1" />
-                  <button type="submit" disabled={nameBusy} className="telae-press btn btn-primary h-11">{nameBusy ? t('Salvando…') : t('Salvar')}</button>
+                  <button type="submit" disabled={nameBusy || !name.trim() || name.trim() === (account?.displayName ?? '')} className="telae-press btn btn-primary h-11">{nameBusy ? t('Salvando…') : t('Salvar')}</button>
                 </div>
                 <p className="mt-1.5 text-xs text-ink-3">{t('É o nome que seus amigos veem.')}</p>
                 {nameError && <p role="alert" className="mt-2 text-sm text-danger-soft">{nameError}</p>}
               </form>
-              {account && (
-                <dl className="mt-6 grid gap-2.5 border-t border-line pt-6 text-sm">
-                  <div className="flex items-baseline justify-between gap-6"><dt className="text-ink-3">{t('E-mail')}</dt><dd className="font-mono text-[13px]">{account.email}</dd></div>
-                  <div className="flex items-baseline justify-between gap-6"><dt className="text-ink-3">{t('Nome de usuário')}</dt><dd className="font-mono text-[13px]">@{account.username}</dd></div>
-                </dl>
-              )}
-              <div className="mt-6">
-                <button type="button" onClick={onSignOut} className="telae-press btn btn-secondary">{t('Sair da conta')}</button>
+              <div className="telae-setting-row mt-2">
+                <div className="min-w-0">
+                  <p className="text-[15px] font-medium">{t('Sair da conta')}</p>
+                  <p className="mt-1 text-[13px] leading-relaxed text-ink-3">{t('Você entra de novo quando quiser.')}</p>
+                </div>
+                <button type="button" onClick={onSignOut} className="telae-press btn btn-secondary shrink-0"><LogOut size={16} strokeWidth={1.75} aria-hidden="true" />{t('Sair da conta')}</button>
               </div>
             </Section>
           )}
 
           {tab === 'general' && (
-            <Section title={t('Geral')}>
-              <div className="divide-y divide-line">
-                <div className="flex items-center justify-between gap-6 pb-4">
-                  <label htmlFor="language" className="text-sm font-medium">{t('Idioma')}</label>
-                  <select id="language" value={settings?.language ?? 'auto'} disabled={!settings} onChange={event => updateSetting({ language: event.target.value as AppSettings['language'] })} className="field h-10 w-auto min-w-[200px] text-[13px]">
+            <Section title={t('Geral')} hideTitle>
+              <div className="telae-setting-rows">
+                <div className="telae-setting-row">
+                  <label htmlFor="language" className="text-[15px] font-medium">{t('Idioma')}</label>
+                  <select id="language" value={settings?.language ?? 'auto'} disabled={!settings} onChange={event => updateSetting({ language: event.target.value as AppSettings['language'] })} className="telae-select min-w-[200px]">
                     {LANGUAGES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
@@ -247,10 +258,10 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
             </Section>
           )}
 
-          {tab === 'security' && (account ? <AccountSecurity /> : <p className="text-sm text-ink-3">{t('Entre na sua conta pra continuar.')}</p>)}
+          {tab === 'security' && (account ? <AccountSecurity /> : <p className="text-sm text-ink-3">{t('Entra na sua conta pra continuar.')}</p>)}
 
           {tab === 'server' && (
-            <Section title={t('Servidor de sinalização')} description={t('É quem apresenta vocês uns aos outros. Imagem e som vão direto de um PC pro outro, sem passar por ele. Quer hospedar o seu? Veja Self-hosting no README.')}>
+            <Section title={t('Servidor do Telaê')} description={t('É quem apresenta vocês uns aos outros. Imagem e som vão direto de um PC pro outro, sem passar por ele. Quer hospedar o seu? Veja Self-hosting no README.')}>
               <form onSubmit={event => { event.preventDefault(); void saveServer() }}>
                 <label htmlFor="server-url" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Endereço')}</label>
                 <div className="flex flex-wrap gap-2">
@@ -263,9 +274,17 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
           )}
 
           {tab === 'about' && (
-            <Section title={t('Sobre')}>
-              <dl className="grid gap-2.5 text-sm">
-                <div className="flex items-baseline justify-between gap-6"><dt className="text-ink-3">{t('Versão')}</dt><dd className="tnum font-mono text-[13px]">{version ? `v${version}` : '—'}</dd></div>
+            <Section title={t('Sobre')} hideTitle>
+              <div className="flex items-center gap-4">
+                <BrandMark size={52} />
+                <div>
+                  <p className="text-[17px] font-semibold tracking-[-0.02em]">Telaê {version ? <span className="tnum font-normal text-ink-3">v{version}</span> : null}</p>
+                  <p className="mt-1 text-[13px] text-ink-3">{t('Passa a tela pros amigos, com imagem nítida e som junto.')}</p>
+                </div>
+              </div>
+              <dl className="telae-facts mt-6">
+                <div className="flex items-baseline justify-between gap-6"><dt className="text-ink-3">{t('Licença')}</dt><dd className="text-[14px] font-medium">MIT</dd></div>
+                <div className="flex items-baseline justify-between gap-6"><dt className="text-ink-3">{t('Código-fonte')}</dt><dd className="select-text text-[14px] font-medium">github.com/NicolasPortie/Telae</dd></div>
               </dl>
             </Section>
           )}

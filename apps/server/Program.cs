@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddTrustedClientAddress(builder.Configuration);
 builder.Services.AddTelaeAccounts(builder.Configuration, builder.Environment);
 builder.Services.AddAuthRateLimits();
+builder.Services.AddHsts(options => options.MaxAge = TimeSpan.FromDays(180));
 
 builder.Services.AddSignalR(options =>
 {
@@ -39,25 +40,13 @@ builder.Services.AddSingleton<DisconnectCoordinator>();
 builder.Services.AddSingleton<PresenceSubscriptions>();
 builder.Services.AddSingleton<InputLimitFilter>();
 
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy
-            .SetIsOriginAllowed(origin =>
-                origin.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase) ||
-                origin.StartsWith("https://localhost:", StringComparison.OrdinalIgnoreCase) ||
-                origin.StartsWith("file://", StringComparison.OrdinalIgnoreCase) ||
-                origin.Equals("null", StringComparison.OrdinalIgnoreCase))
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
-    });
-});
+builder.Services.AddTelaeCors();
 
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+if (!app.Environment.IsDevelopment()) app.UseHsts();
+app.UseTelaeHttpSecurity();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -97,7 +86,11 @@ app.MapGet("/health", (IOptions<IceConfiguration> ice, IOptions<TurnConfiguratio
         accounts = new { emailConfigured = !string.IsNullOrWhiteSpace(smtp.Value.Host), legacyDevices = auth.Value.AllowLegacyDevices },
     }));
 app.MapAuth();
-app.MapHub<TelaeHub>("/hubs/telae");
+// O token é validado ao conectar; depois, cada chamada confere se a sessão foi revogada (InputLimitFilter).
+// Fechar a conexão quando o token vence derrubaria transmissões longas a cada renovação.
+var hub = app.MapHub<TelaeHub>("/hubs/telae");
+if (!app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.AllowLegacyDevices)
+    hub.RequireAuthorization();
 
 await app.Services.InitializeAccountsDatabaseAsync();
 app.Run();

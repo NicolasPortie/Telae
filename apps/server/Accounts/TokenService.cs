@@ -11,10 +11,14 @@ public sealed class TokenService(IOptions<AuthOptions> options, TimeProvider clo
 {
     public const string AccountIdClaim = JwtRegisteredClaimNames.Sub;
     public const string UsernameClaim = "username";
+    public const string SessionIdClaim = "sid";
 
-    public static SymmetricSecurityKey SigningKey(string jwtKey) => new(Encoding.UTF8.GetBytes(jwtKey));
+    public static SymmetricSecurityKey SigningKey(string jwtKey) => new(DeriveKey(jwtKey, "telae/jwt-signing/v1"));
 
-    public (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(Account account)
+    private static byte[] DeriveKey(string root, string purpose) =>
+        HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(root), 32, info: Encoding.UTF8.GetBytes(purpose));
+
+    public (string Token, DateTimeOffset ExpiresAt) CreateAccessToken(Account account, Guid sessionId)
     {
         var auth = options.Value;
         var now = clock.GetUtcNow();
@@ -29,6 +33,7 @@ public sealed class TokenService(IOptions<AuthOptions> options, TimeProvider clo
             Subject = new ClaimsIdentity([
                 new Claim(AccountIdClaim, account.Id.ToString()),
                 new Claim(UsernameClaim, account.Username),
+                new Claim(SessionIdClaim, sessionId.ToString()),
             ]),
             SigningCredentials = new SigningCredentials(SigningKey(auth.JwtKey), SecurityAlgorithms.HmacSha256),
         };
@@ -45,7 +50,7 @@ public sealed class TokenService(IOptions<AuthOptions> options, TimeProvider clo
     /// </summary>
     public string HashCode(Guid accountId, OneTimeCodePurpose purpose, string code)
     {
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(options.Value.JwtKey));
+        using var hmac = new HMACSHA256(DeriveKey(options.Value.JwtKey, "telae/one-time-codes/v1"));
         return Convert.ToHexStringLower(hmac.ComputeHash(Encoding.UTF8.GetBytes($"{accountId}:{(int)purpose}:{code}")));
     }
 

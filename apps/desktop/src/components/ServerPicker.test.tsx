@@ -30,7 +30,7 @@ it('saves another server before signing in', async () => {
   await userEvent.type(field, 'https://meu.servidor.dev')
   await userEvent.click(screen.getByRole('button', { name: 'Salvar' }))
   expect(api.setSignalingUrl).toHaveBeenCalledWith('https://meu.servidor.dev')
-  expect(await screen.findByRole('status')).toHaveTextContent('Reinicie o Telaê')
+  expect(await screen.findByRole('status')).toHaveTextContent('Reinicia o Telaê')
   expect(screen.getByText('meu.servidor.dev')).toBeInTheDocument()
 })
 

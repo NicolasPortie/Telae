@@ -35,6 +35,7 @@ public sealed record SignalingPayload(string Kind, string? Sdp = null, IceCandid
 public sealed record SignalingEnvelope(string SessionId, string FromDeviceId, SignalingPayload Payload);
 public sealed record ViewerJoinedEvent(string SessionId, DeviceSnapshot Viewer);
 public sealed record ViewerLeftEvent(string SessionId, string ViewerDeviceId);
+public sealed record SharePreviewEvent(string DeviceId, string Image, DateTimeOffset CapturedAt);
 public sealed record InviteSnapshot(string Code, string SessionId, DateTimeOffset ExpiresAt);
 public sealed record InviteResult(InviteSnapshot Invite, ShareSessionSnapshot Session);
 public sealed record PendingDisconnect(string? DeviceId, long Generation);

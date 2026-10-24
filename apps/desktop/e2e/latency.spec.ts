@@ -108,6 +108,7 @@ test('latência: movimento com áudio não acumula atraso após uma pausa do emi
     })
     await sender.page.getByRole('button', { name: /Escolher tela/ }).click()
     await sender.page.getByRole('radio', { name: '720p', exact: true }).click()
+    await sender.page.getByRole('tab', { name: /Janelas/ }).click()
     const source = sender.page.getByRole('radiogroup', { name: 'Janelas', exact: true }).getByRole('radio', { name: /Telae Latency Pattern/ })
     await expect(source).toBeVisible({ timeout: 15_000 })
     await source.click()

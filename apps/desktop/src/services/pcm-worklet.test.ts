@@ -236,7 +236,7 @@ describe('process audio diagnostics and lifecycle', () => {
     bridge.state(status)
     expect(ended).toHaveBeenCalledOnce()
     expect(bridge.track.readyState).toBe('ended')
-    expect(capture.diagnostics!.error).toBe(status === 'error' ? 'bridge failed' : 'A captura de áudio foi interrompida.')
+    expect(capture.diagnostics!.error).toBe(status === 'error' ? 'bridge failed' : 'A captura do som foi interrompida.')
     await vi.waitFor(() => expect(bridge.stopAudioCapture).toHaveBeenCalledOnce())
     expect(bridge.close).toHaveBeenCalledOnce()
     expect(bridge.disposeState).toHaveBeenCalledOnce()

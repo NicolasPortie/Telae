@@ -2,7 +2,7 @@ namespace Telae.Server.Accounts;
 
 public sealed class AuthOptions
 {
-    /// <summary>Chave de assinatura dos tokens de acesso (mínimo de 32 caracteres). Obrigatória em produção.</summary>
+    /// <summary>Chave raiz dos tokens e códigos (mínimo de 32 caracteres). Obrigatória em produção.</summary>
     public string JwtKey { get; set; } = "";
     public string Issuer { get; set; } = "telae";
     public string Audience { get; set; } = "telae-desktop";
@@ -10,13 +10,18 @@ public sealed class AuthOptions
     public int RefreshTokenDays { get; set; } = 30;
     public int CodeMinutes { get; set; } = 15;
     public int MaxCodeAttempts { get; set; } = 5;
+    public int MaxCodesPerDay { get; set; } = 10;
+    public int MaxFailedCodeAttemptsPerDay { get; set; } = 20;
+    public int LoginBackoffSeconds { get; set; } = 1;
+    public int LoginFailureWindowMinutes { get; set; } = 60;
+    public int MaxAccountFailedLogins { get; set; } = 100;
     public int MaxFailedLogins { get; set; } = 5;
     /// <summary>Limites por endereço IP e por minuto: cadastro, reenvio de código e recuperação de senha (rígido) e demais chamadas de conta.</summary>
     public int StrictRequestsPerMinute { get; set; } = 6;
     public int RequestsPerMinute { get; set; } = 30;
     public int LockoutMinutes { get; set; } = 15;
     /// <summary>Aceita clientes anteriores à 0.2 que se identificam só pela credencial do dispositivo.</summary>
-    public bool AllowLegacyDevices { get; set; } = true;
+    public bool AllowLegacyDevices { get; set; } = false;
     /// <summary>
     /// Quando falso, só quem está em <see cref="AllowedEmails"/> consegue criar conta (convite por e-mail).
     /// O servidor público do projeto roda fechado: quem não foi liberado não tem como entrar.

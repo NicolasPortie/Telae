@@ -5,7 +5,7 @@ import { estimateLatencyMs, formatBitrate, transportLabel } from '../ui/format'
 
 const QUALITY_BADGE: Record<ConnectionQuality, { label: () => string; dot: string }> = {
   good: { label: () => t('Conexão boa'), dot: 'bg-ok' },
-  degraded: { label: () => t('Conexão instável'), dot: 'bg-signal' },
+  degraded: { label: () => t('Conexão instável'), dot: 'bg-warn' },
   poor: { label: () => t('Conexão fraca'), dot: 'bg-danger' },
   unknown: { label: () => t('Medindo conexão…'), dot: 'bg-ink-4' },
 }
@@ -24,7 +24,7 @@ function Row({ label, value, warn = false }: { label: string; value: string; war
   return (
     <div className="flex items-baseline justify-between gap-6">
       <dt className="text-ink-3">{label}</dt>
-      <dd className={`tnum text-right font-mono text-[11px] ${warn ? 'text-signal-soft' : 'text-ink'}`}>{value}</dd>
+      <dd className={`tnum text-right font-mono text-[11px] ${warn ? 'text-warn-soft' : 'text-ink'}`}>{value}</dd>
     </div>
   )
 }
@@ -32,21 +32,23 @@ function Row({ label, value, warn = false }: { label: string; value: string; war
 const ms = (value: number | null | undefined) => (value == null ? '—' : `${Math.round(value)} ms`)
 
 /** Estatísticas do vídeo em tempo real. Mostra só o que a telemetria realmente mediu. */
-export function StreamStats({ diagnostics: d, connection, className = '' }: {
+export function StreamStats({ diagnostics: d, connection, className = '', bare = false }: {
   diagnostics: DiagnosticsSnapshot
   connection: ConnectionQuality
   className?: string
+  /** Sem cartão nem cabeçalho: para quando o painel em volta já diz o que é. */
+  bare?: boolean
 }) {
   const latency = estimateLatencyMs(d)
   const resolution = d.width && d.height ? `${d.width}×${d.height}${d.framesPerSecond != null ? ` · ${Math.round(d.framesPerSecond)} fps` : ''}` : '—'
   const loss = d.packetLossPercent == null ? '—' : `${d.packetLossPercent.toLocaleString(numberLocale(), { maximumFractionDigits: 1 })}%`
   const frozen = (d.freezeCount ?? 0) > 0
   return (
-    <section aria-label={t('Estatísticas da transmissão')} className={`rounded-2xl border border-line-strong bg-canvas/90 p-4 text-xs shadow-card backdrop-blur ${className}`}>
-      <div className="mb-3 flex items-center justify-between gap-6">
-        <h2 className="eyebrow">{t('Estatísticas')}</h2>
+    <section aria-label={t('Estatísticas da transmissão')} className={bare ? `text-xs ${className}` : `rounded-2xl border border-line-strong bg-canvas/90 p-4 text-xs shadow-card backdrop-blur ${className}`}>
+      {!bare && <div className="mb-3 flex items-center justify-between gap-6">
+        <h2 className="text-[13px] font-semibold text-ink">{t('Estatísticas')}</h2>
         <ConnectionBadge quality={connection} />
-      </div>
+      </div>}
       <dl className="grid gap-1.5">
         <Row label={t('Imagem')} value={resolution} />
         <Row label={t('Codec')} value={d.codec ?? '—'} />

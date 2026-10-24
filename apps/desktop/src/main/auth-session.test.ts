@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -89,7 +89,7 @@ describe('AuthSession', () => {
     server.login.mockRejectedValue(new AuthError('invalid_credentials'))
     expect(await session.login('ana', 'errada')).toEqual({ ok: false, code: 'invalid_credentials' })
     server.verifyEmail.mockRejectedValue(new Error('boom'))
-    expect(await session.verifyEmail('ana', '123456')).toEqual({ ok: false, code: 'unknown' })
+    expect(await session.verifyEmail('ana', '123456', 'senha')).toEqual({ ok: false, code: 'unknown' })
   })
 
   it('registers without a session when verification is required, and with one when it is not', async () => {
@@ -112,6 +112,70 @@ describe('AuthSession', () => {
     expect(changes).toEqual([null])
     expect(server.logout).toHaveBeenCalledWith('refresh-1')
     expect(await session.getAccessToken()).toBeNull()
+  })
+
+  it('cannot restore a session when a pending refresh completes after logout', async () => {
+    const { server, storage, session } = harness({ refreshToken: 'refresh-1', account })
+    let resolveRefresh!: (value: ServerSession) => void
+    server.refresh.mockImplementation(() => new Promise<ServerSession>(resolve => { resolveRefresh = resolve }))
+    server.logout.mockResolvedValue(undefined)
+    const renewal = session.getAccessToken()
+    await session.logout()
+    resolveRefresh(serverSession({ refreshToken: 'rotated-after-logout' }))
+    expect(await renewal).toBeNull()
+    expect(storage.value).toBeNull()
+    expect(session.getAccount()).toBeNull()
+    expect(server.logout).toHaveBeenCalledWith('rotated-after-logout')
+  })
+
+  it.each(['login', 'verifyEmail', 'register', 'changePassword'] as const)('does not adopt a pending %s response after logout', async operation => {
+    const { server, storage, session, changes } = harness()
+    server.login.mockResolvedValue(serverSession())
+    server.logout.mockResolvedValue(undefined)
+    if (operation === 'changePassword') await session.login('ana', 'senha')
+    let finish!: (value: unknown) => void
+    server[operation].mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const pending = operation === 'login' ? session.login('ana', 'senha')
+      : operation === 'verifyEmail' ? session.verifyEmail('ana', '123456', 'senha')
+      : operation === 'register' ? session.register({ email: 'ana@example.com', username: 'ana', password: 'senha', language: 'pt-BR' })
+      : session.changePassword('senha', 'nova')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    await session.logout()
+    const late = serverSession({ refreshToken: 'late-refresh' })
+    finish(operation === 'register' ? { verificationRequired: false, session: late } : late)
+    expect(await pending).toEqual({ ok: false, code: 'invalid_session' })
+    expect(storage.value).toBeNull()
+    expect(changes.at(-1)).toBeNull()
+    expect(server.logout).toHaveBeenCalledWith('late-refresh')
+  })
+
+  it('does not publish a pending profile edit after logout or erase a newer account after deletion', async () => {
+    const { server, session, storage, changes } = harness()
+    server.login.mockResolvedValue(serverSession())
+    server.logout.mockResolvedValue(undefined)
+    await session.login('ana', 'senha')
+    let finishEdit!: (value: AccountInfo) => void
+    server.updateDisplayName.mockImplementation(() => new Promise(resolve => { finishEdit = resolve }))
+    const edit = session.updateDisplayName('Ana nova')
+    await vi.waitFor(() => expect(finishEdit).toBeTypeOf('function'))
+    await session.logout()
+    finishEdit({ ...account, displayName: 'Ana nova' })
+    expect(await edit).toEqual({ ok: false, code: 'invalid_session' })
+    expect(storage.value).toBeNull()
+    expect(changes.at(-1)).toBeNull()
+
+    await session.login('ana', 'senha')
+    let finishDelete!: () => void
+    server.deleteAccount.mockImplementation(() => new Promise<void>(resolve => { finishDelete = resolve }))
+    const deletion = session.deleteAccount('senha')
+    await vi.waitFor(() => expect(finishDelete).toBeTypeOf('function'))
+    const other = { ...account, id: 'other', username: 'bia' }
+    server.login.mockResolvedValue(serverSession({ account: other, refreshToken: 'other-refresh' }))
+    await session.login('bia', 'outra')
+    finishDelete()
+    expect(await deletion).toEqual({ ok: false, code: 'invalid_session' })
+    expect(session.getAccount()).toEqual(other)
+    expect(storage.value?.refreshToken).toBe('other-refresh')
   })
 
   it('updates the display name, rotates tokens on password change and clears on deletion', async () => {
@@ -162,6 +226,29 @@ describe('AuthServerClient', () => {
     expect(init.method).toBe('PATCH')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer token-1')
     expect(JSON.parse(init.body as string)).toEqual({ displayName: 'Ana' })
+    expect(init.redirect).toBe('error')
+  })
+
+  it('does not forward existing credentials when settings change to another server', async () => {
+    let serverUrl = 'https://trusted.example.com'
+    const fetchImpl = vi.fn().mockResolvedValue(json(200, serverSession()))
+    const client = new AuthServerClient(() => serverUrl, fetchImpl as unknown as typeof fetch)
+    serverUrl = 'https://attacker.example.com'
+    await client.refresh('trusted-refresh-token')
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://trusted.example.com/auth/refresh')
+  })
+
+  it('binds email verification to the password entered in the account flow', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(json(200, serverSession()))
+    const client = new AuthServerClient(() => 'https://trusted.example.com', fetchImpl)
+    await client.verifyEmail('ana@example.com', '123456', 'chosen-password')
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ identifier: 'ana@example.com', code: '123456', password: 'chosen-password' })
+  })
+
+  it('rejects remote HTTP before a password or token can be sent', () => {
+    const fetchImpl = vi.fn()
+    expect(() => new AuthServerClient(() => 'http://remote.example.com', fetchImpl)).toThrow()
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 })
 
@@ -179,7 +266,7 @@ describe('session storage', () => {
   }
 
   it('keeps the refresh token encrypted on disk and round-trips it', () => {
-    const storage = createSessionStorage(file(), () => cipher)
+    const storage = createSessionStorage(file(), () => cipher, 'https://telae.example.com')
     storage.save({ refreshToken: 'segredo-do-refresh', account })
     const raw = readFileSync(folders[0] + '/session.json', 'utf8')
     expect(raw).not.toContain('segredo-do-refresh')
@@ -188,12 +275,30 @@ describe('session storage', () => {
 
   it('returns nothing for a missing, corrupt or undecryptable session and can clear it', () => {
     const target = file()
-    const storage = createSessionStorage(target, () => cipher)
+    const storage = createSessionStorage(target, () => cipher, 'https://telae.example.com')
     expect(storage.load()).toBeNull()
     storage.save({ refreshToken: 'x', account })
-    expect(createSessionStorage(target, () => ({ encrypt: cipher.encrypt, decrypt: () => null })).load()).toBeNull()
+    expect(createSessionStorage(target, () => ({ encrypt: cipher.encrypt, decrypt: () => null }), 'https://telae.example.com').load()).toBeNull()
     storage.clear()
     expect(storage.load()).toBeNull()
     storage.clear()
+  })
+
+  it('never loads a token created for another server or an old unbound session', () => {
+    const target = file()
+    const storage = createSessionStorage(target, () => cipher, 'https://trusted.example.com')
+    storage.save({ refreshToken: 'trusted-refresh-token', account })
+    expect(createSessionStorage(target, () => cipher, 'https://attacker.example.com').load()).toBeNull()
+    writeFileSync(target, JSON.stringify({ refreshTokenEnc: cipher.encrypt('old-token'), account }))
+    expect(storage.load()).toBeNull()
+  })
+
+  it('never persists or loads a refresh token without an encryption vault', () => {
+    const target = file()
+    const storage = createSessionStorage(target, () => undefined, 'https://trusted.example.com')
+    writeFileSync(target, JSON.stringify({ serverUrl: 'https://trusted.example.com', refreshToken: 'plaintext', account }))
+    expect(storage.load()).toBeNull()
+    storage.save({ refreshToken: 'new-secret', account })
+    expect(existsSync(target)).toBe(false)
   })
 })

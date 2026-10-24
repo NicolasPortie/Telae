@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { Activity, Maximize, Minimize, Signal, Volume2, VolumeX } from 'lucide-react'
+import { Activity, Maximize, Minimize, Volume2, VolumeX } from 'lucide-react'
 import { t } from '../i18n'
 import type { ShareSessionController } from '../services/share-session'
 import type { DeviceSnapshot } from '../services/types'
+import { avatarInitial, avatarTone } from '../ui/avatar'
 import { LiveFriendsSwitch } from './LiveFriendsSwitch'
 import { StreamStats } from './StreamStats'
 
@@ -17,12 +18,15 @@ type Props = {
   watchingDeviceId: string | null
   watchError: string | null
   live: boolean
+  /** Última miniatura da tela de quem você vai assistir: fundo enquanto conecta. */
+  preview?: string
   onWatch: (friend: DeviceSnapshot) => void
   onLeave: () => void
 }
 
 /** Player do espectador: vídeo, controles que somem sozinhos, volume, tela cheia e estatísticas. */
-export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, watchingDeviceId, watchError, live, onWatch, onLeave }: Props) {
+export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, watchingDeviceId, watchError, live, preview, onWatch, onLeave }: Props) {
+  const sharerName = snapshot.session?.sharerDisplayName ?? null
   const stageRef = useRef<HTMLDivElement | null>(null)
   const overlayTimer = useRef<number | null>(null)
   const [overlayVisible, setOverlayVisible] = useState(true)
@@ -95,35 +99,39 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
         onFocusCapture={pokeOverlay}
         onBlurCapture={pokeOverlay}
         tabIndex={0}
-        aria-label={t('Player da transmissão. F para tela cheia, M para silenciar, I para estatísticas.')}
+        aria-label={t('Transmissão. F pra tela cheia, M pra silenciar, I pras estatísticas.')}
         className={`telae-panel-enter telae-viewer-stage ${live && !overlayVisible ? 'telae-viewer-idle' : ''}`}
       >
-        {(snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
-          <div className="mx-auto max-w-[520px] py-16 text-center">
-            <p className="flex items-center justify-center gap-2.5 text-[15px]">
-              <Signal size={18} className="text-signal" aria-hidden="true" />
-              {stateLabel[snapshot.state]}
-            </p>
-            {snapshot.error && <p role="alert" className="mt-2 text-sm text-danger-soft">{snapshot.error}</p>}
-            <button type="button" onClick={onLeave} className="telae-press btn btn-secondary btn-lg mt-6">
-              {t('Cancelar')}
-            </button>
-            <div className="mt-6 flex justify-center">
-              <LiveFriendsSwitch
-                friends={friends}
-                currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
-                pendingDeviceId={watchingDeviceId}
-                disabled={busy || watchingDeviceId !== null}
-                error={watchError}
-                onWatch={onWatch}
-              />
+        {!snapshot.hasRemoteStream && (snapshot.state === 'joining' || snapshot.state === 'negotiating' || snapshot.state === 'reconnecting') && (
+          <div className="telae-viewer-waiting" data-state={snapshot.state}>
+            {preview && <img aria-hidden="true" src={preview} alt="" className="telae-viewer-waiting-backdrop" />}
+            <div className="telae-viewer-waiting-card">
+              {sharerName && <span aria-hidden="true" className="telae-avatar telae-viewer-waiting-avatar" style={{ background: avatarTone(sharerName) }}>{avatarInitial(sharerName)}</span>}
+              {sharerName && <p className="mt-4 text-[20px] font-semibold tracking-[-0.02em]">{sharerName}</p>}
+              <p role="status" className="telae-viewer-waiting-state"><span aria-hidden="true" />{stateLabel[snapshot.state]}</p>
+              {snapshot.error && <p role="alert" className="mt-2 text-sm text-danger-soft">{snapshot.error}</p>}
+              <button type="button" onClick={onLeave} className="telae-press btn btn-secondary mt-6">
+                {t('Cancelar')}
+              </button>
+              <div className="mt-5 flex justify-center">
+                <LiveFriendsSwitch
+                  friends={friends}
+                  currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
+                  pendingDeviceId={watchingDeviceId}
+                  disabled={busy || watchingDeviceId !== null}
+                  error={watchError}
+                  label={t('Trocar para')}
+                  onWatch={onWatch}
+                />
+              </div>
             </div>
           </div>
         )}
 
         {snapshot.hasRemoteStream && (
           <div className="telae-viewer-playback relative">
-            <div className="telae-video-canvas telae-viewer-canvas overflow-hidden rounded-xl border border-line">
+            <div className="telae-video-canvas telae-viewer-canvas" data-state={snapshot.state}>
+              {snapshot.state === 'reconnecting' && <p role="status" className="telae-viewer-reconnecting"><span aria-hidden="true" />{stateLabel.reconnecting}</p>}
               <video
                 ref={videoRef}
                 autoPlay
@@ -139,16 +147,28 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
               role="group"
               onMouseEnter={pokeOverlay}
               onMouseLeave={pokeOverlay}
-              className={`telae-viewer-controls absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-2 rounded-b-xl px-4 py-3 transition-opacity duration-200 ${
-                overlayVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
+              className={`telae-viewer-controls ${
+                overlayVisible ? '' : 'is-idle'
               }`}
             >
+              {sharerName && (
+                <p className="telae-viewer-now">
+                  <span aria-hidden="true" className="telae-avatar" style={{ background: avatarTone(sharerName) }}>{avatarInitial(sharerName)}</span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[14px] font-semibold text-ink">{sharerName}</span>
+                    {snapshot.state === 'reconnecting'
+                      ? <span className="flex items-center gap-1.5 text-[12px] text-warn-soft"><span aria-hidden="true" className="telae-live-dot !bg-warn" />{stateLabel.reconnecting}</span>
+                      : <span className="flex items-center gap-1.5 text-[12px] text-tally-soft"><span aria-hidden="true" className="telae-live-dot" />{t('Ao vivo')}</span>}
+                  </span>
+                </p>
+              )}
               <LiveFriendsSwitch
                 friends={friends}
                 currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
                 pendingDeviceId={watchingDeviceId}
                 disabled={busy || watchingDeviceId !== null}
                 error={watchError}
+                label={t('Trocar para')}
                 onWatch={onWatch}
               />
               <button
@@ -165,7 +185,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 aria-label={muted || volume === 0 ? t('Ativar som') : t('Silenciar')}
                 title={muted || volume === 0 ? t('Ativar som (M)') : t('Silenciar (M)')}
               >
-                {muted || volume === 0 ? <VolumeX size={18} aria-hidden="true" /> : <Volume2 size={18} aria-hidden="true" />}
+                {muted || volume === 0 ? <VolumeX size={18} strokeWidth={1.75} aria-hidden="true" /> : <Volume2 size={18} strokeWidth={1.75} aria-hidden="true" />}
               </button>
               <input
                 type="range"
@@ -196,7 +216,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 aria-label={t('Estatísticas da transmissão')}
                 title={t('Estatísticas (I)')}
               >
-                <Activity size={18} aria-hidden="true" />
+                <Activity size={18} strokeWidth={1.75} aria-hidden="true" />
               </button>
               <button
                 type="button"
@@ -205,7 +225,7 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
                 aria-label={fullscreen ? t('Sair da tela cheia') : t('Tela cheia')}
                 title={fullscreen ? t('Sair da tela cheia (Esc)') : t('Tela cheia (F)')}
               >
-                {fullscreen ? <Minimize size={18} aria-hidden="true" /> : <Maximize size={18} aria-hidden="true" />}
+                {fullscreen ? <Minimize size={18} strokeWidth={1.75} aria-hidden="true" /> : <Maximize size={18} strokeWidth={1.75} aria-hidden="true" />}
               </button>
               <button
                 type="button"

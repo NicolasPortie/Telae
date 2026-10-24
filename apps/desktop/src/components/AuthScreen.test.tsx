@@ -37,7 +37,7 @@ it('switches between sign in and create account with tabs, without remounting th
   expect(screen.getByRole('tab', { name: 'Entrar' })).toHaveAttribute('aria-selected', 'true')
   await userEvent.click(screen.getByRole('tab', { name: 'Criar conta' }))
   expect(screen.getByRole('tab', { name: 'Criar conta' })).toHaveAttribute('aria-selected', 'true')
-  expect(screen.getByRole('heading', { name: 'Crie sua conta' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Cria sua conta' })).toBeInTheDocument()
   await userEvent.click(screen.getByRole('tab', { name: 'Entrar' }))
   expect(screen.getByRole('heading', { name: 'Bem-vindo de volta' })).toBeInTheDocument()
 })
@@ -86,7 +86,7 @@ it('creates an account with a live strength meter, then confirms the email with 
   await userEvent.keyboard('12a3456')
   expect(digitBoxes().map(box => (box as HTMLInputElement).value)).toEqual(['1', '2', '3', '4', '5', '6'])
   await userEvent.click(confirm)
-  expect(auth.verifyEmail).toHaveBeenCalledWith('ana@example.com', '123456')
+  expect(auth.verifyEmail).toHaveBeenCalledWith('ana@example.com', '123456', 'uma-senha-bem-longa-42')
   await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith(account))
 })
 
@@ -96,7 +96,7 @@ it('accepts the whole code pasted into one box and goes back with Backspace', as
   await userEvent.click(screen.getByRole('button', { name: 'Esqueci minha senha' }))
   await userEvent.type(screen.getByLabelText('E-mail ou @usuário'), 'ana')
   await userEvent.click(screen.getByRole('button', { name: 'Enviar código' }))
-  expect(await screen.findByRole('heading', { name: 'Senha nova' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Cria uma senha nova' })).toBeInTheDocument()
 
   await userEvent.paste('654 321')
   expect(digitBoxes().map(box => (box as HTMLInputElement).value).join('')).toBe('654321')
@@ -106,11 +106,26 @@ it('accepts the whole code pasted into one box and goes back with Backspace', as
 
 it('goes to email confirmation when signing in with an unverified account', async () => {
   auth.login.mockResolvedValue({ ok: false, code: 'email_not_verified' })
+  auth.verifyEmail.mockResolvedValue({ ok: true, data: account })
   renderScreen()
   await userEvent.type(screen.getByLabelText('E-mail ou @usuário'), 'ana@example.com')
   await userEvent.type(screen.getByLabelText('Senha'), 'uma-senha-bem-longa-42')
   await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
   expect(await screen.findByRole('heading', { name: 'Olha seu e-mail' })).toBeInTheDocument()
+  await userEvent.keyboard('123456')
+  await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+  expect(auth.verifyEmail).toHaveBeenCalledWith('ana@example.com', '123456', 'uma-senha-bem-longa-42')
+})
+
+it('discards the pending verification password when returning to sign in', async () => {
+  auth.login.mockResolvedValue({ ok: false, code: 'email_not_verified' })
+  renderScreen()
+  await userEvent.type(screen.getByLabelText('E-mail ou @usuário'), 'ana@example.com')
+  await userEvent.type(screen.getByLabelText('Senha'), 'uma-senha-bem-longa-42')
+  await userEvent.click(screen.getByRole('button', { name: 'Entrar' }))
+  expect(await screen.findByRole('heading', { name: 'Olha seu e-mail' })).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+  expect(screen.getByLabelText('Senha')).toHaveValue('')
 })
 
 it('recovers a password with the emailed code', async () => {
@@ -122,7 +137,7 @@ it('recovers a password with the emailed code', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Enviar código' }))
   expect(auth.forgotPassword).toHaveBeenCalledWith('ana')
 
-  expect(await screen.findByRole('heading', { name: 'Senha nova' })).toBeInTheDocument()
+  expect(await screen.findByRole('heading', { name: 'Cria uma senha nova' })).toBeInTheDocument()
   await userEvent.keyboard('654321')
   await userEvent.type(screen.getByLabelText('Nova senha'), 'outra-senha-bem-longa-7')
   await userEvent.click(screen.getByRole('button', { name: 'Salvar nova senha' }))

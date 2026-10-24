@@ -26,12 +26,14 @@ public sealed class TelaeHub(
                 : null;
             if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão acabou. Entra de novo.");
             return await presence.RegisterAsync(
-                new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, "", account.Username), Context.ConnectionId, authenticatedAccount: true);
+                new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, "", account.Username), Context.ConnectionId,
+                authenticatedAccount: true, sessionId: Context.User.FindFirstValue(TokenService.SessionIdClaim),
+                authorize: () => accounts!.IsSessionActiveAsync(Context.User, Context.ConnectionAborted));
         }
 
-        if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados do dispositivo.");
+        if (request is null) throw new TelaeDomainException("invalid_request", "Não deu pra registrar este aparelho. Reinicia o app e tenta de novo.");
         var allowLegacy = services.GetService<IOptions<AuthOptions>>()?.Value.AllowLegacyDevices ?? true;
-        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
+        if (!allowLegacy) throw new TelaeDomainException("login_required", "Entra na sua conta pra continuar.");
         return await presence.RegisterAsync(request, Context.ConnectionId);
     }
 
@@ -40,15 +42,15 @@ public sealed class TelaeHub(
         Context.User?.Identity?.IsAuthenticated == true && Guid.TryParse(Context.User.FindFirstValue(TokenService.AccountIdClaim), out var id) ? id : null;
 
     private FriendsService Friends() =>
-        services.GetService<FriendsService>() ?? throw new TelaeDomainException("accounts_unavailable", "Contas indisponíveis neste servidor.");
+        services.GetService<FriendsService>() ?? throw new TelaeDomainException("accounts_unavailable", "Esse servidor não oferece contas.");
 
     private static TelaeDomainException FriendFailure(AccountException error) => error.Code switch
     {
-        "friend_not_found" => new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo."),
+        "friend_not_found" => new TelaeDomainException("friend_not_found", "Não deu pra achar ninguém com esse @. Confere e tenta de novo."),
         "cannot_add_self" => new TelaeDomainException("cannot_add_self", "Você não pode se adicionar."),
         "already_friends" => new TelaeDomainException("already_friends", "Esse amigo já está na sua lista."),
         "too_many_friends" => new TelaeDomainException("too_many_friends", "Sua lista chegou ao limite de 200 amigos."),
-        _ => new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Use de 3 a 20 letras, números ou _."),
+        _ => new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Usa de 3 a 20 letras, números ou _."),
     };
 
     private DeviceSnapshot ProfileOf(FriendAccount account) =>
@@ -56,12 +58,13 @@ public sealed class TelaeHub(
 
     public async Task<DeviceSnapshot?> LookupFriend(string friendCode)
     {
-        registry.GetDeviceIdForConnection(Context.ConnectionId);
-        if (AuthenticatedAccountId() is null) return registry.FindByFriendCode(friendCode);
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        if (AuthenticatedAccountId() is null)
+            return registry.FindByFriendCode(friendCode) is { } device ? registry.ForObserver(deviceId, device) : null;
         try
         {
             var found = await Friends().FindByUsernameAsync(friendCode, Context.ConnectionAborted);
-            return found is null ? null : ProfileOf(found);
+            return found is null ? null : registry.ForObserver(deviceId, ProfileOf(found));
         }
         catch (AccountException error) { throw FriendFailure(error); }
     }
@@ -81,11 +84,9 @@ public sealed class TelaeHub(
                 return friend.Username;
             }).ToArray();
         if (friendCodes is null || friendCodes.Length > 200)
-            throw new TelaeDomainException("invalid_friend_list", "Informe no máximo 200 amigos.");
-        var friends = registry.GetDevicesByFriendCodes(friendCodes);
-        await presence.ReplaceAsync(Context.ConnectionId, friends);
+            throw new TelaeDomainException("invalid_friend_list", "A lista de amigos pode ter até 200 pessoas.");
         // Quem deixou de ser amigo (de qualquer um dos lados) sai da transmissão em andamento.
-        var declared = registry.DeclareFriends(deviceId, friendCodes);
+        var declared = await presence.DeclareFriendsAsync(Context.ConnectionId, friendCodes);
         foreach (var detachment in declared.Detached)
         {
             await NotifyAsync(detachment.ViewerDeviceId, "SessionEnded", detachment.SessionId);
@@ -98,16 +99,15 @@ public sealed class TelaeHub(
             var requester = registry.GetDevice(deviceId);
             if (requester is not null)
                 foreach (var targetId in declared.NewRequestDeviceIds)
-                    await NotifyAsync(targetId, "FriendRequestReceived", requester);
+                    await NotifyAsync(targetId, "FriendRequestReceived", registry.ForObserver(targetId, requester));
         }
-        // Read again after subscribing so changes during group setup are reflected.
-        return registry.GetDevicesByFriendCodes(friendCodes);
+        return registry.GetDevicesByFriendCodes(friendCodes).Select(friend => registry.ForObserver(deviceId, friend)).ToArray();
     }
 
     /// <summary>Adiciona um amigo pelo @usuário (só contas) e avisa quem foi adicionado, se estiver online.</summary>
     public async Task<DeviceSnapshot> AddFriend(string username)
     {
-        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
+        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entra na sua conta pra continuar.");
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
         FriendAccount friend;
         try { friend = await Friends().AddAsync(account, username, Context.ConnectionAborted); }
@@ -118,13 +118,14 @@ public sealed class TelaeHub(
         // Se a outra pessoa já tinha adicionado de volta, é amizade mútua e não há pedido a avisar.
         var requester = registry.GetDevice(deviceId);
         if (requester is not null && !registry.AreMutualFriends(deviceId, friend.Id.ToString()))
-            await NotifyAsync(friend.Id.ToString(), "FriendRequestReceived", requester);
-        return snapshot;
+            await NotifyAsync(friend.Id.ToString(), "FriendRequestReceived", registry.ForObserver(friend.Id.ToString(), requester));
+        return registry.ForObserver(deviceId, snapshot);
     }
 
     public async Task RemoveFriend(string username)
     {
-        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entre na sua conta pra continuar.");
+        var account = AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entra na sua conta pra continuar.");
+        registry.GetDeviceIdForConnection(Context.ConnectionId);
         try { await Friends().RemoveAsync(account, username, Context.ConnectionAborted); }
         catch (AccountException error) { throw FriendFailure(error); }
         await GetFriends([]);
@@ -133,9 +134,10 @@ public sealed class TelaeHub(
     public async Task<IReadOnlyList<DeviceSnapshot>> GetFriendRequests()
     {
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        if (AuthenticatedAccountId() is not { } account) return registry.GetFriendRequests(deviceId);
+        if (AuthenticatedAccountId() is not { } account)
+            return registry.GetFriendRequests(deviceId).Select(friend => registry.ForObserver(deviceId, friend)).ToArray();
         var pending = await Friends().PendingRequestsAsync(account, Context.ConnectionAborted);
-        return pending.Select(ProfileOf).ToArray();
+        return pending.Select(friend => registry.ForObserver(deviceId, ProfileOf(friend))).ToArray();
     }
 
     public async Task DismissFriendRequest(string friendCode)
@@ -152,11 +154,23 @@ public sealed class TelaeHub(
 
     public async Task<ShareAccessResult> StartShare(StartShareRequest request)
     {
-        if (request is null) throw new TelaeDomainException("invalid_request", "Informe os dados da transmissão.");
+        if (request is null) throw new TelaeDomainException("invalid_request", "Não deu pra iniciar a transmissão. Tenta de novo.");
         EnsureCallerMatches(request.DeviceId);
         var session = registry.StartShare(request.DeviceId, request.QualityProfile);
         await presence.PublishAsync(registry.GetDevice(request.DeviceId)!);
         return new ShareAccessResult(session, GetIceServers(request.DeviceId));
+    }
+
+    /// <summary>Miniatura da tela de quem transmite, repassada aos amigos mútuos online.</summary>
+    public async Task PublishSharePreview(string image)
+    {
+        await presence.PublishPreviewAsync(Context.ConnectionId, image);
+    }
+
+    public Task<IReadOnlyList<SharePreviewEvent>> GetFriendPreviews()
+    {
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        return Task.FromResult(registry.GetFriendPreviews(deviceId));
     }
 
     public Task<ShareSessionSnapshot?> GetActiveShare()
@@ -168,7 +182,7 @@ public sealed class TelaeHub(
     public async Task StopShare()
     {
         var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        var session = registry.StopShare(deviceId);
+        var session = await presence.StopShareAsync(Context.ConnectionId);
 
         foreach (var viewerDeviceId in session.ViewerDeviceIds)
         {
@@ -185,8 +199,7 @@ public sealed class TelaeHub(
 
     public async Task<ShareSessionSnapshot> RemoveViewer(string viewerDeviceId)
     {
-        var sharerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        var session = registry.RemoveViewer(sharerDeviceId, viewerDeviceId);
+        var session = await presence.RemoveViewerAsync(Context.ConnectionId, viewerDeviceId);
         try
         {
             await Clients.Client(registry.GetConnectionId(viewerDeviceId)).SendAsync("SessionEnded", session.SessionId);
@@ -275,12 +288,11 @@ public sealed class TelaeHub(
             (envelope.Payload.Kind is "offer" or "answer" && string.IsNullOrWhiteSpace(envelope.Payload.Sdp)) ||
             envelope.Payload.Sdp?.Length > 65_536 || envelope.Payload.Candidate?.Candidate?.Length > 4096 ||
             envelope.Payload.Candidate?.SdpMid?.Length > 256 || envelope.Payload.Candidate?.UsernameFragment?.Length > 256)
-            throw new TelaeDomainException("invalid_signal", "Sinalização inválida.");
+            throw new TelaeDomainException("invalid_signal", "Não deu pra completar a conexão. Tenta entrar de novo.");
         if (!string.Equals(fromDeviceId, envelope.FromDeviceId, StringComparison.Ordinal))
-            throw new TelaeDomainException("invalid_signal_sender", "O remetente não corresponde ao dispositivo conectado.");
+            throw new TelaeDomainException("invalid_signal_sender", "Não deu pra completar a conexão. Tenta entrar de novo.");
 
-        registry.ValidateSessionParticipant(envelope.SessionId, fromDeviceId, targetDeviceId);
-        await Clients.Client(registry.GetConnectionId(targetDeviceId)).SendAsync("SignalReceived", envelope);
+        await presence.SendSignalAsync(Context.ConnectionId, targetDeviceId, envelope);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -315,6 +327,6 @@ public sealed class TelaeHub(
     private void EnsureCallerMatches(string deviceId)
     {
         if (registry.GetDeviceIdForConnection(Context.ConnectionId) != deviceId)
-            throw new TelaeDomainException("device_mismatch", "O dispositivo informado não corresponde à conexão atual.");
+            throw new TelaeDomainException("device_mismatch", "Não deu pra completar a conexão. Tenta entrar de novo.");
     }
 }

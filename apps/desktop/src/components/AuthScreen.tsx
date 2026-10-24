@@ -31,7 +31,7 @@ function Field({ id, label, icon: Icon, value, onChange, hint, trailing, ...inpu
     <div>
       <label htmlFor={id} className="mb-1.5 block text-xs font-medium text-ink-2">{label}</label>
       <div className="relative">
-        <Icon size={16} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-4" />
+        <Icon size={16} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-4" />
         <input id={id} value={value} onChange={event => onChange(event.target.value)} className={`field h-12 pl-10 ${trailing ? 'pr-12' : ''}`} {...input} />
         {trailing}
       </div>
@@ -81,7 +81,7 @@ function PasswordField({ id, label, value, onChange, autoComplete, hint, usernam
         <div className="mt-2.5 flex items-center gap-3" role="status" aria-label={t('Força da senha: {level}', { level: labels[score] })}>
           <div className="flex flex-1 gap-1" aria-hidden="true">
             {[1, 2, 3].map(step => (
-              <span key={step} className={`h-1 flex-1 rounded-full transition-colors ${score >= step ? (score === 3 ? 'bg-ok' : score === 2 ? 'bg-signal' : 'bg-danger') : 'bg-line-strong'}`} />
+              <span key={step} className={`h-1 flex-1 rounded-full transition-colors ${score >= step ? (score === 3 ? 'bg-ok' : score === 2 ? 'bg-warn' : 'bg-danger') : 'bg-line-strong'}`} />
             ))}
           </div>
           <span className="w-[84px] text-right text-xs text-ink-3">{labels[score]}</span>
@@ -127,7 +127,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
 
   async function run<T>(action: () => Promise<AuthOutcome<T>>, onSuccess: (data: T) => void) {
     if (!desktopApiAvailable) {
-      setError(t('Abra o aplicativo Telaê para continuar.'))
+      setError(t('Abre o app Telaê pra continuar.'))
       return
     }
     setBusy(true)
@@ -145,7 +145,9 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
 
   const submit = (handler: () => void) => (event: FormEvent) => { event.preventDefault(); handler() }
 
-  const login = () => void run(() => window.telae.auth.login(identifier.trim(), password), onAuthenticated).then(outcome => {
+  const authenticated = (account: AccountInfo) => { setPassword(''); onAuthenticated(account) }
+
+  const login = () => void run(() => window.telae.auth.login(identifier.trim(), password), authenticated).then(outcome => {
     if (outcome && !outcome.ok && outcome.code === 'email_not_verified') {
       setEmail(identifier.includes('@') ? identifier.trim() : '')
       setMode('verify')
@@ -157,18 +159,17 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
   const register = () => void run(
     () => window.telae.auth.register({ email: email.trim(), username: username.trim(), password, language: getLocale() }),
     result => {
-      if (result.account) { onAuthenticated(result.account); return }
+      if (result.account) { authenticated(result.account); return }
       setIdentifier(email.trim())
-      setPassword('')
       setMode('verify')
       setResendIn(RESEND_COOLDOWN_SECONDS)
     },
   )
 
-  const verify = () => void run(() => window.telae.auth.verifyEmail(identifier.trim(), code.trim()), onAuthenticated)
+  const verify = () => void run(() => window.telae.auth.verifyEmail(identifier.trim(), code.trim(), password), authenticated)
 
   const resend = () => void run(() => window.telae.auth.resendVerification(identifier.trim()), () => {
-    setInfo(t('Mandei outro código.'))
+    setInfo(t('Mandamos outro código.'))
     setResendIn(RESEND_COOLDOWN_SECONDS)
   })
 
@@ -185,11 +186,11 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     setInfo(t('Senha trocada. Entra com a nova.'))
   })
 
-  const submitLabel = (label: string) => (busy ? t('Aguarde…') : label)
+  const submitLabel = (label: string) => (busy ? t('Um instante…') : label)
   const tabbed = mode === 'login' || mode === 'register'
 
   let title = t('Bem-vindo de volta')
-  let subtitle: string | null = t('Entre pra ver quem está ao vivo.')
+  let subtitle: string | null = t('Entra pra ver quem está ao vivo.')
   let form: ReactNode
 
   if (mode === 'login') {
@@ -202,7 +203,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
       </form>
     )
   } else if (mode === 'register') {
-    title = t('Crie sua conta')
+    title = t('Cria sua conta')
     subtitle = t('Seu @ é como os amigos te acham.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(register)}>
@@ -218,7 +219,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     form = (
       <form className="mt-7 grid gap-5" onSubmit={submit(verify)}>
         <CodeInput value={code} onChange={setCode} disabled={busy} />
-        <button type="submit" disabled={busy || code.length !== 6} className="telae-press btn btn-primary btn-lg w-full">{submitLabel(t('Confirmar'))}</button>
+        <button type="submit" disabled={busy || code.length !== 6 || !password} className="telae-press btn btn-primary btn-lg w-full">{submitLabel(t('Confirmar'))}</button>
         <button type="button" onClick={resend} disabled={busy || resendIn > 0} className="justify-self-center text-[13px] text-ink-3 underline-offset-2 hover:text-ink hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">
           {resendIn > 0 ? t('Reenviar código em {seconds}s', { seconds: resendIn }) : t('Reenviar código')}
         </button>
@@ -226,7 +227,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
     )
   } else if (mode === 'forgot') {
     title = t('Esqueceu a senha?')
-    subtitle = t('Diz seu e-mail ou @ e a gente manda um código pra você criar outra.')
+    subtitle = t('Diz seu e-mail ou @ e a gente manda um código pra criar uma senha nova.')
     form = (
       <form className="mt-7 grid gap-4" onSubmit={submit(forgot)}>
         <Field id="identifier" label={t('E-mail ou @usuário')} icon={Mail} value={identifier} onChange={setIdentifier} autoComplete="username" spellCheck={false} autoFocus />
@@ -234,7 +235,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
       </form>
     )
   } else {
-    title = t('Senha nova')
+    title = t('Cria uma senha nova')
     subtitle = t('Cola o código que mandamos e escolhe a nova senha.')
     form = (
       <form className="mt-7 grid gap-5" onSubmit={submit(reset)}>
@@ -248,18 +249,13 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
   return (
     <section aria-labelledby="auth-title" className="telae-panel-enter telae-auth">
       <div className="telae-auth-brand" aria-hidden="true">
-        <div className="telae-beam" />
-        <div className="relative">
-          <p className="display max-w-[11ch] text-[clamp(38px,4.6vw,60px)]">{t('Passa a tela pros amigos.')}</p>
-          <p className="mt-4 max-w-[36ch] text-[15px] leading-relaxed text-ink-2">{t('Imagem nítida e som junto, sem criar sala nem mandar link.')}</p>
-        </div>
-        <div className="relative mt-auto pb-16 pt-12"><AuthShowcase /></div>
+        <AuthShowcase />
       </div>
 
       <div className="telae-auth-form">
         <div className="mx-auto w-full max-w-[400px]">
           {tabbed ? (
-            <div role="tablist" aria-label={t('Entrar ou criar conta')} className="mb-8 grid grid-cols-2 rounded-xl border border-line-strong bg-canvas p-1">
+            <div role="tablist" aria-label={t('Entrar ou criar conta')} className="telae-auth-tabs">
               {(['login', 'register'] as const).map(option => (
                 <button
                   key={option}
@@ -267,7 +263,7 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
                   role="tab"
                   aria-selected={mode === option}
                   onClick={() => go(option)}
-                  className={`telae-press min-h-[38px] rounded-lg text-[13px] font-medium transition-colors ${mode === option ? 'bg-active text-ink shadow-card' : 'text-ink-3 hover:text-ink'}`}
+                  className={`telae-press min-h-[38px] rounded-lg text-[13px] font-medium transition-colors ${mode === option ? 'bg-active text-signal' : 'text-ink-3 hover:bg-raised hover:text-ink'}`}
                 >
                   {option === 'login' ? t('Entrar') : t('Criar conta')}
                 </button>
@@ -279,9 +275,9 @@ export function AuthScreen({ desktopApiAvailable, initialIdentifier = '', notice
             </button>
           )}
 
-          <h1 id="auth-title" className="display text-[34px]">{title}</h1>
+          <h1 id="auth-title" className="telae-session-title">{title}</h1>
           {subtitle && <p className="mt-2 text-sm leading-relaxed text-ink-2">{subtitle}</p>}
-          {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abra o aplicativo Telaê para continuar.')}</p>}
+          {!desktopApiAvailable && <p role="alert" className="mt-4 text-sm text-danger-soft">{t('Abre o app Telaê pra continuar.')}</p>}
           {info && <p role="status" className="notice mt-5">{info}</p>}
           {error && <p role="alert" className="mt-5 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[13px] leading-relaxed text-danger-soft"><CircleAlert size={15} aria-hidden="true" className="mt-0.5 shrink-0" />{error}</p>}
           <div role={tabbed ? 'tabpanel' : undefined}>{form}</div>
