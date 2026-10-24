@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeSignalingUrl, SignalingServerSettings } from './signaling-url.ts'
+import { migrateBuiltInServer, normalizeSignalingUrl, SignalingServerSettings } from './signaling-url.ts'
 import { AuthServerClient } from './auth-client.ts'
 
 describe('signaling URL trust boundary', () => {
+  it('migrates only the former official default without replacing custom servers', () => {
+    expect(migrateBuiltInServer('https://old.example.com/', 'https://new.example.com', 'https://old.example.com')).toBe('https://new.example.com')
+    expect(migrateBuiltInServer('https://custom.example.com', 'https://new.example.com', 'https://old.example.com')).toBe('https://custom.example.com')
+    expect(migrateBuiltInServer('https://old.example.com.evil.test', 'https://new.example.com', 'https://old.example.com')).toBe('https://old.example.com.evil.test')
+    expect(migrateBuiltInServer('https://old.example.com', '', 'https://old.example.com')).toBe('https://old.example.com')
+  })
   it('canonicalizes HTTPS URLs and preserves server prefixes', () => {
     expect(normalizeSignalingUrl(' HTTPS://TELAE.EXAMPLE.COM:443/app/ ')).toBe('https://telae.example.com/app')
   })

@@ -1,8 +1,9 @@
 /** Tradução para inglês: chave = texto-fonte em pt-BR usado em `t()` (e mensagens de domínio do servidor). */
 export const en: Record<string, string> = {
+  "A versão {version} está disponível.": "Version {version} is available.",
+  "Baixar atualização": "Download update",
   "O servidor está cheio. Tenta de novo mais tarde.": "The server is full. Try again later.",
   "Usa https:// pra proteger sua conta. O http:// só funciona neste PC.": "Use https:// to protect your account. http:// only works on this PC.",
-  "Essa instalação não atualiza sozinha. Baixa o instalador mais novo na página do projeto.": "This installation can't update itself. Download the latest installer from the project page.",
   "Usa um servidor em que você confia. Quem o administra recebe os dados da conta e a senha usada nele.": "Use a server you trust. Whoever runs it receives your account details and the password you use there.",
   "Essa ação não está disponível.": "This action is not available.",
   "Só seus amigos podem assistir.": "Only your friends can watch.",
