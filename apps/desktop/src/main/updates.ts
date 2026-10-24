@@ -90,6 +90,8 @@ export class DesktopUpdates {
     this.feedUrl = feedUrl
     const updater = new NsisUpdater({ provider: 'generic', url: feedUrl })
     updater.updateConfigPath = configPath
+    // updateConfigPath resets electron-updater's provider; restore the pinned feed afterwards.
+    updater.setFeedURL({ provider: 'generic', url: feedUrl })
     updater.disableWebInstaller = true
     // Unsigned builds may check metadata, but never download or execute it automatically.
     updater.autoDownload = this.automaticInstall

@@ -8,6 +8,7 @@ const updaterInstances = vi.hoisted(() => [] as Array<{
   quitAndInstall: ReturnType<typeof vi.fn>
   autoDownload: boolean
   autoInstallOnAppQuit: boolean
+  setFeedURL: ReturnType<typeof vi.fn>
 }>)
 
 const updateConfig = vi.hoisted(() => ({ value: 'publisherName: Telae' }))
@@ -19,7 +20,12 @@ vi.mock('electron-updater', () => ({
     NsisUpdater: class extends EventEmitter {
       autoDownload = true
       autoInstallOnAppQuit = true
-      readonly feed: { provider: string; url: string }
+      feed: { provider: string; url: string }
+      setFeedURL = vi.fn((feed: { provider: string; url: string }) => { this.feed = feed })
+      set updateConfigPath(_value: string) {
+        // Match the real library: setting its disk config clears the constructor's provider.
+        this.feed = { provider: 'generic', url: 'https://placeholder.invalid/updates/' }
+      }
       checkForUpdates = vi.fn(async () => null)
       quitAndInstall = vi.fn()
       constructor(feed: { provider: string; url: string }) {
@@ -54,6 +60,7 @@ describe('DesktopUpdates', () => {
       url: 'https://updates.example.com/updates/windows/',
     })
     expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
+    expect(updaterInstances[0].setFeedURL).toHaveBeenCalledWith(updaterInstances[0].feed)
   })
 
   it('waits for a live session to end before installing a downloaded update', async () => {
