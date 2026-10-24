@@ -17,6 +17,7 @@ import type {
   LocalProfile,
 } from '../shared/contracts.ts'
 import { DesktopUpdates } from './updates.ts'
+import { signedUpdateVerifier } from './update-signature.ts'
 import { readLocalProfile, writeJsonAtomically, writeLocalProfile, type SecretCipher } from './profile-store.ts'
 import { AuthServerClient } from './auth-client.ts'
 import { AuthSession } from './auth-session.ts'
@@ -56,10 +57,11 @@ const LOCAL_SIGNALING_URL = 'http://localhost:5015'
 const BUILT_IN_SIGNALING_URL = typeof __TELAE_DEFAULT_SERVER_URL__ === 'string' ? __TELAE_DEFAULT_SERVER_URL__.replace(/\/+$/, '') : ''
 const PREVIOUS_SIGNALING_URL = typeof __TELAE_PREVIOUS_SERVER_URL__ === 'string' ? __TELAE_PREVIOUS_SERVER_URL__ : ''
 const DEFAULT_SIGNALING_URL = app.isPackaged && BUILT_IN_SIGNALING_URL ? BUILT_IN_SIGNALING_URL : LOCAL_SIGNALING_URL
+const UPDATE_PUBLIC_KEY = typeof __TELAE_UPDATE_PUBLIC_KEY__ === 'string' ? __TELAE_UPDATE_PUBLIC_KEY__ : ''
 
 const updates = new DesktopUpdates((status) => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', status)
-}, BUILT_IN_SIGNALING_URL)
+}, BUILT_IN_SIGNALING_URL, UPDATE_PUBLIC_KEY && BUILT_IN_SIGNALING_URL ? signedUpdateVerifier(UPDATE_PUBLIC_KEY, BUILT_IN_SIGNALING_URL, (input, init) => net.fetch(String(input), init)) : undefined)
 
 function readSignalingUrl(): string {
   try {

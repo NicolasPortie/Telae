@@ -164,4 +164,68 @@ describe('DesktopUpdates', () => {
     expect(updates.getStatus().phase).toBe('error')
     expect(updates.getManualDownloadUrl()).toBeNull()
   })
+
+  it('automatically downloads Ed25519 releases, verifies before readiness, waits for the stream and verifies again before silent install', async () => {
+    updateConfig.value = 'provider: generic'
+    const verifier = vi.fn(async () => undefined)
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com', verifier)
+    await updates.check()
+    const updater = updaterInstances[0]
+    expect(updater.autoDownload).toBe(true)
+    expect(updater.autoInstallOnAppQuit).toBe(false)
+    updates.setSessionActive(true)
+    updater.emit('update-downloaded', { version: '0.3.2', downloadedFile: '/cache/update.exe' })
+    expect(updates.getStatus().phase).not.toBe('ready')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(verifier).toHaveBeenCalledExactlyOnceWith('0.3.2', '/cache/update.exe')
+    expect(updates.getStatus().phase).toBe('ready')
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+    updates.setSessionActive(false)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(verifier).toHaveBeenCalledTimes(2)
+    expect(updater.quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true)
+  })
+
+  it('never installs a tampered or unsigned download, including cached files', async () => {
+    updateConfig.value = 'provider: generic'
+    const verifier = vi.fn(async () => { throw new Error('invalid_update_signature') })
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com', verifier)
+    await updates.check()
+    const updater = updaterInstances[0]
+    updater.emit('update-downloaded', { version: '0.3.2', downloadedFile: '/cache/update.exe' })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(updates.getStatus().phase).toBe('error')
+    expect(updater.autoInstallOnAppQuit).toBe(false)
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('cancels installation if the cached installer fails the second verification', async () => {
+    updateConfig.value = 'provider: generic'
+    const verifier = vi.fn(async () => undefined).mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('invalid_update_hash'))
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com', verifier)
+    await updates.check()
+    updaterInstances[0].emit('update-downloaded', { version: '0.3.2', downloadedFile: '/cache/update.exe' })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(updates.getStatus().phase).toBe('error')
+    expect(updaterInstances[0].quitAndInstall).not.toHaveBeenCalled()
+  })
+
+  it('does not restart if a transmission starts while the final signature check is pending', async () => {
+    updateConfig.value = 'provider: generic'
+    let finishVerification = () => {}
+    const verifier = vi.fn(async (): Promise<void> => {}).mockResolvedValueOnce(undefined).mockImplementationOnce(() => new Promise<void>(resolve => { finishVerification = resolve }))
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com', verifier)
+    await updates.check()
+    updaterInstances[0].emit('update-downloaded', { version: '0.3.2', downloadedFile: '/cache/update.exe' })
+    await vi.advanceTimersByTimeAsync(1500)
+    updates.setSessionActive(true)
+    finishVerification()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(updates.getStatus().phase).toBe('ready')
+    expect(updaterInstances[0].quitAndInstall).not.toHaveBeenCalled()
+    updates.setSessionActive(false)
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(updaterInstances[0].quitAndInstall).toHaveBeenCalledExactlyOnceWith(true, true)
+  })
 })

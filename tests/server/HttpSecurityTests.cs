@@ -15,6 +15,7 @@ public sealed class HttpSecurityTests : IAsyncLifetime
 {
     private WebApplication _app = null!;
     private HttpClient _http = null!;
+    private readonly string _updates = Path.Combine(Path.GetTempPath(), "telae-download-tests-" + Guid.NewGuid().ToString("N"));
 
     public async Task InitializeAsync()
     {
@@ -34,9 +35,11 @@ public sealed class HttpSecurityTests : IAsyncLifetime
         _app.UseCors();
         _app.MapPost("/auth/echo", (Payload body) => body);
         _app.MapGet("/health", () => new { status = "ok" });
+        Directory.CreateDirectory(_updates);
+        _app.MapTelaeDownloads(_updates);
         await _app.StartAsync();
         var address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
-        _http = new HttpClient { BaseAddress = new Uri(address) };
+        _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { BaseAddress = new Uri(address) };
     }
 
     [Theory]
@@ -95,6 +98,31 @@ public sealed class HttpSecurityTests : IAsyncLifetime
     {
         _http.Dispose();
         await _app.DisposeAsync();
+        Directory.Delete(_updates, recursive: true);
+    }
+
+    [Fact]
+    public async Task Stable_download_link_tracks_the_published_version_without_caching_a_stale_installer()
+    {
+        foreach (var version in new[] { "0.3.2", "0.3.3" })
+        {
+            await File.WriteAllTextAsync(Path.Combine(_updates, "latest.yml"), $"version: {version}\n");
+            await File.WriteAllTextAsync(Path.Combine(_updates, $"Telae-Setup-{version}.exe"), "fixture");
+            using var response = await _http.GetAsync("/download/windows");
+            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+            Assert.Equal($"/updates/windows/Telae-Setup-{version}.exe", response.Headers.Location?.OriginalString);
+            Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+        }
+    }
+
+    [Theory]
+    [InlineData("0.3.2")]
+    [InlineData("../../private")]
+    public async Task Stable_download_never_redirects_to_missing_or_arbitrary_files(string version)
+    {
+        await File.WriteAllTextAsync(Path.Combine(_updates, "latest.yml"), $"version: {version}\n");
+        using var response = await _http.GetAsync("/download/windows");
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     public sealed record Payload(string Value);

@@ -11,7 +11,7 @@ Não abra uma issue pública. Use o recurso **Report a vulnerability** da aba Se
 
 O modelo de identidade e as defesas já adotadas estão descritos em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e na [ADR 0003](docs/adr/0003-device-identity.md).
 
-Escolha um servidor de confiança: seu administrador recebe os dados de conta e a senha usada nele. Use uma senha exclusiva. Sessões locais ficam vinculadas ao servidor e dependem da proteção do sistema operacional para persistência. A origem de atualizações é fixada na compilação; instalações sem assinatura de código exigem atualização manual pela página oficial do projeto.
+Escolha um servidor de confiança: seu administrador recebe os dados de conta e a senha usada nele. Use uma senha exclusiva. Sessões locais ficam vinculadas ao servidor e dependem da proteção do sistema operacional para persistência. A origem de atualizações e a chave pública Ed25519 são fixadas na compilação oficial. O app verifica a assinatura da versão, nome, tamanho e SHA-512 do instalador antes de liberar a instalação e novamente antes de executar; arquivos em cache também são verificados. A chave privada permanece fora do cliente e do servidor de downloads. Sem chave de release ou publicador Authenticode confiável, o app não executa atualizações automaticamente.
 
 Requisitos de TLS, proxies confiáveis, proteção dos dados persistidos e recomendações opcionais de WAF/Turnstile estão em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
