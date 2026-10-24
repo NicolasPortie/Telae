@@ -1,4 +1,5 @@
 import type { AccountInfo, AuthErrorCode } from '../shared/contracts.ts'
+import { normalizeSignalingUrl } from './signaling-url.ts'
 
 export class AuthError extends Error {
   readonly code: AuthErrorCode
@@ -28,18 +29,18 @@ const REQUEST_TIMEOUT_MS = 15_000
 
 /** Chamadas REST de conta ao servidor. Feitas pelo processo principal para que tokens nunca passem pela interface. */
 export class AuthServerClient {
-  private readonly baseUrl: () => string
+  private readonly baseUrl: string
   private readonly fetchImpl: typeof fetch
 
   constructor(baseUrl: () => string, fetchImpl: typeof fetch = fetch) {
-    this.baseUrl = baseUrl
+    this.baseUrl = normalizeSignalingUrl(baseUrl())
     this.fetchImpl = fetchImpl
   }
 
   private async request<T>(method: string, path: string, body?: unknown, accessToken?: string): Promise<T> {
     let response: Response
     try {
-      response = await this.fetchImpl(`${this.baseUrl().replace(/\/+$/, '')}${path}`, {
+      response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         method,
         headers: {
           'Content-Type': 'application/json',
@@ -47,6 +48,7 @@ export class AuthServerClient {
         },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        redirect: 'error',
       })
     } catch {
       throw new AuthError('network')
@@ -68,8 +70,8 @@ export class AuthServerClient {
     return this.request<RegisterResponse>('POST', '/auth/register', input)
   }
 
-  verifyEmail(identifier: string, code: string) {
-    return this.request<ServerSession>('POST', '/auth/verify-email', { identifier, code })
+  verifyEmail(identifier: string, code: string, password: string) {
+    return this.request<ServerSession>('POST', '/auth/verify-email', { identifier, code, password })
   }
 
   resendVerification(identifier: string) {

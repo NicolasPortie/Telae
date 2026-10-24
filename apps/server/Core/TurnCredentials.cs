@@ -61,9 +61,9 @@ public static class TurnCredentialIssuer
         int ttlSeconds)
     {
         if (string.IsNullOrWhiteSpace(secret))
-            throw new TelaeDomainException("turn_not_configured", "O serviço TURN não está configurado.");
+            throw new TelaeDomainException("turn_not_configured", "O servidor não está pronto pra esse tipo de conexão. Fala com quem administra.");
         if (ttlSeconds <= 0)
-            throw new TelaeDomainException("invalid_turn_ttl", "A duração da credencial TURN é inválida.");
+            throw new TelaeDomainException("invalid_turn_ttl", "O servidor não está pronto pra esse tipo de conexão. Fala com quem administra.");
 
         var username = $"{now.ToUnixTimeSeconds() + ttlSeconds}:{deviceId.Trim()}";
         using var hmac = new HMACSHA1(Encoding.UTF8.GetBytes(secret));

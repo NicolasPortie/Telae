@@ -11,14 +11,14 @@
 A Windows desktop app with video up to 1440p60, system or per-application audio and peer-to-peer WebRTC transport. No rooms, no links: friends who are live show up in your list and you join with one click.
 
 [![CI](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml/badge.svg)](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml)
-[![Release](https://img.shields.io/github/v/release/NicolasPortie/Telae?label=release&color=E0AE5E)](https://github.com/NicolasPortie/Telae/releases)
+[![Release](https://img.shields.io/github/v/release/NicolasPortie/Telae?label=release&color=8CC63F)](https://github.com/NicolasPortie/Telae/releases)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![WebRTC](https://img.shields.io/badge/WebRTC-P2P-E0AE5E)
+![WebRTC](https://img.shields.io/badge/WebRTC-P2P-8CC63F)
 
 [Demo](#demo) · [Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Self-hosting](#self-hosting) · [Documentation](#documentation)
 
@@ -27,10 +27,10 @@ A Windows desktop app with video up to 1440p60, system or per-application audio 
 ## Demo
 
 <p align="center">
-  <img src="docs/media/demo.gif" alt="Telaê demo: a friend picks a window and starts streaming, then another friend watches it live with the statistics panel open" width="720" />
+  <img src="docs/media/demo.gif" alt="Telaê demo: Ana picks a window and goes live while friends join; on Pedro's PC her screen shows up live on the home screen and he watches in one click with the statistics open" width="720" />
 </p>
 
-<p align="center"><sub>Ana picks a window and goes live; Bruno sees her in his friends list, watches in one click and opens the live statistics (direct route, 1 ms RTT, no packet loss).</sub></p>
+<p align="center"><sub>Ana picks a window and goes live while friends join. On Pedro's PC her screen is already playing on the home screen; he watches in one click and opens the statistics. Interface walkthrough with sample content.</sub></p>
 
 ## Table of contents
 
@@ -59,30 +59,31 @@ The goal of the project is a screen-sharing product that is genuinely good at it
 - **Up to 1440p60** with explicit profiles (720p60, 1080p30, 1080p60, 1440p30, 1440p60) and automatic adaptation under CPU or network pressure.
 - **Synced audio** from the whole system or only the chosen application, captured by a native bridge using Windows process loopback. Discord's audio is excluded automatically when sharing a full screen.
 - **Friends and presence**: add people by their @username, mutual friendship, friend requests and quick switching between live streams. The friend list lives on the server, so it follows your account to any computer.
+- **Live previews**: while a friend streams, a small preview of their screen refreshes on your home screen every few seconds. Only mutual friends receive it, and it is never stored.
 - **Up to 12 viewers** per stream, each with an independent connection, quality and recovery.
 - **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
 - **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.
 - **Accounts**: email and password with 6-digit email verification, password recovery, rotating sessions and account deletion ([ADR 0004](docs/adr/0004-user-accounts.md)). Tokens are kept in the OS keystore.
-- **Windows notifications** when a friend goes live, optional launch at startup and background auto-updates.
+- **Windows notifications** when a friend goes live, optional launch at startup and background auto-updates on signed builds.
 - **English and Portuguese** interface, following the Windows language or chosen in Settings.
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/home.png" alt="Home screen with the friends list and a friend who is live" /></td>
+    <td width="50%"><img src="docs/screenshots/home.png" alt="Home screen with live previews of friends who are streaming and the friends list" /></td>
     <td width="50%"><img src="docs/screenshots/viewer.png" alt="Viewer player with controls and the statistics panel" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Home: friends grouped by Live, Online and Offline</sub></td>
+    <td align="center"><sub>Home: friends who are live show their screen right there</sub></td>
     <td align="center"><sub>Viewer: player with controls and statistics (key <code>I</code>)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Sharer screen with preview, viewers and statistics" /></td>
+    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Sharer screen with preview, who is watching and connection" /></td>
     <td width="50%"><img src="docs/screenshots/create-account.png" alt="Create account screen with email, username and password" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Sharer: preview, viewers and telemetry</sub></td>
+    <td align="center"><sub>Sharer: preview, who is watching and connection health</sub></td>
     <td align="center"><sub>Create account: your @username is how friends find you</sub></td>
   </tr>
 </table>
@@ -138,7 +139,7 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 
 ### Download
 
-Grab the Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). The installers are not code-signed yet, so Windows SmartScreen may warn on the first run: choose **More info > Run anyway**. The app updates itself in the background.
+Grab the Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). The installers are not code-signed yet, so Windows SmartScreen may warn on the first run: choose **More info > Run anyway**. Until the installer is signed, new versions are installed by downloading the installer again from here. Auto-update only applies to signed builds.
 
 The installers published here are generic: they do not come with any server. Telaê is open source, so to use it with your friends [run your own server](#self-hosting) and set its address on the sign-in screen (**Server > Change**) or in **Settings > Signaling server**. To bake a default into your own installer, set `TELAE_DEFAULT_SERVER_URL` when running `npm run dist`.
 
@@ -218,7 +219,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 ## Known limitations
 
 - Windows only for now (the capture and audio pipeline depends on Windows APIs).
-- The installers are not code-signed yet, so Windows SmartScreen may warn on first run.
+- The installers are not code-signed yet, so Windows SmartScreen may warn on first run, and updates are manual until then.
 - Each viewer receives its own encoded stream, so upload bandwidth and CPU grow with the number of viewers. An SFU is a future option.
 - 1440p60 depends on the machine and the network; the validation docs list what was and was not measured.
 

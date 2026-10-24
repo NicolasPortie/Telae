@@ -4,6 +4,22 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.3.0] - 2026-10-24
+
+Nova identidade verde, prévias ao vivo dos amigos e proteção de contas e do desktop. Notas em [docs/releases/RELEASE_0.3.0.md](docs/releases/RELEASE_0.3.0.md). **Atualize o servidor antes do desktop** e entre novamente na conta após a migração.
+
+### Interface
+- Nova marca e telas de entrada, início, transmissão e configurações; seletor de fontes com abas Telas/Janelas e qualidade em uma linha.
+- Prévias de transmissão na lista de amigos, recebidas apenas por amizades mútuas e mantidas em memória.
+- Área de clique estável no botão Escolher tela após redimensionar a janela.
+- Capturas de tela e demonstrações em GIF atualizadas em português e inglês.
+
+### Segurança
+- Renderer em `telae://app`, CSP restrita ao servidor ativo, validação de IPC e fuses do Electron.
+- Atualizações vinculadas à origem HTTPS definida na compilação e ao publicador do instalador; builds sem assinatura exigem atualização manual.
+- Revogação de sessões, chaves separadas para tokens e códigos, limites persistentes de autenticação e endurecimento de HTTP, SMTP e sinalização.
+- Duas migrações PostgreSQL para famílias de sessão e histórico de tentativas. Faça backup antes do deploy; sessões antigas exigem novo login.
+
 ## [0.2.1] - 2026-10-24
 
 O instalador público passa a ser genérico, sem servidor embutido; o oficial é distribuído pelo mantenedor. Notas em [docs/releases/RELEASE_0.2.1.md](docs/releases/RELEASE_0.2.1.md).

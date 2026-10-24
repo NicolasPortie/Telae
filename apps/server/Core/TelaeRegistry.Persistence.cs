@@ -64,7 +64,7 @@ public sealed partial class TelaeRegistry
     {
         var normalized = value?.Trim() ?? "";
         if (normalized.Length is < 1 or > 32)
-            throw new TelaeDomainException("invalid_display_name", "O nome deve ter entre 1 e 32 caracteres.");
+            throw new TelaeDomainException("invalid_display_name", "O nome precisa ter de 1 a 32 caracteres.");
         return normalized;
     }
 
@@ -73,17 +73,17 @@ public sealed partial class TelaeRegistry
     {
         var normalized = (value ?? "").Trim().TrimStart('@').ToLowerInvariant();
         if (normalized.Length is < 3 or > 20 || !normalized.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
-            throw new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Use de 3 a 20 letras, números ou _.");
+            throw new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Usa de 3 a 20 letras, números ou _.");
         return normalized;
     }
 
     private static string NormalizeInviteCode(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 32)
-            throw new TelaeDomainException("invalid_friend_code", "Código inválido.");
+            throw new TelaeDomainException("invalid_friend_code", "Esse convite não existe. Confere o código e tenta de novo.");
         var normalized = value.Trim().Replace("-", "").ToUpperInvariant();
         if (normalized.Length is not (6 or 8) || !normalized.All(char.IsAsciiLetterOrDigit))
-            throw new TelaeDomainException("invalid_friend_code", "Código inválido.");
+            throw new TelaeDomainException("invalid_friend_code", "Esse convite não existe. Confere o código e tenta de novo.");
         return normalized;
     }
 }
