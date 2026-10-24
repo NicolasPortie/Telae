@@ -4,12 +4,16 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.2.1] - 2026-10-24
+
+O instalador público passa a ser genérico, sem servidor embutido; o oficial é distribuído pelo mantenedor. Notas em [docs/releases/RELEASE_0.2.1.md](docs/releases/RELEASE_0.2.1.md).
+
 ## [0.2.0] - 2026-10-23
 
 Contas de usuário, amigos pelo @usuário e um novo visual. Notas completas em [docs/releases/RELEASE_0.2.0.md](docs/releases/RELEASE_0.2.0.md). **Exige atualizar o servidor e o desktop juntos:** o servidor passa a recusar clientes sem conta.
 
 ### Servidor padrão
-- **O servidor padrão sai do código.** O instalador oficial recebe o endereço na compilação (`TELAE_DEFAULT_SERVER_URL`, variável de Actions do `release.yml`); quem compila o código aberto não recebe servidor nenhum. A tela de entrada ganhou **Servidor > Alterar** para apontar o app para o seu próprio servidor antes de criar a conta.
+- **O servidor padrão sai do código e do instalador público.** O endereço entra na compilação (`TELAE_DEFAULT_SERVER_URL`); o instalador oficial é gerado num repositório privado e o público não vem com servidor nenhum. A tela de entrada ganhou **Servidor > Alterar** para apontar o app para o seu próprio servidor antes de criar a conta.
 
 ### Segurança
 - **Cadastro fechado por padrão.** O servidor só cria conta para e-mails liberados em `Auth__AllowedEmails` (ou `TELAE_ALLOWED_EMAILS` no Docker Compose); `Auth__RegistrationOpen=true` reabre para qualquer pessoa. Quem não está na lista recebe o erro `registration_closed`, traduzido na interface.

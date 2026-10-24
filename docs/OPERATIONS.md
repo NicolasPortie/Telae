@@ -36,7 +36,7 @@ O teste usa tons discretos de aplicativos separados e valida exclusão de proces
 
 ## Servidor padrão do instalador
 
-O servidor que o app usa por padrão **não está no código**. O instalador oficial recebe o endereço na compilação, pela variável `TELAE_DEFAULT_SERVER_URL`: o `release.yml` lê a variável de Actions de mesmo nome do repositório (Settings > Secrets and variables > Actions > Variables). Quem compila o código aberto sem essa variável tem um app sem servidor padrão e escolhe o seu na tela de entrada ou em Configurações. Para um instalador próprio: `TELAE_DEFAULT_SERVER_URL=https://telae.seudominio.com npm run dist`.
+O servidor que o app usa por padrão **não está no código nem no instalador público**. O endereço entra na compilação, pela variável `TELAE_DEFAULT_SERVER_URL`. O `release.yml` deste repositório não a define, então o instalador público (e qualquer build do código aberto) não vem com servidor: a pessoa escolhe o seu na tela de entrada (Servidor > Alterar) ou em Configurações. O instalador **oficial**, com o servidor do mantenedor, é gerado no repositório de operação privado e distribuído só por quem o mantém. Para um instalador próprio: `TELAE_DEFAULT_SERVER_URL=https://telae.seudominio.com npm run dist`.
 
 A verificação de atualizações usa sempre o servidor configurado (`<servidor>/updates/windows/`), então um build próprio atualiza a partir do próprio servidor.
 
@@ -44,7 +44,7 @@ A verificação de atualizações usa sempre o servidor configurado (`<servidor>
 
 O código fica neste repositório público e roda só em runners da GitHub, sem segredos de infraestrutura. A parte que mexe em máquinas próprias vive num repositório de operação **privado**: os runners `self-hosted`, a entrega do instalador ao servidor, a validação física de mídia e os scripts de deploy com o layout do servidor.
 
-O repositório privado consulta a Release pública mais recente. O público nunca o chama e não guarda segredos dele, então um PR de fora não alcança as máquinas de operação. Mantenha em Settings > Actions a aprovação de workflows para contribuidores externos, só ações oficiais liberadas e permissão de leitura por padrão. As tags `v*` têm regra de proteção: só o mantenedor cria.
+O repositório privado compila o instalador oficial a partir de uma tag do público. O público nunca o chama e não guarda segredos dele, então um PR de fora não alcança as máquinas de operação. Mantenha em Settings > Actions a aprovação de workflows para contribuidores externos, só ações oficiais liberadas e permissão de leitura por padrão. As tags `v*` têm regra de proteção: só o mantenedor cria.
 
 ## Versões e publicação
 
@@ -55,7 +55,7 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-Ao enviar a tag, o `release.yml` valida, gera o instalador do Windows e cria a Release pública com o instalador, o blockmap e o `latest.yml`. A entrega ao servidor de atualizações e a atualização do backend são feitas pelo repositório de operação.
+Ao enviar a tag, o `release.yml` valida, gera o instalador genérico do Windows e cria a Release pública com o instalador, o blockmap e o `latest.yml`. O instalador oficial, a entrega ao servidor de atualizações e a atualização do backend são feitos pelo repositório de operação.
 
 Quem hospeda o próprio servidor pode implantar o backend de qualquer forma que preferir (veja o `docker-compose.yml` e o [unit de exemplo](../ops/telae-server.service)). O estado persistente fica fora da pasta de release e não é versionado.
 

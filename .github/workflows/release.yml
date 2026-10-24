@@ -1,8 +1,8 @@
 name: Release
 
-# Ao enviar uma tag v*, valida, gera o instalador do Windows e cria a Release pública.
-# Roda só em runners da GitHub. Validação física de mídia e a entrega ao servidor
-# ficam num repositório de operação privado.
+# Ao enviar uma tag v*, valida, gera o instalador GENÉRICO do Windows (sem servidor embutido) e cria a Release pública.
+# Roda só em runners da GitHub. O instalador oficial, com o servidor do mantenedor, a validação física de mídia e a
+# entrega ao servidor ficam num repositório de operação privado.
 
 on:
   push:
@@ -67,8 +67,6 @@ jobs:
       - name: Build Windows installer and update manifest
         working-directory: apps/desktop
         env:
-          # Servidor padrão só dos instaladores oficiais; quem compila o código aberto não recebe nenhum.
-          TELAE_DEFAULT_SERVER_URL: ${{ vars.TELAE_DEFAULT_SERVER_URL }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run dist
@@ -96,6 +94,6 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME @files --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "Telaê v$version" --generate-notes
+            gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "Telaê v$version" --generate-notes --notes "Instalador genérico: não vem com servidor. Defina o seu em Servidor > Alterar na tela de entrada (veja o README)."
           }
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o GitHub Release.' }
