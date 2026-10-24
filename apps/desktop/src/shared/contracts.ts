@@ -101,7 +101,7 @@ export type TelaeAuthApi = {
   /** Conta da sessão guardada neste computador, validada no servidor quando possível. */
   getSession(): Promise<AccountInfo | null>
   register(input: { email: string; username: string; password: string; language: string }): Promise<AuthOutcome<RegisterOutcome>>
-  verifyEmail(identifier: string, code: string): Promise<AuthOutcome<AccountInfo>>
+  verifyEmail(identifier: string, code: string, password: string): Promise<AuthOutcome<AccountInfo>>
   resendVerification(identifier: string): Promise<AuthOutcome>
   login(identifier: string, password: string): Promise<AuthOutcome<AccountInfo>>
   logout(): Promise<void>

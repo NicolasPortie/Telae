@@ -41,3 +41,6 @@ apps/server/data/*
 *.tmp
 *.temp
 
+# Local design explorations (published assets live in docs/media and docs/screenshots)
+/output/
+

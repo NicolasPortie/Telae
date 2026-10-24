@@ -28,6 +28,7 @@ public sealed class RefreshToken
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid AccountId { get; set; }
     public Account? Account { get; set; }
+    public Guid SessionId { get; set; } = Guid.NewGuid();
     /// <summary>SHA-256 do token; o valor original só existe no cliente.</summary>
     public string TokenHash { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
@@ -38,7 +39,7 @@ public sealed class RefreshToken
     public string? UserAgent { get; set; }
 }
 
-public enum OneTimeCodePurpose { VerifyEmail = 1, ResetPassword = 2 }
+public enum OneTimeCodePurpose { VerifyEmail = 1, ResetPassword = 2, RegistrationNotice = 3 }
 
 /// <summary>Código numérico de uso único (verificação de e-mail ou redefinição de senha).</summary>
 public sealed class OneTimeCode
@@ -74,5 +75,23 @@ public sealed class DismissedRequest
     public Account? Account { get; set; }
     public Guid FromId { get; set; }
     public Account? From { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+// Histórico limpo pela manutenção e removido junto com a conta.
+public sealed class FailedCodeAttempt
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AccountId { get; set; }
+    public OneTimeCodePurpose Purpose { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class PasswordAttempt
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AccountId { get; set; }
+    public string ClientAddressHash { get; set; } = "";
+    public bool AppliesToPair { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
 }

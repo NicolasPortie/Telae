@@ -3,8 +3,15 @@ productName: Telae
 copyright: Copyright © 2026 Telaê
 artifactName: "${productName}-Setup-${version}.${ext}"
 
-# O app confere atualizações no servidor configurado pelo usuário (<servidor>/updates/windows/); este endereço é só o modelo
-# do app-update.yml e é substituído em tempo de execução.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+# O servidor de atualizações vem da compilação; mudar a sinalização não o altera.
 publish:
   provider: generic
   url: https://telae.example.invalid/updates/windows/
@@ -28,7 +35,7 @@ win:
     - target: nsis
       arch: [x64]
   # Assinatura: definir CSC_LINK (certificado) e CSC_KEY_PASSWORD
-  # no ambiente de release. Sem eles o instalador sai unsigned, só para teste.
+  # no ambiente de release. Sem assinatura, a atualização é apenas manual.
 
 nsis:
   oneClick: true

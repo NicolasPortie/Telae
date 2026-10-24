@@ -12,9 +12,9 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(deviceId);
             if (_sessionsBySharer.ContainsKey(deviceId))
-                throw new TelaeDomainException("share_already_active", "Este dispositivo já está compartilhando a tela.");
+                throw new TelaeDomainException("share_already_active", "Você já está transmitindo.");
             if (_sessionsBySharer.Values.Any(session => session.ViewerDeviceIds.Contains(deviceId)))
-                throw new TelaeDomainException("viewer_already_joined", "Saia da transmissão atual antes de transmitir a sua.");
+                throw new TelaeDomainException("viewer_already_joined", "Sai da transmissão atual antes de transmitir a sua.");
 
             var session = new ShareSessionRecord(
                 Guid.NewGuid().ToString("N"),
@@ -40,16 +40,16 @@ public sealed partial class TelaeRegistry
     public ShareSessionSnapshot JoinShare(string viewerDeviceId, string sharerDeviceId)
     {
         if (string.IsNullOrWhiteSpace(sharerDeviceId) || sharerDeviceId.Length > 128)
-            throw new TelaeDomainException("invalid_sharer", "Informe um dispositivo válido.");
+            throw new TelaeDomainException("invalid_sharer", "Não deu pra entrar na transmissão. Tenta de novo.");
         lock (_gate)
         {
             RequireOnlineDevice(viewerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Esta pessoa não está compartilhando a tela agora.");
+                throw new TelaeDomainException("share_not_active", "Essa pessoa não está transmitindo agora.");
             if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
+                throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
             if (!session.ViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("invite_required", "Use um código de convite para entrar nesta transmissão.");
+                throw new TelaeDomainException("invite_required", "Usa um código de convite pra entrar nessa transmissão.");
             return AttachViewerLocked(viewerDeviceId, session);
         }
     }
@@ -67,25 +67,25 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(viewerDeviceId);
             var sharerProfile = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, normalized, StringComparison.OrdinalIgnoreCase))
-                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo.");
+                ?? throw new TelaeDomainException("friend_not_found", "Não deu pra achar ninguém com esse @. Confere e tenta de novo.");
             var sharerDeviceId = sharerProfile.DeviceId;
             if (sharerDeviceId == viewerDeviceId)
                 throw new TelaeDomainException("cannot_view_own_share", "Você não pode assistir à sua própria transmissão.");
             if (!AreMutualFriendsLocked(viewerDeviceId, sharerDeviceId))
-                throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos para assistir.");
+                throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos pra assistir.");
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var target))
                 throw new TelaeDomainException("share_not_active", "Seu amigo não está transmitindo agora.");
             RequireOnlineDevice(sharerDeviceId);
             if (target.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
+                throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
             if (_sessionsBySharer.ContainsKey(viewerDeviceId))
-                throw new TelaeDomainException("share_already_active", "Pare de transmitir antes de assistir a outra.");
+                throw new TelaeDomainException("share_already_active", "Para de transmitir antes de assistir a uma transmissão.");
 
             var current = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(viewerDeviceId));
             if (ReferenceEquals(current, target))
-                throw new TelaeDomainException("already_watching", "Você já está assistindo esta transmissão.");
+                throw new TelaeDomainException("already_watching", "Você já está assistindo essa transmissão.");
             if (target.ViewerDeviceIds.Count >= MaxViewersPerSession)
-                throw new TelaeDomainException("share_full", $"Esta transmissão atingiu o limite de {MaxViewersPerSession} espectadores.");
+                throw new TelaeDomainException("share_full", $"Essa transmissão já chegou ao limite de {MaxViewersPerSession} pessoas.");
 
             ViewerDetachment? detached = null;
             if (current is not null)
@@ -107,16 +107,18 @@ public sealed partial class TelaeRegistry
     private ShareSessionSnapshot AttachViewerLocked(string viewerDeviceId, ShareSessionRecord session)
     {
         if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-            throw new TelaeDomainException("viewer_removed", "Você foi removido desta transmissão.");
+            throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
         RequireOnlineDevice(session.SharerDeviceId);
         if (viewerDeviceId == session.SharerDeviceId)
-            throw new TelaeDomainException("cannot_view_own_share", "O dispositivo não pode assistir à própria transmissão.");
+            throw new TelaeDomainException("cannot_view_own_share", "Você não pode assistir à sua própria transmissão.");
+        if (_profiles[session.SharerDeviceId].DeviceSecretHash is null && !AreMutualFriendsLocked(viewerDeviceId, session.SharerDeviceId))
+            throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos pra assistir.");
         if (_sessionsBySharer.ContainsKey(viewerDeviceId))
-            throw new TelaeDomainException("share_already_active", "Pare de transmitir antes de assistir a outra.");
+            throw new TelaeDomainException("share_already_active", "Para de transmitir antes de assistir a uma transmissão.");
         if (_sessionsBySharer.Values.Any(s => s != session && s.ViewerDeviceIds.Contains(viewerDeviceId)))
-            throw new TelaeDomainException("viewer_already_joined", "Saia da transmissão atual antes de entrar em outra.");
-        if (session.ViewerDeviceIds.Count >= 12 && !session.ViewerDeviceIds.Contains(viewerDeviceId))
-            throw new TelaeDomainException("share_full", "Esta transmissão atingiu o limite de 12 espectadores.");
+            throw new TelaeDomainException("viewer_already_joined", "Sai da transmissão atual antes de entrar em outra.");
+        if (session.ViewerDeviceIds.Count >= MaxViewersPerSession && !session.ViewerDeviceIds.Contains(viewerDeviceId))
+            throw new TelaeDomainException("share_full", "Essa transmissão já chegou ao limite de 12 pessoas.");
         session.ViewerDeviceIds.Add(viewerDeviceId);
         return ToSessionSnapshot(session);
     }
@@ -126,7 +128,7 @@ public sealed partial class TelaeRegistry
         lock (_gate)
         {
             if (!_sessionsBySharer.Remove(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Este dispositivo não possui uma transmissão ativa.");
+                throw new TelaeDomainException("share_not_active", "Você não está transmitindo agora.");
             // Os convites da sessão terminada são mantidos de propósito: entrar com
             // eles deve responder share_not_active ("transmissão já terminou") em vez
             // de invite_invalid. Eles saem por expiração no próximo CreateInvite.
@@ -137,14 +139,14 @@ public sealed partial class TelaeRegistry
     public ShareSessionSnapshot RemoveViewer(string sharerDeviceId, string viewerDeviceId)
     {
         if (string.IsNullOrWhiteSpace(viewerDeviceId) || viewerDeviceId.Length > 128)
-            throw new TelaeDomainException("invalid_viewer", "Informe um espectador válido.");
+            throw new TelaeDomainException("invalid_viewer", "Essa pessoa não está nessa transmissão.");
         lock (_gate)
         {
             RequireOnlineDevice(sharerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Este dispositivo não possui uma transmissão ativa.");
+                throw new TelaeDomainException("share_not_active", "Você não está transmitindo agora.");
             if (!session.ViewerDeviceIds.Remove(viewerDeviceId))
-                throw new TelaeDomainException("viewer_not_joined", "O espectador não participa desta transmissão.");
+                throw new TelaeDomainException("viewer_not_joined", "Essa pessoa não está nessa transmissão.");
             session.BlockedViewerDeviceIds.Add(viewerDeviceId);
             return ToSessionSnapshot(session);
         }
@@ -157,7 +159,7 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(sharerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Este dispositivo não possui uma transmissão ativa.");
+                throw new TelaeDomainException("share_not_active", "Você não está transmitindo agora.");
             session.QualityProfile = normalized;
             return ToSessionSnapshot(session);
         }
@@ -180,13 +182,15 @@ public sealed partial class TelaeRegistry
     {
         lock (_gate)
         {
+            RequireOnlineDevice(deviceId);
+            RequireOnlineDevice(targetDeviceId);
             var session = _sessionsBySharer.Values.FirstOrDefault(s => s.SessionId == sessionId)
                 ?? throw new TelaeDomainException("share_not_active", "Essa transmissão não está mais no ar.");
 
             var validPair = (session.SharerDeviceId == deviceId && session.ViewerDeviceIds.Contains(targetDeviceId)) ||
                 (session.SharerDeviceId == targetDeviceId && session.ViewerDeviceIds.Contains(deviceId));
             if (!validPair)
-                throw new TelaeDomainException("not_session_participant", "Somente participantes da transmissão podem trocar sinalização.");
+                throw new TelaeDomainException("not_session_participant", "Só quem está na transmissão pode fazer isso.");
         }
     }
 
@@ -208,7 +212,7 @@ public sealed partial class TelaeRegistry
         return normalized switch
         {
             "auto" or "720p60" or "1080p30" or "1080p60" or "1440p30" or "1440p60" => normalized,
-            _ => throw new TelaeDomainException("invalid_quality_profile", "Perfil de qualidade inválido.")
+            _ => throw new TelaeDomainException("invalid_quality_profile", "Não deu pra usar esse perfil de qualidade. Escolhe outro.")
         };
     }
 }

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Telae.Server.Core;
+using Telae.Server.Accounts;
 using Telae.Server.Hubs;
 
 namespace Telae.Server.Tests;
@@ -33,6 +34,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
             settings[$"ClientAddress:KnownProxies:{index}"] = knownProxies[index];
         builder.Configuration.AddInMemoryCollection(settings);
         builder.Services.AddTrustedClientAddress(builder.Configuration);
+        builder.Services.Configure<AuthOptions>(options => options.AllowLegacyDevices = true);
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddSignalR(options =>
         {
@@ -127,6 +129,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var anonymousEvents = ObservePresence(anonymous);
         var device = await sharer.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("sharer", "Sharer", new string('a', 64)));
         await friend.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { device.FriendCode });
+        await sharer.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { _app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("friend")!.FriendCode });
         // Lookup alone does not subscribe.
         await stranger.InvokeAsync<DeviceSnapshot>("LookupFriend", device.FriendCode);
         await sharer.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("sharer", "Renamed", new string('a', 64)));
@@ -148,6 +151,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var source = await ConnectAsync("source", "Source");
         var subscriber = await ConnectAsync("subscriber", "Subscriber");
         var device = await source.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("source", "Source", new string('a', 64)));
+        await source.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { _app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("subscriber")!.FriendCode });
         var events = ObservePresence(subscriber);
         await subscriber.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { device.FriendCode });
         await subscriber.InvokeAsync<DeviceSnapshot[]>("GetFriends", Array.Empty<string>());
@@ -173,6 +177,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var source = await ConnectAsync("source", "Source");
         var old = await ConnectAsync("subscriber", "Subscriber");
         var device = await source.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("source", "Source", new string('a', 64)));
+        await source.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { _app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("subscriber")!.FriendCode });
         await old.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { device.FriendCode });
         var events = ObservePresence(old);
         await ConnectAsync("subscriber", "Subscriber");
@@ -264,7 +269,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var second = await ConnectUnregisteredAsync();
         var error = await Assert.ThrowsAsync<HubException>(() => second.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("new-device", "New", new string('a', 64))));
-        Assert.Contains("Muitas solicitações", error.Message);
+        Assert.Contains("Muitos pedidos em pouco tempo", error.Message);
         Assert.Null(_app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("new-device"));
     }
 
@@ -284,7 +289,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var sameClient = await ConnectUnregisteredAsync("198.51.100.10", "198.51.100.99");
         var error = await Assert.ThrowsAsync<HubException>(() => sameClient.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("first-client", "First", new string('a', 64))));
-        Assert.Contains("Muitas solicitações", error.Message);
+        Assert.Contains("Muitos pedidos em pouco tempo", error.Message);
 
         // This registration used to fail because both peers appeared as 127.0.0.1.
         var secondClient = await ConnectUnregisteredAsync("198.51.100.11");
@@ -312,7 +317,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var forged = await ConnectUnregisteredAsync("198.51.100.11", "198.51.100.11");
         var error = await Assert.ThrowsAsync<HubException>(() => forged.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("forged", "Forged", new string('b', 64))));
-        Assert.Contains("Muitas solicitações", error.Message);
+        Assert.Contains("Muitos pedidos em pouco tempo", error.Message);
         Assert.Null(_app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("forged"));
     }
 
@@ -331,7 +336,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var second = await ConnectUnregisteredAsync(header);
         var error = await Assert.ThrowsAsync<HubException>(() => second.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("second", "Second", new string('b', 64))));
-        Assert.Contains("Muitas solicitações", error.Message);
+        Assert.Contains("Muitos pedidos em pouco tempo", error.Message);
     }
 
     [Fact]
@@ -343,7 +348,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         for (var index = 2; index < 120; index++)
             await caller.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare");
         var error = await Assert.ThrowsAsync<HubException>(() => caller.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"));
-        Assert.Contains("Muitas solicitações", error.Message);
+        Assert.Contains("Muitos pedidos em pouco tempo", error.Message);
     }
 
     [Fact]
@@ -359,7 +364,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         await unregistered.StartAsync();
         var takeoverError = await Assert.ThrowsAsync<HubException>(() => unregistered.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("device-sharer", "Attacker", new string('b', 64))));
-        Assert.Contains("credencial", takeoverError.Message);
+        Assert.Contains("confirmar este aparelho", takeoverError.Message);
         Assert.NotNull(await sharer.InvokeAsync<ShareSessionSnapshot?>("GetActiveShare"));
     }
 
@@ -520,7 +525,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var error = await Assert.ThrowsAsync<HubException>(() =>
             stranger.InvokeAsync("SendSignal", "device-viewer",
                 new SignalingEnvelope(join.Session.SessionId, "device-stranger", new SignalingPayload("offer", "x"))));
-        Assert.Contains("participantes", error.Message);
+        Assert.Contains("Só quem está na transmissão", error.Message);
     }
 
     private async Task<DeviceSnapshot> RegisterAsync(HubConnection connection, string deviceId, string displayName) =>
@@ -576,7 +581,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
 
         // Código inexistente: friend_not_found
         var notFound = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "ZZZZZZ"));
-        Assert.Contains("Não achei ninguém", notFound.Message);
+        Assert.Contains("Não deu pra achar ninguém", notFound.Message);
 
         // Identificador fora do formato do @usuário: invalid_friend_code
         var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
@@ -795,7 +800,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         Assert.Single(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));
 
         var unknown = await Assert.ThrowsAsync<HubException>(() => target.InvokeAsync("DismissFriendRequest", "ZZZZZZ"));
-        Assert.Contains("Não achei ninguém", unknown.Message);
+        Assert.Contains("Não deu pra achar ninguém", unknown.Message);
 
         await target.InvokeAsync("DismissFriendRequest", requesterSnapshot.FriendCode);
         Assert.Empty(await target.InvokeAsync<DeviceSnapshot[]>("GetFriendRequests"));

@@ -1,3 +1,4 @@
+import { avatarInitial, avatarTone } from '../ui/avatar'
 import { t } from '../i18n'
 import { liveFriendsExcept } from '../services/friends'
 import type { DeviceSnapshot } from '../services/types'
@@ -6,12 +7,14 @@ import type { DeviceSnapshot } from '../services/types'
  * Amigos ao vivo para trocar de transmissão sem voltar à lista. O amigo que já está sendo
  * assistido não aparece. Erros de troca são mostrados aqui, sem interromper a transmissão atual.
  */
-export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDeviceId, disabled, error, onWatch }: {
+export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDeviceId, disabled, error, label, onWatch }: {
   friends: DeviceSnapshot[]
   currentSharerDeviceId: string | null
   pendingDeviceId: string | null
   disabled: boolean
   error: string | null
+  /** Rótulo antes da lista; no player, a troca diz o que faz. */
+  label?: string
   onWatch: (friend: DeviceSnapshot) => void
 }) {
   const options = liveFriendsExcept(friends, currentSharerDeviceId)
@@ -20,7 +23,7 @@ export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDevic
     <div className="telae-live-switch">
       {options.length > 0 && (
         <>
-          <span className="telae-live-switch-label">{t('Em cartaz')}</span>
+          <span className="telae-live-switch-label">{label ?? t('Em cartaz')}</span>
           <ul className="telae-live-switch-list" aria-label={t('Amigos ao vivo')}>
             {options.map(friend => (
               <li key={friend.deviceId}>
@@ -31,6 +34,7 @@ export function LiveFriendsSwitch({ friends, currentSharerDeviceId, pendingDevic
                   aria-busy={pendingDeviceId === friend.deviceId}
                   className="telae-press telae-live-chip"
                 >
+                  <span aria-hidden="true" className="telae-avatar !h-6 !w-6 !text-[10px]" style={{ background: avatarTone(friend.displayName) }}>{avatarInitial(friend.displayName)}</span>
                   <span aria-hidden="true" className="telae-live-dot" />
                   {pendingDeviceId === friend.deviceId ? t('Entrando…') : friend.displayName}
                 </button>

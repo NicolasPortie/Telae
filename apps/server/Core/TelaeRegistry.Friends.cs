@@ -10,7 +10,10 @@ public sealed partial class TelaeRegistry
     {
         lock (_gate)
         {
+            RequireOnlineDevice(deviceId);
             var newSet = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (newSet.Count > 200)
+                throw new TelaeDomainException("invalid_friend_list", "A lista de amigos pode ter até 200 pessoas.");
             var oldSet = _declaredFriendsByDevice.GetValueOrDefault(deviceId)
                 ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _declaredFriendsByDevice[deviceId] = newSet;
@@ -97,8 +100,11 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(deviceId);
             var target = _profiles.Values.FirstOrDefault(p => string.Equals(p.FriendCode, normalized, StringComparison.OrdinalIgnoreCase))
-                ?? throw new TelaeDomainException("friend_not_found", "Não achei ninguém com esse @. Confere e tenta de novo.");
+                ?? throw new TelaeDomainException("friend_not_found", "Não deu pra achar ninguém com esse @. Confere e tenta de novo.");
             if (target.DeviceId == deviceId) return;
+            if (!_profiles.TryGetValue(deviceId, out var me)
+                || !_declaredFriendsByDevice.TryGetValue(target.DeviceId, out var theirs)
+                || !theirs.Contains(me.FriendCode) || AreMutualFriendsLocked(deviceId, target.DeviceId)) return;
             if (!_dismissedRequests.TryGetValue(deviceId, out var set))
             {
                 set = new HashSet<string>(StringComparer.Ordinal);

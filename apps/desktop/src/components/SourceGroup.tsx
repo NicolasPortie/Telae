@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Monitor, AppWindow } from 'lucide-react'
 import { t } from '../i18n'
 import type { CaptureSource } from '../shared/contracts'
 
@@ -8,8 +8,11 @@ export function SourceGroup({
   sources,
   selectedId,
   onSelect,
+  showHeading = true,
 }: {
   title: string
+  /** Falso quando o título já aparece numa aba. O nome acessível do grupo continua o mesmo. */
+  showHeading?: boolean
   sources: CaptureSource[]
   selectedId: string
   onSelect: (id: string) => void
@@ -18,13 +21,13 @@ export function SourceGroup({
   const tabStopId = sources.some(source => source.id === selectedId) ? selectedId : sources[0]?.id
   if (sources.length === 0) return null
   return (
-    <div className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-ink-2">{title}<span aria-hidden="true" className="count tnum">{sources.length}</span></h2>
-      <ul role="radiogroup" aria-label={title} className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="telae-source-group">
+      {showHeading && <h2 className="telae-source-heading">{title}<span aria-hidden="true" className="tnum text-xs text-ink-4">{sources.length}</span></h2>}
+      <ul role="radiogroup" aria-label={title} className="telae-source-grid">
         {sources.map((source, index) => {
           const active = source.id === selectedId
           return (
-            <li key={source.id}>
+            <li key={source.id} className="min-w-0 telae-source-item" style={{ '--i': Math.min(index, 12) } as React.CSSProperties}>
               <button
                 type="button"
                 role="radio"
@@ -53,24 +56,20 @@ export function SourceGroup({
                   onSelect(next.id)
                   buttons.current.get(next.id)?.focus()
                 }}
-                className={`telae-press telae-source-card relative block w-full overflow-hidden rounded-xl border bg-canvas text-left ${
-                  active ? 'border-signal' : 'border-line'
-                }`}
+                className="telae-press telae-source-card"
               >
                 {source.thumbnailDataUrl ? (
                   <img src={source.thumbnailDataUrl} alt="" aria-hidden="true" draggable={false} className="aspect-video w-full object-contain" />
                 ) : (
-                  <span aria-hidden="true" className="block aspect-video w-full bg-surface" />
+                  <span aria-hidden="true" className="telae-source-placeholder">{source.kind === 'screen' ? <Monitor size={28} strokeWidth={1.75} /> : <AppWindow size={28} strokeWidth={1.75} />}</span>
                 )}
                 {active && (
-                  <span aria-hidden="true" className="absolute right-2 top-2 flex items-center gap-1 rounded-full border border-signal/50 bg-canvas/90 px-2.5 py-1 text-[11px] font-semibold text-signal-soft backdrop-blur">
-                    <Check size={12} /> {t('Escolhida')}
+                  <span aria-hidden="true" className="telae-source-selected">
+                    <Check size={12} strokeWidth={1.75} /> {t('Escolhida')}
                   </span>
                 )}
                 <span
-                  className={`block truncate border-t px-3 py-2.5 text-[13px] ${
-                    active ? 'border-signal/40 bg-signal/10 font-semibold text-ink' : 'border-line text-ink-3'
-                  }`}
+                  className="telae-source-name"
                 >
                   {source.name}
                 </span>

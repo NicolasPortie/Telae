@@ -1,14 +1,40 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http;
+using System.Net;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging.Abstractions;
 using Telae.Server.Core;
 
 namespace Telae.Server.Tests;
 
 public sealed class TrustedClientAddressTests
 {
+    [Fact]
+    public async Task Untrusted_peer_cannot_spoof_address_or_https()
+    {
+        var services = new ServiceCollection();
+        services.AddTrustedClientAddress(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ClientAddress:KnownProxies:0"] = "127.0.0.1",
+        }).Build());
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ForwardedHeadersOptions>>();
+        var middleware = new ForwardedHeadersMiddleware(_ => Task.CompletedTask, NullLoggerFactory.Instance, options);
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
+        context.Request.Scheme = "http";
+        context.Request.Headers["CF-Connecting-IP"] = "198.51.100.20";
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
+
+        await middleware.Invoke(context);
+
+        Assert.Equal("http", context.Request.Scheme);
+        Assert.Equal(IPAddress.Parse("203.0.113.10"), context.Connection.RemoteIpAddress);
+    }
+
     [Fact]
     public void Forwarding_is_disabled_by_default_with_no_implicit_loopback_or_network_trust()
     {
@@ -35,7 +61,7 @@ public sealed class TrustedClientAddressTests
         services.AddTrustedClientAddress(configuration);
         using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
-        Assert.Equal(ForwardedHeaders.XForwardedFor, options.ForwardedHeaders);
+        Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, options.ForwardedHeaders);
         Assert.Equal("CF-Connecting-IP", options.ForwardedForHeaderName);
         Assert.Equal(2, options.KnownProxies.Count);
         Assert.Empty(options.KnownIPNetworks);

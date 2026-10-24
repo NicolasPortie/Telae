@@ -1,6 +1,9 @@
 import { t } from '../i18n/index.ts'
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { load } from 'js-yaml'
 import type { UpdateStatus } from '../shared/contracts.ts'
 
 const { NsisUpdater } = electronUpdater
@@ -16,9 +19,11 @@ export class DesktopUpdates {
   private installTimer: ReturnType<typeof setTimeout> | null = null
   private status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
   private readonly onStatus: StatusListener
+  private readonly trustedServerUrl: string
 
-  constructor(onStatus: StatusListener) {
+  constructor(onStatus: StatusListener, trustedServerUrl: string) {
     this.onStatus = onStatus
+    this.trustedServerUrl = trustedServerUrl
   }
 
   getStatus(): UpdateStatus {
@@ -36,15 +41,23 @@ export class DesktopUpdates {
     if (!active && this.status.phase === 'ready') this.install()
   }
 
-  async check(signalingUrl: string): Promise<void> {
+  async check(): Promise<void> {
     if (!app.isPackaged || process.platform !== 'win32' || this.checking || this.installing) return
     if (this.status.phase === 'downloading' || this.status.phase === 'ready') return
 
     this.checking = true
     this.publish({ phase: 'checking', version: app.getVersion() })
     try {
-      const feedUrl = new URL('updates/windows/', `${signalingUrl.replace(/\/+$/, '')}/`).toString()
-      if (this.feedUrl !== feedUrl) this.configure(feedUrl)
+      const server = new URL(this.trustedServerUrl)
+      if (server.protocol !== 'https:' || server.username || server.password || server.search || server.hash) throw new Error('manual_update')
+      const configPath = path.join(process.resourcesPath, 'app-update.yml')
+      const config = load(readFileSync(configPath, 'utf8')) as { publisherName?: unknown } | null
+      const names = typeof config?.publisherName === 'string' ? [config.publisherName] : config?.publisherName
+      if (!Array.isArray(names) || !names.length || names.some(name => typeof name !== 'string' || !name.trim())) {
+        throw new Error('manual_update')
+      }
+      const feedUrl = new URL('updates/windows/', `${server.toString().replace(/\/+$/, '')}/`).toString()
+      if (this.feedUrl !== feedUrl) this.configure(feedUrl, configPath)
       const updater = this.updater
       if (!updater) return
       await updater.checkForUpdates()
@@ -52,16 +65,18 @@ export class DesktopUpdates {
       this.publish({
         phase: 'error',
         version: app.getVersion(),
-        message: this.errorMessage(error),
+        message: !this.updater ? t('Essa instalação não atualiza sozinha. Baixa o instalador mais novo na página do projeto.') : this.errorMessage(error),
       })
     } finally {
       this.checking = false
     }
   }
 
-  private configure(feedUrl: string): void {
+  private configure(feedUrl: string, configPath: string): void {
     this.feedUrl = feedUrl
     const updater = new NsisUpdater({ provider: 'generic', url: feedUrl })
+    updater.updateConfigPath = configPath
+    updater.disableWebInstaller = true
     updater.autoDownload = true
     updater.autoInstallOnAppQuit = true
     updater.on('update-available', (info) => {
@@ -110,7 +125,7 @@ export class DesktopUpdates {
 
   private errorMessage(error: unknown): string {
     const detail = error instanceof Error ? error.message : String(error)
-    if (/404|ENOENT/i.test(detail)) return t('O servidor ainda não publicou os arquivos da atualização.')
+    if (/404|ENOENT/i.test(detail)) return t('O servidor ainda não tem essa atualização. Tenta de novo mais tarde.')
     return t('Não deu pra baixar a atualização. Confere a conexão com o servidor.')
   }
 }

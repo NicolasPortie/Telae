@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { release } from 'node:os'
-import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session } from 'electron'
+import { app, BrowserWindow, desktopCapturer, ipcMain, net, protocol, safeStorage, session } from 'electron'
 import type {
   AudioBridgeState,
   AudioProcess,
@@ -22,6 +22,11 @@ import { AuthServerClient } from './auth-client.ts'
 import { AuthSession } from './auth-session.ts'
 import { createSessionStorage } from './auth-store.ts'
 import { resolveAudioBridgePath } from './audio-bridge-path.ts'
+import { normalizeSignalingUrl, SignalingServerSettings } from './signaling-url.ts'
+import { allowsPermission, isRendererOrigin, isTrustedFrame, secureIpcHandler } from './ipc-security.ts'
+import { guardRendererNavigation, PACKAGED_RENDERER_URL, packagedRendererResponse, rendererContentSecurityPolicy, withRendererCsp } from './renderer-security.ts'
+
+protocol.registerSchemesAsPrivileged([{ scheme: 'telae', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
 
 // Sharing remains active when the main window is minimized or covered.
 app.commandLine.appendSwitch('disable-renderer-backgrounding')
@@ -43,9 +48,6 @@ let audioBridge: ChildProcess | null = null
 let audioBridgeCaptureId: string | null = null
 let audioState: AudioBridgeState = { status: 'idle' }
 let selectedCaptureSourceId: string | null = null
-const updates = new DesktopUpdates((status) => {
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', status)
-})
 
 const profilePath = () => path.join(app.getPath('userData'), 'profile.json')
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
@@ -54,26 +56,9 @@ const LOCAL_SIGNALING_URL = 'http://localhost:5015'
 const BUILT_IN_SIGNALING_URL = typeof __TELAE_DEFAULT_SERVER_URL__ === 'string' ? __TELAE_DEFAULT_SERVER_URL__.replace(/\/+$/, '') : ''
 const DEFAULT_SIGNALING_URL = app.isPackaged && BUILT_IN_SIGNALING_URL ? BUILT_IN_SIGNALING_URL : LOCAL_SIGNALING_URL
 
-function normalizeSignalingUrl(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, '')
-  if (!trimmed) throw new Error(t('Falta o endereço do servidor.'))
-
-  let parsed: URL
-  try {
-    parsed = new URL(trimmed)
-  } catch {
-    throw new Error(t('Esse endereço não parece válido. Use algo como https://telae.seudominio.com.'))
-  }
-
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(t('O endereço precisa começar com http:// ou https://.'))
-  }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new Error(t('Use só o endereço do servidor, sem usuário nem senha.'))
-  }
-
-  return trimmed
-}
+const updates = new DesktopUpdates((status) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update:status', status)
+}, BUILT_IN_SIGNALING_URL)
 
 function readSignalingUrl(): string {
   try {
@@ -134,16 +119,18 @@ function persistSettings(patch: Partial<AppSettings>): AppSettings {
 }
 
 function persistSignalingUrl(value: string): string {
-  const signalingUrl = normalizeSignalingUrl(value)
-  writeJsonAtomically(settingsPath(), { ...readStoredSettings(), signalingUrl })
-  return signalingUrl
+  return signalingServer.saveForRestart(value)
 }
+
+const signalingServer = new SignalingServerSettings(readSignalingUrl(), signalingUrl => {
+  writeJsonAtomically(settingsPath(), { ...readStoredSettings(), signalingUrl })
+})
 
 const SECRET_PREFIX = 'safe:'
 
 /** Cofre do sistema para a credencial; sem ele (ex.: Linux sem keyring) o perfil segue em arquivo local. */
 function profileCipher(): SecretCipher | undefined {
-  if (!safeStorage.isEncryptionAvailable()) return undefined
+  if (!safeStorage.isEncryptionAvailable() || (process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text')) return undefined
   return {
     encrypt: plain => SECRET_PREFIX + safeStorage.encryptString(plain).toString('base64'),
     decrypt: encoded => {
@@ -177,11 +164,14 @@ function syncProfileWithAccount(account: AccountInfo | null) {
 }
 
 function getAuth(): AuthSession {
-  authSession ??= new AuthSession(
-    new AuthServerClient(readSignalingUrl),
-    createSessionStorage(authSessionPath(), profileCipher),
-    syncProfileWithAccount,
-  )
+  if (!authSession) {
+    const serverUrl = signalingServer.activeUrl
+    authSession = new AuthSession(
+      new AuthServerClient(() => serverUrl),
+      createSessionStorage(authSessionPath(), profileCipher, serverUrl),
+      syncProfileWithAccount,
+    )
+  }
   return authSession
 }
 
@@ -204,17 +194,42 @@ function stopAudioBridge(captureId?: string) {
   sendAudioState({ status: 'idle', captureId: stoppedId })
 }
 
+function rendererUrl(): string {
+  return !app.isPackaged && process.env.ELECTRON_RENDERER_URL
+    ? new URL(process.env.ELECTRON_RENDERER_URL).toString()
+    : PACKAGED_RENDERER_URL
+}
+
+function registerRendererSecurity() {
+  const documentUrl = rendererUrl()
+  const policy = rendererContentSecurityPolicy(signalingServer.activeUrl,
+    documentUrl === PACKAGED_RENDERER_URL ? undefined : documentUrl)
+  // O protocolo local permite enviar a CSP também no app empacotado.
+  session.defaultSession.protocol.handle('telae', request => packagedRendererResponse(request,
+    path.join(__dirname, '../renderer'), url => net.fetch(url), policy))
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({ responseHeaders: details.url === documentUrl
+      ? withRendererCsp(details.responseHeaders, policy) : details.responseHeaders })
+  })
+}
+
 function registerIpc() {
-  ipcMain.handle('profile:get', () => persistProfile(readProfile()))
-  ipcMain.handle('profile:set-name', (_event, displayName: string) => {
+  const handle = (channel: string, listener: Parameters<typeof ipcMain.handle>[1]) => {
+    ipcMain.handle(channel, secureIpcHandler(channel, listener, () => ({
+      contents: mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null,
+      rendererUrl: rendererUrl(),
+    })))
+  }
+  handle('profile:get', () => persistProfile(readProfile()))
+  handle('profile:set-name', (_event, displayName: string) => {
     const normalized = displayName.trim().slice(0, 32)
-    if (!normalized) throw new Error(t('Escreva seu nome.'))
+    if (!normalized) throw new Error(t('Escreve seu nome.'))
     const profile = readProfile()
     profile.displayName = normalized
     return persistProfile(profile)
   })
 
-  ipcMain.handle('capture:list-sources', async (): Promise<CaptureSource[]> => {
+  handle('capture:list-sources', async (): Promise<CaptureSource[]> => {
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 400, height: 225 },
@@ -228,39 +243,39 @@ function registerIpc() {
     }))
   })
 
-  ipcMain.handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
-    if (!sourceId?.trim()) throw new Error(t('Escolha uma tela ou janela antes de começar.'))
+  handle('capture:select-source', async (_event, sourceId: string): Promise<void> => {
+    if (!sourceId?.trim()) throw new Error(t('Escolhe uma tela ou janela antes de começar.'))
     const sources = await desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: { width: 0, height: 0 },
       fetchWindowIcons: false,
     })
     if (!sources.some((source) => source.id === sourceId)) {
-      throw new Error(t('Essa tela ou janela não está mais disponível.'))
+      throw new Error(t('Essa tela ou janela não está mais disponível. Escolhe outra.'))
     }
     selectedCaptureSourceId = sourceId
   })
 
-  ipcMain.handle('capture:resolve-window-audio', async (_event, sourceId: string): Promise<number> => {
+  handle('capture:resolve-window-audio', async (_event, sourceId: string): Promise<number> => {
     if (sourceId !== selectedCaptureSourceId || !sourceId.startsWith('window:'))
-      throw new Error(t('Selecione uma janela válida para capturar seu áudio.'))
+      throw new Error(t('Escolhe uma janela pra pegar o som dela.'))
     const match = /^window:(\d+):/.exec(sourceId)
-    if (!match) throw new Error(t('Não consegui identificar essa janela.'))
+    if (!match) throw new Error(t('Não deu pra identificar essa janela. Escolhe de novo.'))
     const result = await execFileAsync(findAudioBridge(), ['resolve-window', match[1]], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     const processId = Number(result.stdout.trim())
     if (!Number.isInteger(processId) || processId <= 0)
-      throw new Error(t('Não consegui identificar o áudio desse app.'))
+      throw new Error(t('Não deu pra achar o som desse app.'))
     return processId
   })
 
-  ipcMain.handle('audio:list-processes', async (): Promise<AudioProcess[]> => {
+  handle('audio:list-processes', async (): Promise<AudioProcess[]> => {
     const executable = findAudioBridge()
     const result = await execFileAsync(executable, ['list'], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 1024 * 1024 })
     return JSON.parse(result.stdout) as AudioProcess[]
   })
 
   const startAudioBridge = (processId: number, captureId: string, screen = false) => {
-    if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error(t('Captura de áudio inválida.'))
+    if (typeof captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(captureId)) throw new Error(t('Não deu pra usar essa captura de som. Tenta de novo.'))
     stopAudioBridge()
     const executable = findAudioBridge()
     sendAudioState({ status: 'starting', processId, captureId })
@@ -299,65 +314,72 @@ function registerIpc() {
       audioBridge = null
       audioBridgeCaptureId = null
       if (code && code !== 0 && audioState.status !== 'error') {
-        sendAudioState({ status: 'error', message: t('O capturador de áudio encerrou com código {code}.', { code: String(code) }), captureId })
+        sendAudioState({ status: 'error', message: t('A captura do som parou de repente. Tenta de novo.', { code: String(code) }), captureId })
       } else if (audioState.status !== 'error') {
         sendAudioState({ status: 'idle', captureId })
       }
     })
   }
 
-  ipcMain.handle('audio:start', (_event, processId: number, captureId: string) => {
-    if (!Number.isInteger(processId) || processId <= 0) throw new Error(t('Processo de áudio inválido.'))
+  handle('audio:start', (_event, processId: number, captureId: string) => {
+    if (!Number.isInteger(processId) || processId <= 0) throw new Error(t('Não deu pra achar o som desse app.'))
     startAudioBridge(processId, captureId)
   })
-  ipcMain.handle('audio:start-screen', (_event, captureId: string) => {
-    if (!selectedCaptureSourceId?.startsWith('screen:')) throw new Error(t('Selecione uma tela para capturar o áudio.'))
+  handle('audio:start-screen', (_event, captureId: string) => {
+    if (!selectedCaptureSourceId?.startsWith('screen:')) throw new Error(t('Escolhe uma tela pra pegar o som.'))
     startAudioBridge(0, captureId, true)
   })
 
-  ipcMain.handle('audio:stop', (_event, captureId: string) => {
+  handle('audio:stop', (_event, captureId: string) => {
     if (typeof captureId === 'string') stopAudioBridge(captureId)
   })
-  ipcMain.handle('environment:get', () => ({
+  handle('environment:get', () => ({
     version: app.getVersion(),
     platform: process.platform,
     isPackaged: app.isPackaged,
-    signalingUrl: readSignalingUrl(),
+    signalingUrl: signalingServer.activeUrl,
     forceRelay: !app.isPackaged && process.env.TELAE_E2E_RELAY === '1',
   }))
-  ipcMain.handle('environment:set-signaling-url', (_event, signalingUrl: string) => {
+  handle('environment:set-signaling-url', (_event, signalingUrl: string) => {
     const saved = persistSignalingUrl(signalingUrl)
-    void updates.check(saved)
+    void updates.check()
     return { version: app.getVersion(), platform: process.platform, isPackaged: app.isPackaged, signalingUrl: saved }
   })
-  ipcMain.handle('auth:session', async () => {
+  handle('auth:session', async () => {
     const auth = getAuth()
     const account = await auth.restore()
     if (account) syncProfileWithAccount(account)
     return account
   })
-  ipcMain.handle('auth:register', (_event, input: { email: string; username: string; password: string; language: string }) => getAuth().register(input))
-  ipcMain.handle('auth:verify-email', (_event, identifier: string, code: string) => getAuth().verifyEmail(String(identifier), String(code)))
-  ipcMain.handle('auth:resend-verification', (_event, identifier: string) => getAuth().resendVerification(String(identifier)))
-  ipcMain.handle('auth:login', (_event, identifier: string, password: string) => getAuth().login(String(identifier), String(password)))
-  ipcMain.handle('auth:logout', () => getAuth().logout())
-  ipcMain.handle('auth:forgot-password', (_event, identifier: string) => getAuth().forgotPassword(String(identifier)))
-  ipcMain.handle('auth:reset-password', (_event, identifier: string, code: string, newPassword: string) => getAuth().resetPassword(String(identifier), String(code), String(newPassword)))
-  ipcMain.handle('auth:update-display-name', (_event, displayName: string) => getAuth().updateDisplayName(String(displayName)))
-  ipcMain.handle('auth:change-password', (_event, current: string, next: string) => getAuth().changePassword(String(current), String(next)))
-  ipcMain.handle('auth:delete-account', (_event, password: string) => getAuth().deleteAccount(String(password)))
-  ipcMain.handle('auth:access-token', () => getAuth().getAccessToken())
-  ipcMain.handle('settings:get', () => readSettings())
-  ipcMain.handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
-  ipcMain.handle('update:status', () => updates.getStatus())
-  ipcMain.handle('update:check', () => updates.check(readSignalingUrl()))
-  ipcMain.handle('update:session-active', (_event, active: boolean) => updates.setSessionActive(active === true))
+  handle('auth:register', (_event, input: { email: string; username: string; password: string; language: string }) => getAuth().register(input))
+  handle('auth:verify-email', (_event, identifier: string, code: string, password: string) => getAuth().verifyEmail(identifier, code, password))
+  handle('auth:resend-verification', (_event, identifier: string) => getAuth().resendVerification(String(identifier)))
+  handle('auth:login', (_event, identifier: string, password: string) => getAuth().login(String(identifier), String(password)))
+  handle('auth:logout', () => getAuth().logout())
+  handle('auth:forgot-password', (_event, identifier: string) => getAuth().forgotPassword(String(identifier)))
+  handle('auth:reset-password', (_event, identifier: string, code: string, newPassword: string) => getAuth().resetPassword(String(identifier), String(code), String(newPassword)))
+  handle('auth:update-display-name', (_event, displayName: string) => getAuth().updateDisplayName(String(displayName)))
+  handle('auth:change-password', (_event, current: string, next: string) => getAuth().changePassword(String(current), String(next)))
+  handle('auth:delete-account', (_event, password: string) => getAuth().deleteAccount(String(password)))
+  handle('auth:access-token', () => getAuth().getAccessToken())
+  handle('settings:get', () => readSettings())
+  handle('settings:update', (_event, patch: Partial<AppSettings>) => persistSettings(patch ?? {}))
+  handle('update:status', () => updates.getStatus())
+  handle('update:check', () => updates.check())
+  handle('update:session-active', (_event, active: boolean) => updates.setSessionActive(active === true))
 }
 
 function registerDisplayMediaHandler() {
-  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+  const trusted = (contents: Electron.WebContents | null, url: string | undefined, mainFrame: boolean) =>
+    !!mainWindow && !mainWindow.isDestroyed() && contents === mainWindow.webContents && mainFrame && isRendererOrigin(url, rendererUrl())
+  session.defaultSession.setPermissionCheckHandler((contents, permission, _origin, details) =>
+    allowsPermission(permission, trusted(contents, details.requestingUrl, details.isMainFrame), !!selectedCaptureSourceId))
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) =>
+    callback(allowsPermission(permission, trusted(contents, details.requestingUrl, details.isMainFrame), !!selectedCaptureSourceId,
+      (details as { mediaTypes?: string[] }).mediaTypes ?? ['video'])))
+  session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const sourceId = selectedCaptureSourceId
-    if (!sourceId) {
+    if (!sourceId || !mainWindow || mainWindow.isDestroyed() || !isTrustedFrame(request.frame, mainWindow.webContents, rendererUrl())) {
       callback({})
       return
     }
@@ -373,9 +395,11 @@ function registerDisplayMediaHandler() {
       return
     }
 
-    callback({
-      video: source,
-    })
+    if (!mainWindow || mainWindow.isDestroyed() || !isTrustedFrame(request.frame, mainWindow.webContents, rendererUrl()) || selectedCaptureSourceId !== sourceId) {
+      callback({})
+      return
+    }
+    callback({ video: source })
   })
 }
 
@@ -406,14 +430,12 @@ async function createWindow() {
   // Início automático com o Windows: abre minimizado, sem roubar o foco.
   if (process.argv.includes('--hidden')) mainWindow.minimize()
 
-  mainWindow.webContents.on('will-navigate', event => event.preventDefault())
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  guardRendererNavigation(mainWindow.webContents)
   mainWindow.webContents.on('render-process-gone', () => {
     void stopAudioBridge()
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
+  await mainWindow.loadURL(rendererUrl())
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -432,11 +454,12 @@ if (!hasSingleInstanceLock) {
     app.setAppUserModelId('com.telae.desktop')
     setLocale(resolveLocale(readSettings().language, app.getLocale()))
     registerIpc()
+    registerRendererSecurity()
     registerDisplayMediaHandler()
     await createWindow()
-    void updates.check(readSignalingUrl())
+    void updates.check()
     // Apps left open also receive releases published after startup.
-    const updateCheckTimer = setInterval(() => void updates.check(readSignalingUrl()), 15 * 60 * 1000)
+    const updateCheckTimer = setInterval(() => void updates.check(), 15 * 60 * 1000)
     updateCheckTimer.unref()
     app.once('before-quit', () => clearInterval(updateCheckTimer))
     app.on('activate', async () => {

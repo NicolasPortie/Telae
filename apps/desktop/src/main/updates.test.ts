@@ -8,6 +8,9 @@ const updaterInstances = vi.hoisted(() => [] as Array<{
   quitAndInstall: ReturnType<typeof vi.fn>
 }>)
 
+const updateConfig = vi.hoisted(() => ({ value: 'publisherName: Telae' }))
+vi.mock('node:fs', () => ({ readFileSync: () => updateConfig.value }))
+
 vi.mock('electron', () => ({ app: { getVersion: () => '0.1.5', isPackaged: true } }))
 vi.mock('electron-updater', () => ({
   default: {
@@ -30,7 +33,8 @@ describe('DesktopUpdates', () => {
   beforeEach(() => {
     updaterInstances.length = 0
     vi.useFakeTimers()
-    vi.stubGlobal('process', { platform: 'win32' })
+    vi.stubGlobal('process', { platform: 'win32', resourcesPath: '/app/resources' })
+    updateConfig.value = 'publisherName: Telae'
   })
 
   afterEach(() => {
@@ -38,19 +42,19 @@ describe('DesktopUpdates', () => {
     vi.useRealTimers()
   })
 
-  it('checks the update feed on the configured signaling server', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await updates.check('http://192.168.0.10:5015/')
+  it('checks only the build-configured HTTPS update server', async () => {
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
     expect(updaterInstances[0].feed).toEqual({
       provider: 'generic',
-      url: 'http://192.168.0.10:5015/updates/windows/',
+      url: 'https://updates.example.com/updates/windows/',
     })
     expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
   })
 
   it('waits for a live session to end before installing a downloaded update', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await updates.check('http://localhost:5015')
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
     const updater = updaterInstances[0]
     updates.setSessionActive(true)
     updater.emit('update-downloaded', { version: '0.1.6' })
@@ -63,8 +67,8 @@ describe('DesktopUpdates', () => {
   })
 
   it('cancels a scheduled restart if a session starts during the delay', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await updates.check('http://localhost:5015')
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
     const updater = updaterInstances[0]
     updater.emit('update-downloaded', { version: '0.1.12' })
     vi.advanceTimersByTime(250)
@@ -77,8 +81,8 @@ describe('DesktopUpdates', () => {
   })
 
   it('installs silently and relaunches automatically when idle', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await updates.check('https://example.com')
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
     updaterInstances[0].emit('update-downloaded', { version: '0.1.17' })
     expect(updates.getStatus()).toEqual({ phase: 'installing', version: '0.1.17' })
     vi.advanceTimersByTime(1499)
@@ -88,22 +92,29 @@ describe('DesktopUpdates', () => {
   })
 
   it('allows another check after an installation error', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await updates.check('https://example.com')
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
     const updater = updaterInstances[0]
     updater.quitAndInstall.mockImplementationOnce(() => updater.emit('error', new Error('install failed')))
     updater.emit('update-downloaded', { version: '0.1.17' })
     vi.advanceTimersByTime(1500)
     expect(updates.getStatus().phase).toBe('error')
-    await updates.check('https://example.com')
+    await updates.check()
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
-  it('reports invalid feed URLs without an unhandled rejection', async () => {
-    const updates = new DesktopUpdates(vi.fn())
-    await expect(updates.check('invalid')).resolves.toBeUndefined()
-    expect(updates.getStatus().phase).toBe('error')
-    await updates.check('https://example.com')
-    expect(updaterInstances[0].checkForUpdates).toHaveBeenCalledOnce()
+  it.each(['', 'invalid', 'http://updates.example.com', 'http://localhost:5015'])('never starts an updater without a trusted HTTPS feed (%s)', async feed => {
+    const updates = new DesktopUpdates(vi.fn(), feed)
+    await expect(updates.check()).resolves.toBeUndefined()
+    expect(updaterInstances).toHaveLength(0)
+    expect(updates.getStatus()).toMatchObject({ phase: 'error', message: expect.stringContaining('não atualiza sozinha') })
+  })
+
+  it.each(['', 'publisherName: []', 'publisherName: ""', 'publisherName: [Telae, ""]', 'publisherName: 123'])('refuses unsigned or malformed publisher configuration (%s)', async config => {
+    updateConfig.value = config
+    const updates = new DesktopUpdates(vi.fn(), 'https://updates.example.com')
+    await updates.check()
+    expect(updaterInstances).toHaveLength(0)
+    expect(updates.getStatus()).toMatchObject({ phase: 'error', message: expect.stringContaining('não atualiza sozinha') })
   })
 })
