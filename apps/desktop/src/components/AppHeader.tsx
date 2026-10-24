@@ -1,6 +1,8 @@
 import { Settings } from 'lucide-react'
-import { getLocale, t } from '../i18n'
+import { t } from '../i18n'
 import type { UpdateStatus } from '../shared/contracts'
+import { avatarInitial, avatarTone } from '../ui/avatar'
+import { BrandLockup } from './BrandMark'
 import { UpdateNotice } from './UpdateNotice'
 
 const CONNECTION = {
@@ -27,11 +29,11 @@ export function AppHeader({ version, displayName, signedIn, connection, profileL
   return (
     <header className="telae-header shrink-0">
       <div className="telae-header-bar flex items-center gap-3 pl-5 pr-3">
-        <span aria-hidden="true" className="telae-mark" />
-        <p className="telae-wordmark">Telaê</p>
+        <p aria-label="Telaê" className="flex"><BrandLockup size={20} /></p>
         {version && <span aria-label={t('Versão instalada')} title={t('Versão instalada')} className="tnum font-mono text-[10px] text-ink-4">v{version}</span>}
         <span className="ml-auto" />
-        {signedIn && <span className={`telae-connection ${CONNECTION[connection].className}`}>
+        {/* Durante uma sessão, a própria tela diz como está a conexão. */}
+        {signedIn && !sessionActive && <span className={`telae-connection ${CONNECTION[connection].className}`}>
           <span aria-hidden="true" className="telae-connection-dot" />
           {CONNECTION[connection].label()}
         </span>}
@@ -39,11 +41,11 @@ export function AppHeader({ version, displayName, signedIn, connection, profileL
           type="button"
           onClick={onOpenProfile}
           disabled={profileLocked}
-          title={profileLocked ? t('Pare de transmitir pra abrir as configurações.') : t('Configurações')}
+          title={profileLocked ? t('Para de transmitir pra abrir as configurações.') : t('Configurações')}
           className="telae-press telae-profile-chip"
           aria-label={t('Abrir configurações')}
         >
-          {displayName && <span aria-hidden="true" className="avatar h-6 w-6 text-[11px]">{displayName.trim().slice(0, 1).toLocaleUpperCase(getLocale())}</span>}
+          {displayName && <span aria-hidden="true" className="telae-avatar !h-6 !w-6 !text-[11px]" style={{ background: avatarTone(displayName) }}>{avatarInitial(displayName)}</span>}
           {displayName && <span className="max-w-[140px] truncate">{displayName}</span>}
           <Settings size={14} aria-hidden="true" className={displayName ? 'text-ink-4' : 'ml-2'} />
         </button>}

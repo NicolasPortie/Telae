@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { startedSharing, upsertFriend } from '../services/friends'
 import { normalizeUsername, type ShareSessionController } from '../services/share-session'
-import type { DeviceSnapshot } from '../services/types'
+import type { DeviceSnapshot, SharePreviewEvent } from '../services/types'
 
 const REFRESH_INTERVAL_MS = 12_000
 
@@ -29,6 +29,8 @@ type Options = {
 export function useFriends({ controller, desktopApiAvailable, online }: Options) {
   const [friends, setFriends] = useState<DeviceSnapshot[]>([])
   const [requests, setRequests] = useState<DeviceSnapshot[]>([])
+  // Miniatura mais recente de cada amigo que está transmitindo, por deviceId.
+  const [previews, setPreviews] = useState<Record<string, SharePreviewEvent>>({})
   const [myUsername, setMyUsername] = useState<string | null>(null)
   const [myHandleCopied, setMyHandleCopied] = useState(false)
   const [usernameInput, setUsernameInput] = useState('')
@@ -48,6 +50,10 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       // Pedidos recebidos (quem me adicionou sem reciprocidade): não bloqueiam a lista.
       try { setRequests(await controller.fetchFriendRequests()) } catch { /* pedidos não bloqueiam */ }
       setFriends(await controller.fetchFriends())
+      try {
+        const list = await controller.fetchFriendPreviews()
+        setPreviews(Object.fromEntries(list.map(preview => [preview.deviceId, preview])))
+      } catch { /* miniaturas são enfeite: a lista funciona sem elas */ }
     } catch {
       // a lista de amigos não bloqueia a home
     }
@@ -69,7 +75,8 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
     const offRequest = controller.onFriendRequest(() => {
       void controller.fetchFriendRequests().then(setRequests).catch(() => undefined)
     })
-    return () => { window.clearInterval(interval); offPresence(); offRequest() }
+    const offPreview = controller.onSharePreview(preview => setPreviews(current => ({ ...current, [preview.deviceId]: preview })))
+    return () => { window.clearInterval(interval); offPresence(); offRequest(); offPreview() }
   }, [controller, desktopApiAvailable, online, refresh])
 
   const copyMyHandle = useCallback(async () => {
@@ -79,18 +86,18 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       setMyHandleCopied(true)
       window.setTimeout(() => setMyHandleCopied(false), 2000)
     } catch {
-      setError(t('Não deu pra copiar seu @.'))
+      setError(t('Não deu pra copiar seu @. Tenta de novo.'))
     }
   }, [myUsername])
 
   const add = useCallback(async (usernameArg?: string) => {
     const username = normalizeUsername(usernameArg ?? usernameInput)
     if (!username) {
-      setError(t('Esse @ não parece certo. Use de 3 a 20 letras, números ou _.'))
+      setError(t('Esse @ não parece certo. Usa de 3 a 20 letras, números ou _.'))
       return
     }
     if (!desktopApiAvailable) {
-      setError(t('Abra o aplicativo Telaê para adicionar amigos.'))
+      setError(t('Abre o app Telaê pra adicionar amigos.'))
       return
     }
     if (username === myUsername) {
@@ -104,13 +111,13 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       const added = await controller.addFriend(username)
       setUsernameInput('')
       setAddOpen(false)
-      setSuccess(t('{name} adicionado!', { name: added.displayName }))
+      setSuccess(t('{name} adicionado.', { name: added.displayName }))
       window.setTimeout(() => setSuccess(null), 3000)
       setFriends(await controller.fetchFriends())
       // Adicionar de volta torna a amizade mútua: o pedido some.
       try { setRequests(await controller.fetchFriendRequests()) } catch { /* a lista principal já atualizou */ }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não deu pra adicionar o amigo.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra adicionar o amigo. Tenta de novo.'))
     } finally {
       setBusy(false)
     }
@@ -124,7 +131,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       await controller.dismissFriendRequest(username)
       setRequests(await controller.fetchFriendRequests())
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não deu pra ignorar o pedido.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra ignorar o pedido. Tenta de novo.'))
     } finally {
       setBusy(false)
     }
@@ -139,7 +146,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
       await controller.removeFriend(username)
       setFriends(await controller.fetchFriends())
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : t('Não deu pra remover o amigo.'))
+      setError(failure instanceof Error ? failure.message : t('Não deu pra remover o amigo. Tenta de novo.'))
     } finally {
       setBusy(false)
     }
@@ -152,7 +159,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
   }, [])
 
   return {
-    friends, requests, myUsername, myHandleCopied,
+    friends, requests, previews, myUsername, myHandleCopied,
     usernameInput, setUsernameInput, addOpen, setAddOpen, closeAddForm,
     busy, error, success, pendingRemove, setPendingRemove,
     copyMyHandle, add, dismissRequest, remove,

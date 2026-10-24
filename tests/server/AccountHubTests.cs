@@ -39,7 +39,11 @@ public sealed class AccountHubTests : IAsyncLifetime
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddTrustedClientAddress(builder.Configuration);
         builder.Services.AddTelaeAccounts(builder.Configuration, builder.Environment);
-        builder.Services.AddSignalR(options => options.AddFilter(typeof(DomainErrorFilter)));
+        builder.Services.AddSignalR(options =>
+        {
+            options.AddFilter(typeof(DomainErrorFilter));
+            options.AddFilter<InputLimitFilter>();
+        });
         builder.Services.AddSingleton(new TelaeRegistry());
         builder.Services.AddSingleton<PresenceSubscriptions>();
         builder.Services.AddSingleton<DisconnectCoordinator>();
@@ -124,7 +128,7 @@ public sealed class AccountHubTests : IAsyncLifetime
         await connection.StartAsync();
         var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("legacy-device", "Legado", new string('a', 64))));
-        Assert.Contains("Entre na sua conta", error.Message);
+        Assert.Contains("Entra na sua conta", error.Message);
     }
 
     [Fact]
@@ -135,7 +139,7 @@ public sealed class AccountHubTests : IAsyncLifetime
         await connection.StartAsync();
         var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest(session.Account.Id.ToString(), "ana", new string('a', 64))));
-        Assert.Contains("Entre na sua conta", error.Message);
+        Assert.Contains("Entra na sua conta", error.Message);
     }
 
     [Fact]
@@ -149,7 +153,7 @@ public sealed class AccountHubTests : IAsyncLifetime
         await connection.StartAsync();
         var error = await Assert.ThrowsAsync<HubException>(() => connection.InvokeAsync<DeviceSnapshot>("RegisterDevice",
             new RegisterDeviceRequest("x", "x", "")));
-        Assert.Contains("sessão acabou", error.Message);
+        Assert.Contains("Entra na sua conta", error.Message);
     }
 
     [Fact]
@@ -168,5 +172,41 @@ public sealed class AccountHubTests : IAsyncLifetime
         Assert.Equal(ana.Account.Id.ToString(), deviceAna.DeviceId);
         Assert.Equal(bia.Account.Id.ToString(), deviceBia.DeviceId);
         Assert.NotEqual(deviceAna.FriendCode, deviceBia.FriendCode);
+    }
+
+    [Fact]
+    public async Task Logout_removes_the_live_share_and_cannot_be_undone_by_the_old_connection()
+    {
+        var session = await NewAccountAsync("ana");
+        var connection = Connect(session.AccessToken);
+        await connection.StartAsync();
+        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("x", "x", ""));
+        await connection.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest(session.Account.Id.ToString(), "1080p60"));
+        var registry = _app!.Services.GetRequiredService<TelaeRegistry>();
+        Assert.NotNull(registry.GetActiveSessionForSharer(session.Account.Id.ToString()));
+
+        using (var scope = _app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<AccountService>().LogoutAsync(session.RefreshToken, default);
+        Assert.Null(registry.GetActiveSessionForSharer(session.Account.Id.ToString()));
+        Assert.False(registry.IsRegisteredConnection(connection.ConnectionId!));
+        await Assert.ThrowsAnyAsync<Exception>(() => connection.InvokeAsync<ShareAccessResult>("StartShare",
+            new StartShareRequest(session.Account.Id.ToString(), "1080p60")));
+    }
+
+    [Fact]
+    public async Task Logging_out_a_stale_family_does_not_disconnect_the_newer_login()
+    {
+        var old = await NewAccountAsync("ana");
+        AuthResult current;
+        using (var scope = _app!.Services.CreateScope())
+            current = await scope.ServiceProvider.GetRequiredService<AccountService>().LoginAsync("ana", Password, null, default);
+        var connection = Connect(current.AccessToken);
+        await connection.StartAsync();
+        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("x", "x", ""));
+        using (var scope = _app.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<AccountService>().LogoutAsync(old.RefreshToken, default);
+        Assert.True(_app.Services.GetRequiredService<TelaeRegistry>().IsRegisteredConnection(connection.ConnectionId!));
+        Assert.NotNull(await connection.InvokeAsync<ShareAccessResult>("StartShare",
+            new StartShareRequest(current.Account.Id.ToString(), "1080p60")));
     }
 }

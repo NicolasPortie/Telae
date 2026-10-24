@@ -12,9 +12,11 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(sharerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Inicie a transmissão antes de gerar um convite.");
+                throw new TelaeDomainException("share_not_active", "Começa a transmitir antes de criar um convite.");
 
             PurgeExpiredInvitesLocked();
+            if (_invitesByCode.Values.Count(invite => invite.SharerDeviceId == sharerDeviceId) >= MaxInvitesPerDevice)
+                throw new TelaeDomainException("rate_limited", "Muitos pedidos em pouco tempo. Espera um minuto e tenta de novo.");
             var code = GenerateUniqueInviteCode();
             var invite = new InviteRecord(code, session.SessionId, sharerDeviceId, DateTimeOffset.UtcNow + (timeToLive ?? InviteLifetime));
             _invitesByCode.Add(code, invite);
@@ -29,11 +31,11 @@ public sealed partial class TelaeRegistry
             RequireOnlineDevice(viewerDeviceId);
             var normalized = NormalizeInviteCode(inviteCode);
             if (!_invitesByCode.TryGetValue(normalized, out var invite))
-                throw new TelaeDomainException("invite_invalid", "Este convite não existe. Confira o código e tente de novo.");
+                throw new TelaeDomainException("invite_invalid", "Esse convite não existe. Confere o código e tenta de novo.");
             if (invite.ExpiresAt <= DateTimeOffset.UtcNow)
-                throw new TelaeDomainException("invite_expired", "Este convite expirou. Peça um novo convite ao Sharer.");
+                throw new TelaeDomainException("invite_expired", "Esse convite expirou. Pede um novo pra quem está transmitindo.");
             if (!_sessionsBySharer.TryGetValue(invite.SharerDeviceId, out var session) || session.SessionId != invite.SessionId)
-                throw new TelaeDomainException("share_not_active", "Esta transmissão já terminou.");
+                throw new TelaeDomainException("share_not_active", "Essa transmissão já terminou.");
 
             return AttachViewerLocked(viewerDeviceId, session);
         }

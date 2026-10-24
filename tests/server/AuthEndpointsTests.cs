@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Telae.Server.Accounts;
+using Telae.Server.Core;
 
 namespace Telae.Server.Tests;
 
@@ -30,13 +31,17 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
             ["Auth:JwtKey"] = new string('k', 48),
             ["Auth:StrictRequestsPerMinute"] = strict.ToString(),
             ["Auth:RequestsPerMinute"] = "1000",
+            ["Auth:LoginBackoffSeconds"] = "60",
+            ["ClientAddress:KnownProxies:0"] = "127.0.0.1",
         });
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddTelaeAccounts(builder.Configuration, builder.Environment);
+        builder.Services.AddTrustedClientAddress(builder.Configuration);
         builder.Services.AddAuthRateLimits();
         builder.Services.AddSingleton<IEmailSender>(_email);
 
         _app = builder.Build();
+        _app.UseForwardedHeaders();
         _app.UseAuthentication();
         _app.UseAuthorization();
         _app.UseRateLimiter();
@@ -75,7 +80,7 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, (await _http.GetAsync("/auth/me")).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await _http.PostAsJsonAsync("/auth/register", new RegisterRequest("ana@example.com", "ana", Password, "en"))).StatusCode);
-        var session = await (await _http.PostAsJsonAsync("/auth/verify-email", new VerifyRequest("ana", _email.LastCode("ana@example.com")))).Content.ReadFromJsonAsync<AuthResult>();
+        var session = await (await _http.PostAsJsonAsync("/auth/verify-email", new VerifyRequest("ana", _email.LastCode("ana@example.com"), Password))).Content.ReadFromJsonAsync<AuthResult>();
         Assert.NotNull(session);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
@@ -92,9 +97,74 @@ public sealed class AuthEndpointsTests : IAsyncLifetime
     public async Task A_tampered_access_token_is_rejected()
     {
         await _http.PostAsJsonAsync("/auth/register", new RegisterRequest("ana@example.com", "ana", Password, null));
-        var session = await (await _http.PostAsJsonAsync("/auth/verify-email", new VerifyRequest("ana", _email.LastCode("ana@example.com")))).Content.ReadFromJsonAsync<AuthResult>();
+        var session = await (await _http.PostAsJsonAsync("/auth/verify-email", new VerifyRequest("ana", _email.LastCode("ana@example.com"), Password))).Content.ReadFromJsonAsync<AuthResult>();
         using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
         request.Headers.Authorization = new("Bearer", session!.AccessToken[..^4] + "AAAA");
         Assert.Equal(HttpStatusCode.Unauthorized, (await _http.SendAsync(request)).StatusCode);
+    }
+
+    private async Task<AuthResult> SignInAsync()
+    {
+        await _http.PostAsJsonAsync("/auth/register", new RegisterRequest("ana@example.com", "ana", Password, null));
+        return (await (await _http.PostAsJsonAsync("/auth/verify-email",
+            new VerifyRequest("ana", _email.LastCode("ana@example.com"), Password))).Content.ReadFromJsonAsync<AuthResult>())!;
+    }
+
+    [Fact]
+    public async Task Password_routes_use_the_client_address_resolved_by_the_trusted_proxy()
+    {
+        var session = await SignInAsync();
+        async Task<HttpResponseMessage> SendAsync(string path, object body, string address, bool signedIn = false)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
+            request.Headers.Add("CF-Connecting-IP", address);
+            if (signedIn) request.Headers.Authorization = new("Bearer", session.AccessToken);
+            return await _http.SendAsync(request);
+        }
+        for (var index = 0; index < 5; index++)
+        {
+            using var failed = await SendAsync("/auth/login", new LoginRequest("ana", "wrong"), "198.51.100.1");
+            Assert.Equal(HttpStatusCode.Unauthorized, failed.StatusCode);
+        }
+        using var blocked = await SendAsync("/auth/login", new LoginRequest("ana", Password), "198.51.100.1");
+        using var owner = await SendAsync("/auth/login", new LoginRequest("ana", Password), "198.51.100.2");
+        Assert.Equal(HttpStatusCode.Unauthorized, blocked.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, owner.StatusCode);
+        using var change = await SendAsync("/auth/change-password", new ChangePasswordRequest(Password, "outra-senha-segura-27"), "198.51.100.1", signedIn: true);
+        using var delete = await SendAsync("/auth/delete-account", new PasswordConfirmRequest(Password), "198.51.100.1", signedIn: true);
+        Assert.Equal(HttpStatusCode.Unauthorized, change.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, delete.StatusCode);
+    }
+
+    private async Task<HttpStatusCode> ProfileStatusAsync(string accessToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/auth/me");
+        request.Headers.Authorization = new("Bearer", accessToken);
+        return (await _http.SendAsync(request)).StatusCode;
+    }
+
+    [Fact]
+    public async Task Logout_immediately_rejects_the_previously_valid_access_token()
+    {
+        var session = await SignInAsync();
+        Assert.Equal(HttpStatusCode.OK, await ProfileStatusAsync(session.AccessToken));
+        Assert.Equal(HttpStatusCode.NoContent, (await _http.PostAsJsonAsync("/auth/logout", new RefreshRequest(session.RefreshToken))).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProfileStatusAsync(session.AccessToken));
+    }
+
+    [Fact]
+    public async Task Password_change_immediately_rejects_old_access_and_keeps_the_new_session()
+    {
+        var session = await SignInAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/auth/change-password");
+        request.Headers.Authorization = new("Bearer", session.AccessToken);
+        request.Content = JsonContent.Create(new ChangePasswordRequest(Password, "outra-senha-segura-27"));
+        var response = await _http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var fresh = (await response.Content.ReadFromJsonAsync<AuthResult>())!;
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProfileStatusAsync(session.AccessToken));
+        Assert.Equal(HttpStatusCode.OK, await ProfileStatusAsync(fresh.AccessToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await _http.PostAsJsonAsync("/auth/refresh", new RefreshRequest(session.RefreshToken))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await ProfileStatusAsync(fresh.AccessToken));
     }
 }

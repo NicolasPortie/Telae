@@ -20,7 +20,7 @@ const person = (overrides: Partial<DeviceSnapshot>): DeviceSnapshot => ({
 
 function stateWith(overrides: Partial<FriendsState> = {}): FriendsState {
   return {
-    friends: [], requests: [], myUsername: 'nicolas', myHandleCopied: false,
+    friends: [], requests: [], previews: {}, myUsername: 'nicolas', myHandleCopied: false,
     usernameInput: '', setUsernameInput: vi.fn(),
     addOpen: false, setAddOpen: vi.fn(), closeAddForm: vi.fn(),
     busy: false, error: null, success: null, pendingRemove: null, setPendingRemove: vi.fn(),
@@ -30,7 +30,7 @@ function stateWith(overrides: Partial<FriendsState> = {}): FriendsState {
 }
 
 const baseProps = {
-  online: true, canWatch: true, watchingDeviceId: null, watchError: null, onWatch: vi.fn(),
+  online: true,
   updateStatus: null, canCheckUpdate: true, onCheckUpdate: vi.fn(),
 }
 
@@ -72,19 +72,18 @@ describe('FriendsRail', () => {
     expect(screen.queryByText('Sua lista está vazia.')).not.toBeInTheDocument()
   })
 
-  it('groups friends into live, online and offline, shows each @, and offers "Assistir" only to live ones', async () => {
-    const onWatch = vi.fn()
+  it('leaves live friends to the home stage and groups the rest into online and offline', () => {
     const live = person({ deviceId: 'live', displayName: 'Bia', friendCode: 'bia', status: 'transmitting', isSharing: true })
     const idle = person({ deviceId: 'idle', displayName: 'Caio', friendCode: 'caio' })
     const away = person({ deviceId: 'away', displayName: 'Dani', friendCode: 'dani', status: 'offline' })
-    render(<FriendsRail state={stateWith({ friends: [live, idle, away] })} {...baseProps} onWatch={onWatch} />)
+    render(<FriendsRail state={stateWith({ friends: [idle, live, away] })} {...baseProps} />)
 
-    expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['Ao vivo1', 'Online1', 'Offline1'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['Online1', 'Offline1'])
+    expect(screen.queryByText('Bia')).not.toBeInTheDocument()
     const rows = screen.getAllByRole('listitem')
-    expect(within(rows[0]).getByText('@bia')).toBeInTheDocument()
-    expect(within(rows[1]).queryByRole('button', { name: 'Assistir' })).not.toBeInTheDocument()
-    await userEvent.click(within(rows[0]).getByRole('button', { name: 'Assistir' }))
-    expect(onWatch).toHaveBeenCalledWith(live)
+    expect(within(rows[0]).getByText('@caio')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('@dani')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Assistir' })).not.toBeInTheDocument()
   })
 
   it('asks for confirmation before removing a friend', async () => {

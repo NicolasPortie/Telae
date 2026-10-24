@@ -7,6 +7,13 @@ export type DeviceSnapshot = {
   activeQualityProfile: string | null
 }
 
+/** Miniatura da tela de um amigo que está transmitindo (JPEG em data URL). */
+export type SharePreviewEvent = {
+  deviceId: string
+  image: string
+  capturedAt: string
+}
+
 export type ShareSessionSnapshot = {
   sessionId: string
   sharerDeviceId: string

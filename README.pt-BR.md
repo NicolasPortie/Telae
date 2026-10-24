@@ -11,14 +11,14 @@
 Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema ou de um aplicativo específico e transporte WebRTC ponto a ponto. Sem salas e sem links: quem está transmitindo aparece na sua lista de amigos e você entra com um clique.
 
 [![CI](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml/badge.svg)](https://github.com/NicolasPortie/Telae/actions/workflows/validate.yml)
-[![Release](https://img.shields.io/github/v/release/NicolasPortie/Telae?label=release&color=E0AE5E)](https://github.com/NicolasPortie/Telae/releases)
+[![Release](https://img.shields.io/github/v/release/NicolasPortie/Telae?label=release&color=8CC63F)](https://github.com/NicolasPortie/Telae/releases)
 ![Licença](https://img.shields.io/badge/licen%C3%A7a-MIT-green)
 ![Plataforma](https://img.shields.io/badge/plataforma-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)
 ![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![WebRTC](https://img.shields.io/badge/WebRTC-P2P-E0AE5E)
+![WebRTC](https://img.shields.io/badge/WebRTC-P2P-8CC63F)
 
 [Demonstração](#demonstração) · [Recursos](#recursos) · [Como funciona](#como-funciona) · [Primeiros passos](#primeiros-passos) · [Hospedagem própria](#hospedagem-própria) · [Documentação](#documentação)
 
@@ -27,10 +27,10 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 ## Demonstração
 
 <p align="center">
-  <img src="docs/media/demo.pt-BR.gif" alt="Demonstração do Telaê: uma amiga escolhe uma janela e começa a transmitir, e outro amigo assiste ao vivo com o painel de estatísticas aberto" width="720" />
+  <img src="docs/media/demo.pt-BR.gif" alt="Demonstração do Telaê: a Ana escolhe uma janela e entra ao vivo enquanto os amigos chegam; no PC do Pedro, a tela dela já aparece ao vivo no Início e ele assiste com um clique, com as estatísticas abertas" width="720" />
 </p>
 
-<p align="center"><sub>A Ana escolhe uma janela e entra ao vivo; o Bruno a vê na lista de amigos, assiste com um clique e abre as estatísticas ao vivo (rota direta, 1 ms de RTT, sem perda de pacotes).</sub></p>
+<p align="center"><sub>A Ana escolhe uma janela e entra ao vivo enquanto os amigos chegam. No PC do Pedro, a tela dela já está passando no Início; ele assiste com um clique e abre as estatísticas. Demonstração da interface com conteúdo de exemplo.</sub></p>
 
 ## Sumário
 
@@ -59,30 +59,31 @@ O objetivo do projeto é um produto de compartilhamento de tela realmente bom na
 - **Até 1440p60**, com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou de rede.
 - **Áudio sincronizado** do sistema inteiro ou só do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
 - **Amigos e presença**: adicione pessoas pelo @usuário, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo. A lista fica no servidor e acompanha sua conta em qualquer computador.
+- **Prévia ao vivo**: enquanto um amigo transmite, uma miniatura da tela dele se atualiza no seu Início a cada poucos segundos. Só amigos mútuos recebem, e nada é guardado.
 - **Até 12 espectadores** por transmissão, cada um com conexão, qualidade e recuperação independentes.
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
-- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática em segundo plano.
+- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática em segundo plano nos builds assinados.
 - **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações.
 
 ## Capturas de tela
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pt-BR/home.png" alt="Tela inicial com a lista de amigos e uma amiga ao vivo" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/home.png" alt="Tela inicial com a prévia ao vivo dos amigos que estão transmitindo e a lista de amigos" /></td>
     <td width="50%"><img src="docs/screenshots/pt-BR/viewer.png" alt="Player do espectador com controles e painel de estatísticas" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Início: amigos agrupados em Ao vivo, Online e Offline</sub></td>
+    <td align="center"><sub>Início: quem está ao vivo aparece com a tela passando</sub></td>
     <td align="center"><sub>Espectador: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de quem transmite, com prévia, espectadores e estatísticas" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de quem transmite, com prévia, quem está assistindo e conexão" /></td>
     <td width="50%"><img src="docs/screenshots/pt-BR/create-account.png" alt="Tela de criar conta com e-mail, nome de usuário e senha" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Transmissão: prévia, espectadores e telemetria</sub></td>
+    <td align="center"><sub>Transmissão: prévia, quem está assistindo e saúde da conexão</sub></td>
     <td align="center"><sub>Criar conta: o @usuário é como os amigos te encontram</sub></td>
   </tr>
 </table>
@@ -138,7 +139,7 @@ O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em ing
 
 ### Baixar
 
-Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. O app se atualiza sozinho em segundo plano.
+Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. Enquanto o instalador não for assinado, novas versões são instaladas baixando o instalador de novo daqui. A atualização automática só vale para builds assinados.
 
 Os instaladores publicados aqui são genéricos: não vêm com servidor nenhum. O Telaê é código aberto, então, para usar com os seus amigos, [hospede o seu servidor](#hospedagem-própria) e informe o endereço na tela de entrada (**Servidor > Alterar**) ou em **Configurações > Servidor de sinalização**. Para embutir um padrão no seu próprio instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
 
@@ -218,7 +219,7 @@ Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
 ## Limitações conhecidas
 
 - Só Windows por enquanto (a captura e o áudio dependem de APIs do Windows).
-- Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução.
+- Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução, e a atualização é manual até lá.
 - Cada espectador recebe um fluxo codificado só para ele, então upload e CPU crescem com o número de espectadores. Um SFU é uma opção futura.
 - 1440p60 depende da máquina e da rede; os documentos de validação listam o que foi e o que não foi medido.
 

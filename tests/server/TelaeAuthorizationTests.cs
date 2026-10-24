@@ -148,4 +148,141 @@ public sealed class TelaeAuthorizationTests
         }
         finally { Directory.Delete(folder, recursive: true); }
     }
+
+    [Fact]
+    public void Outstanding_invites_are_bounded_even_when_the_sharer_restarts_the_session()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterDevice("sharer", "Sharer", "connection", Secret);
+        for (var index = 0; index < TelaeRegistry.MaxInvitesPerDevice; index++)
+        {
+            registry.StartShare("sharer", "auto");
+            registry.CreateInvite("sharer");
+            registry.StopShare("sharer");
+        }
+        registry.StartShare("sharer", "auto");
+
+        Assert.Equal("rate_limited", Assert.Throws<TelaeDomainException>(() => registry.CreateInvite("sharer")).Code);
+    }
+
+    [Fact]
+    public void Forgetting_an_account_removes_its_connections_and_session_participation()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterAccountDevice("ana", "ana", "Ana", "ana-connection");
+        registry.RegisterAccountDevice("bia", "bia", "Bia", "bia-connection");
+        registry.DeclareFriends("ana", ["bia"]);
+        registry.DeclareFriends("bia", ["ana"]);
+        registry.StartShare("ana", "auto");
+        var session = registry.JoinWithInvite("bia", registry.CreateInvite("ana").Code);
+
+        registry.ForgetAccount("bia");
+        Assert.False(registry.IsRegisteredConnection("bia-connection"));
+        Assert.Empty(registry.GetActiveSessionForSharer("ana")!.ViewerDeviceIds);
+        Assert.Equal("device_not_registered", Assert.Throws<TelaeDomainException>(() => registry.ValidateSessionParticipant(session.SessionId, "bia", "ana")).Code);
+        registry.ForgetAccount("ana");
+        Assert.Null(registry.GetActiveSessionForSharer("ana"));
+        Assert.Null(registry.FindConnectionId("ana"));
+    }
+
+    [Fact]
+    public void Account_invites_cannot_bypass_mutual_friendship_or_restore_an_unfriended_viewer()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterAccountDevice("ana", "ana", "Ana", "ana-connection");
+        registry.RegisterAccountDevice("bia", "bia", "Bia", "bia-connection");
+        registry.StartShare("ana", "auto");
+        var invite = registry.CreateInvite("ana");
+
+        Assert.Equal("not_friends", Assert.Throws<TelaeDomainException>(() => registry.JoinWithInvite("bia", invite.Code)).Code);
+        registry.DeclareFriends("ana", ["bia"]);
+        registry.DeclareFriends("bia", ["ana"]);
+        registry.JoinWithInvite("bia", invite.Code);
+        registry.DeclareFriends("ana", []);
+        Assert.Equal("not_friends", Assert.Throws<TelaeDomainException>(() => registry.JoinWithInvite("bia", invite.Code)).Code);
+        Assert.Empty(registry.GetActiveSessionForSharer("ana")!.ViewerDeviceIds);
+    }
+
+    [Fact]
+    public void Legacy_capacity_rejects_new_devices_but_never_blocks_accounts()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"telae-capacity-{Guid.NewGuid():N}");
+        var path = Path.Combine(folder, "profiles.json");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            File.WriteAllText(path, JsonSerializer.Serialize(Enumerable.Range(0, TelaeRegistry.MaxProfiles)
+                .Select(index => new { DeviceId = $"device-{index}", DisplayName = "Name", FriendCode = $"user_{index}", DeviceSecretHash = new string('A', 64) })));
+            var registry = new TelaeRegistry(path);
+
+            Assert.Equal("server_full", Assert.Throws<TelaeDomainException>(() => registry.RegisterDevice("attacker", "Attacker", "new", Secret)).Code);
+            Assert.Null(registry.GetDevice("attacker"));
+            // Encher o registro com aparelhos legados não pode impedir contas de entrar.
+            Assert.Equal("new_account", registry.EnsureAccountProfile("new-account", "new_account", "New").FriendCode);
+            Assert.NotNull(registry.RegisterAccountDevice("other-account", "other_account", "Other", "account-connection"));
+        }
+        finally { Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
+    public void A_request_cannot_be_dismissed_before_it_exists()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterAccountDevice("ana", "ana", "Ana", "ana-connection");
+        registry.RegisterAccountDevice("bia", "bia", "Bia", "bia-connection");
+        registry.DismissFriendRequest("ana", "bia");
+
+        registry.DeclareFriends("bia", ["ana"]);
+
+        Assert.Equal("bia", Assert.Single(registry.GetFriendRequests("ana")).DeviceId);
+    }
+
+    [Fact]
+    public void Revocation_during_grace_ends_the_share_and_old_disconnects_cannot_end_a_later_session()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterDevice("sharer", "Sharer", "first", Secret);
+        registry.StartShare("sharer", "auto");
+        var previousDisconnect = registry.BeginDisconnect("first");
+
+        Assert.NotNull(registry.RevokeDevice("sharer").EndedSession);
+        registry.RegisterDevice("sharer", "Sharer", "second", Secret);
+        var currentSession = registry.StartShare("sharer", "auto");
+        var currentDisconnect = registry.BeginDisconnect("second");
+
+        Assert.Null(registry.FinalizeDisconnect("sharer", previousDisconnect.Generation).EndedSession);
+        Assert.Equal(currentSession.SessionId, registry.GetActiveSessionForSharer("sharer")!.SessionId);
+        Assert.Equal(currentSession.SessionId, registry.FinalizeDisconnect("sharer", currentDisconnect.Generation).EndedSession!.SessionId);
+    }
+
+    [Fact]
+    public void A_stale_connection_cannot_revoke_a_replacement_connection()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterDevice("device", "Owner", "first", Secret);
+        registry.RegisterDevice("device", "Owner", "second", Secret);
+
+        Assert.Null(registry.RevokeDevice("device", "first").ChangedDevice);
+        Assert.Equal("second", registry.GetConnectionId("device"));
+    }
+
+    [Fact]
+    public void Reusing_a_deleted_username_does_not_inherit_the_former_accounts_friendship()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterAccountDevice("ana", "ana", "Ana", "ana-connection");
+        registry.RegisterAccountDevice("old-bia", "bia", "Bia", "old-connection");
+        registry.DeclareFriends("ana", ["bia"]);
+        registry.DeclareFriends("old-bia", ["ana"]);
+        Assert.True(registry.AreMutualFriends("ana", "old-bia"));
+
+        registry.ForgetAccount("old-bia");
+        registry.RegisterAccountDevice("new-bia", "bia", "Bia", "new-connection");
+        registry.DeclareFriends("new-bia", ["ana"]);
+
+        Assert.False(registry.AreMutualFriends("ana", "new-bia"));
+        registry.StartShare("ana", "auto");
+        Assert.Equal("not_friends", Assert.Throws<TelaeDomainException>(() => registry.JoinFriendShare("new-bia", "ana")).Code);
+        Assert.Empty(registry.SetSharePreview("ana", SharePreviewTests.Jpeg).ConnectionIds);
+    }
 }

@@ -61,7 +61,7 @@ export function CodeInput({ value, onChange, disabled }: { value: string; onChan
   }
 
   return (
-    <div role="group" aria-label={t('Código de 6 dígitos')} className="flex gap-2">
+    <div role="group" aria-label={t('Código de 6 dígitos')} className="telae-code-input">
       {digits.map((digit, index) => (
         <input
           key={index}
@@ -75,7 +75,7 @@ export function CodeInput({ value, onChange, disabled }: { value: string; onChan
           autoComplete={index === 0 ? 'one-time-code' : 'off'}
           aria-label={t('Dígito {number}', { number: index + 1 })}
           disabled={disabled}
-          className="otp-box"
+          className="otp-box tnum"
         />
       ))}
     </div>

@@ -33,20 +33,21 @@ export function ServerPicker({ disabled }: { disabled?: boolean }) {
       const environment = await window.telae.setSignalingUrl(value)
       setCurrent(environment.signalingUrl)
       setEditing(false)
-      setFeedback({ kind: 'ok', text: t('Endereço salvo. Reinicie o Telaê pra usar o novo servidor.') })
+      setFeedback({ kind: 'ok', text: t('Endereço salvo. Reinicia o Telaê pra usar o novo servidor.') })
     } catch (error) {
-      setFeedback({ kind: 'error', text: error instanceof Error ? error.message : t('Não deu pra salvar o endereço.') })
+      setFeedback({ kind: 'error', text: error instanceof Error ? error.message : t('Não deu pra salvar o endereço. Tenta de novo.') })
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="mt-8 border-t border-line pt-4 text-[13px] text-ink-3">
+    <div className="telae-server-picker">
       {editing ? (
         <form onSubmit={event => void save(event)}>
           <label htmlFor="auth-server-url" className="mb-1.5 block text-xs font-medium text-ink-2">{t('Endereço do servidor')}</label>
           <input id="auth-server-url" value={value} onChange={event => { setValue(event.target.value); setFeedback(null) }} placeholder="https://telae.seudominio.com" autoComplete="off" spellCheck={false} autoFocus className="field w-full font-mono text-[13px]" />
+          <p className="mt-2 text-xs text-ink-3">{t('Usa um servidor em que você confia. Quem o administra recebe os dados da conta e a senha usada nele.')}</p>
           <div className="mt-2 flex gap-2">
             <button type="submit" disabled={busy || !value.trim()} className="telae-press btn btn-secondary btn-sm">{busy ? t('Salvando…') : t('Salvar')}</button>
             <button type="button" onClick={() => { setEditing(false); setFeedback(null) }} className="telae-press btn btn-ghost btn-sm">{t('Cancelar')}</button>
@@ -54,7 +55,7 @@ export function ServerPicker({ disabled }: { disabled?: boolean }) {
         </form>
       ) : (
         <div className="flex items-center justify-between gap-3">
-          <span>{t('Servidor')}: <span className="font-mono text-ink-2">{hostOf(current)}</span></span>
+          <span>{t('Servidor')}: <span className="break-all font-mono text-xs text-ink-2">{hostOf(current)}</span></span>
           <button type="button" disabled={disabled} onClick={() => { setValue(current); setEditing(true); setFeedback(null) }} className="telae-press text-ink-3 underline-offset-2 hover:text-ink hover:underline disabled:opacity-60">{t('Alterar')}</button>
         </div>
       )}

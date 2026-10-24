@@ -27,7 +27,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "5015:5015"
+      - "127.0.0.1:5015:5015"
     environment:
       ConnectionStrings__Telae: "Host=postgres;Database=telae;Username=telae;Password=${POSTGRES_PASSWORD}"
       # Chave de assinatura dos tokens (mínimo de 32 caracteres): openssl rand -base64 48
@@ -36,7 +36,7 @@ services:
       Auth__RegistrationOpen: ${TELAE_REGISTRATION_OPEN:-false}
       Auth__AllowedEmails: ${TELAE_ALLOWED_EMAILS:-}
       Auth__AllowLegacyDevices: "false"
-      # E-mail transacional (verificação e recuperação de senha). Sem Smtp__Host, os códigos vão só para o log.
+      # E-mail transacional para verificação de conta e recuperação de senha.
       Smtp__Host: ${SMTP_HOST:-}
       Smtp__Port: ${SMTP_PORT:-587}
       Smtp__User: ${SMTP_USER:-}
