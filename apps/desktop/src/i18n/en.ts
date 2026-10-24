@@ -311,6 +311,8 @@ export const en: Record<string, string> = {
   "Senha trocada. Entra com a nova.": "Password changed. Sign in with the new one.",
   "Senha trocada. Os outros aparelhos foram desconectados.": "Password changed. Your other devices were signed out.",
   "Servidor": "Server",
+  "Alterar": "Change",
+  "Endereço do servidor": "Server address",
   "Servidor de sinalização": "Signaling server",
   "Seu @": "Your @",
   "Seu @ é como os amigos te acham.": "Your @ is how friends find you.",
