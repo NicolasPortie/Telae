@@ -120,6 +120,7 @@ test.describe('duas instâncias Telae', () => {
       await sharer.getByRole('button', { name: /Escolher tela/ }).click()
       await expect(sharer.getByRole('heading', { name: /O que você quer mostrar/ })).toBeVisible()
       const qualityOptions = sharer.getByRole('radiogroup', { name: 'Qualidade da imagem' })
+      await expect(qualityOptions).toBeVisible({ timeout: 15_000 }) // A enumeração nativa de fontes termina antes de mostrar a qualidade.
       await expect(qualityOptions.getByRole('radio', { name: 'Auto', exact: true })).toHaveCount(0)
       await expect(qualityOptions.getByRole('radio', { name: '1080p', exact: true })).toHaveAttribute('aria-checked', 'true')
       await expect(qualityOptions.getByRole('radio')).toHaveCount(5)

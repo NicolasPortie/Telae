@@ -64,7 +64,7 @@ O objetivo do projeto é um produto de compartilhamento de tela realmente bom na
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
-- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática em segundo plano nos builds assinados.
+- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de release do projeto.
 - **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações.
 
 ## Capturas de tela
@@ -139,7 +139,7 @@ O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em ing
 
 ### Baixar
 
-Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. Enquanto o instalador não for assinado, novas versões são instaladas baixando o instalador de novo daqui. A atualização automática só vale para builds assinados.
+Baixe o instalador genérico do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Ele não vem com servidor nem feed oficial. O mantenedor distribui o instalador oficial por um link estável separado: ele já vem com o servidor e instala futuras atualizações automaticamente, após verificar a assinatura Ed25519 do projeto. Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na instalação inicial.
 
 Os instaladores publicados aqui são genéricos: não vêm com servidor nenhum. O Telaê é código aberto, então, para usar com os seus amigos, [hospede o seu servidor](#hospedagem-própria) e informe o endereço na tela de entrada (**Servidor > Alterar**) ou em **Configurações > Servidor de sinalização**. Para embutir um padrão no seu próprio instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
 
@@ -219,7 +219,7 @@ Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
 ## Limitações conhecidas
 
 - Só Windows por enquanto (a captura e o áudio dependem de APIs do Windows).
-- Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução, e a atualização é manual até lá.
+- Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na primeira execução. A atualização automática oficial usa uma chave Ed25519 própria fixada no app; builds genéricos precisam configurar o próprio feed e chave de confiança.
 - Cada espectador recebe um fluxo codificado só para ele, então upload e CPU crescem com o número de espectadores. Um SFU é uma opção futura.
 - 1440p60 depende da máquina e da rede; os documentos de validação listam o que foi e o que não foi medido.
 

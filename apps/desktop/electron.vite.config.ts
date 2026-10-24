@@ -10,6 +10,7 @@ export default defineConfig({
     define: {
       __TELAE_DEFAULT_SERVER_URL__: JSON.stringify(process.env.TELAE_DEFAULT_SERVER_URL?.trim() ?? ''),
       __TELAE_PREVIOUS_SERVER_URL__: JSON.stringify(process.env.TELAE_PREVIOUS_SERVER_URL?.trim() ?? ''),
+      __TELAE_UPDATE_PUBLIC_KEY__: JSON.stringify(process.env.TELAE_UPDATE_PUBLIC_KEY?.trim() ?? ''),
     },
     build: {
       rollupOptions: {

@@ -64,7 +64,7 @@ The goal of the project is a screen-sharing product that is genuinely good at it
 - **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
 - **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.
 - **Accounts**: email and password with 6-digit email verification, password recovery, rotating sessions and account deletion ([ADR 0004](docs/adr/0004-user-accounts.md)). Tokens are kept in the OS keystore.
-- **Windows notifications** when a friend goes live, optional launch at startup and background auto-updates on signed builds.
+- **Windows notifications** when a friend goes live, optional launch at startup and automatic updates in official builds, verified with the project's release key.
 - **English and Portuguese** interface, following the Windows language or chosen in Settings.
 
 ## Screenshots
@@ -139,7 +139,7 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 
 ### Download
 
-Grab the Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). The installers are not code-signed yet, so Windows SmartScreen may warn on the first run: choose **More info > Run anyway**. Until the installer is signed, new versions are installed by downloading the installer again from here. Auto-update only applies to signed builds.
+Grab the generic Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). It has no default server or official update feed. The maintainer distributes the official installer through a separate stable download link: it includes the official server and automatically installs future updates after verifying the project's Ed25519 signature. The installers do not have Windows Authenticode certificates yet, so SmartScreen may warn on the initial installation.
 
 The installers published here are generic: they do not come with any server. Telaê is open source, so to use it with your friends [run your own server](#self-hosting) and set its address on the sign-in screen (**Server > Change**) or in **Settings > Signaling server**. To bake a default into your own installer, set `TELAE_DEFAULT_SERVER_URL` when running `npm run dist`.
 
@@ -219,7 +219,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 ## Known limitations
 
 - Windows only for now (the capture and audio pipeline depends on Windows APIs).
-- The installers are not code-signed yet, so Windows SmartScreen may warn on first run, and updates are manual until then.
+- The installers do not have Windows Authenticode certificates yet, so SmartScreen may warn on first run. Official automatic updates use a separate pinned Ed25519 release key; generic builds need their own trusted feed and release key.
 - Each viewer receives its own encoded stream, so upload bandwidth and CPU grow with the number of viewers. An SFU is a future option.
 - 1440p60 depends on the machine and the network; the validation docs list what was and was not measured.
 

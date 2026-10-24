@@ -1,7 +1,7 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Telaê desktop app for low-latency screen sharing with synchronized system audio.",
   "author": {
     "name": "Nicolas Portie",
@@ -26,6 +26,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "test:e2e": "playwright test -c playwright.config.ts",
+    "sign:update": "node scripts/sign-update.mjs",
     "preview": "electron-vite preview",
     "build:audio-bridge": "dotnet publish ../audio-bridge/Telae.AudioBridge.csproj -c Release -r win-x64 --self-contained true -o ./build/audio-bridge",
     "dist": "npm run build && npm run build:audio-bridge && electron-builder --win --publish never"

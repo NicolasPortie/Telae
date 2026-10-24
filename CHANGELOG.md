@@ -4,6 +4,13 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.3.2] - 2026-10-24
+
+- Atualizações automáticas do instalador oficial com assinatura Ed25519 do projeto e chave pública fixada na compilação, sem depender de um certificado Authenticode do Windows.
+- O instalador é verificado após o download, inclusive no cache, e novamente antes da instalação silenciosa. Transmissões ativas adiam o reinício.
+- Novo link estável `/download/windows`, que sempre aponta para o instalador publicado mais recente.
+- A chave privada fica somente no ambiente de release, fora do código e do servidor de downloads. Notas em [docs/releases/RELEASE_0.3.2.md](docs/releases/RELEASE_0.3.2.md).
+
 ## [0.3.1] - 2026-10-24
 
 - Corrigido o aviso permanente de falha de atualização em instalações sem assinatura. Elas verificam a versão normalmente e só oferecem download manual quando há versão nova, sem baixar ou executar instaladores automaticamente.
