@@ -93,7 +93,9 @@ describe('i18n', () => {
   it('resolves the automatic language from the system locale', () => {
     expect(resolveLocale('auto', 'pt-BR')).toBe('pt-BR')
     expect(resolveLocale('auto', 'en-US')).toBe('en')
-    expect(resolveLocale(undefined, 'de-DE')).toBe('en')
+    expect(resolveLocale(undefined, 'de-DE')).toBe('pt-BR')
+    expect(resolveLocale(undefined, 'en-US')).toBe('pt-BR')
+    expect(resolveLocale('auto', undefined)).toBe('pt-BR')
     expect(resolveLocale('en', 'pt-BR')).toBe('en')
     expect(getLocale()).toBe('pt-BR')
   })

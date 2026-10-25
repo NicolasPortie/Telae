@@ -4,6 +4,12 @@ Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). 
 
 ## [Não lançado]
 
+## [0.3.3] - 2026-10-25
+
+- Português do Brasil passa a ser o idioma padrão de novas instalações, mesmo em Windows configurado em inglês. Inglês e modo automático continuam disponíveis como escolhas explícitas.
+- README principal em português, com versão em inglês em `README.en.md`.
+- Mantido o canal oficial de atualizações automáticas com assinatura Ed25519 da 0.3.2.
+
 ## [0.3.2] - 2026-10-24
 
 - Atualizações automáticas do instalador oficial com assinatura Ed25519 do projeto e chave pública fixada na compilação, sem depender de um certificado Authenticode do Windows.

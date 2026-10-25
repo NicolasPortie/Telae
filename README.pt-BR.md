@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](README.md) · **Português**
+**Português** · [English](README.en.md)
 
 <img src="apps/desktop/public/icon.svg" alt="Telaê" width="88" height="88" />
 
@@ -65,7 +65,7 @@ O objetivo do projeto é um produto de compartilhamento de tela realmente bom na
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
 - **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de release do projeto.
-- **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações.
+- **Interface em português e inglês**, com português do Brasil por padrão e outros idiomas disponíveis em Configurações.
 
 ## Capturas de tela
 

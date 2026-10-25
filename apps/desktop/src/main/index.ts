@@ -92,7 +92,7 @@ function readSignalingUrl(): string {
   return DEFAULT_SIGNALING_URL
 }
 
-const DEFAULT_SETTINGS: AppSettings = { language: 'auto', notifyFriendLive: true, launchAtLogin: false }
+const DEFAULT_SETTINGS: AppSettings = { language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false }
 
 type StoredSettings = Partial<AppSettings> & { signalingUrl?: string }
 
