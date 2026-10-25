@@ -5,9 +5,9 @@ export type Locale = 'pt-BR' | 'en'
 export type Language = Locale | 'auto'
 
 export const LANGUAGES: { value: Language; label: string }[] = [
-  { value: 'auto', label: 'Automático / Automatic' },
   { value: 'pt-BR', label: 'Português (Brasil)' },
   { value: 'en', label: 'English' },
+  { value: 'auto', label: 'Automático / Automatic' },
 ]
 
 const catalogs: Record<Locale, Record<string, string> | null> = { 'pt-BR': null, en }
@@ -18,6 +18,7 @@ const listeners = new Set<() => void>()
 /** `auto` segue o idioma do sistema: português para `pt*`, inglês para o resto. */
 export function resolveLocale(language: Language | undefined, systemLocale: string | undefined): Locale {
   if (language === 'pt-BR' || language === 'en') return language
+  if (language !== 'auto' || !systemLocale) return 'pt-BR'
   return systemLocale?.toLowerCase().startsWith('pt') ? 'pt-BR' : 'en'
 }
 
