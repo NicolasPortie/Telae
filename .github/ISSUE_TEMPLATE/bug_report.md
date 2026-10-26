@@ -1,7 +1,7 @@
 ---
 name: Relato de bug
 about: Algo não funciona como esperado
-labels: bug
+labels: erro
 ---
 
 **O que aconteceu**

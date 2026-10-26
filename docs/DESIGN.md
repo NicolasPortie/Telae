@@ -1,50 +1,46 @@
-# Design da interface
+# Interface do Telaê
 
-O Telaê é um utilitário de desktop para assistir à tela de um amigo. A imagem compartilhada é o objeto principal; todo o resto existe para começar, entender ou encerrar essa experiência.
+O conteúdo compartilhado ocupa o centro da experiência. A interface precisa facilitar a escolha da fonte, mostrar quem está assistindo e permitir encerrar a transmissão sem procurar controles.
 
-## Direção visual: sala escura
+## Aparência atual
 
-Uma sala de cinema pequena, só para os amigos. O app é quase preto, com tons quentes de projetor: o âmbar é a luz que sai do projetor (ações e destaques) e o vermelho é a luz de "no ar", usado apenas para quem está transmitindo. Quem está ao vivo aparece como um **cartaz** em "Em cartaz"; quando ninguém transmite, o palco mostra uma **tela apagada**.
+O fundo é quase preto, com tons de verde. O verde-lima marca ações principais, seleção e foco; vermelho indica transmissão ao vivo; âmbar fica reservado a avisos de conexão ou qualidade.
 
-- **Marca:** a palavra *Telaê* em Geist negrito, com espaçamento justo, ao lado de uma pequena tela com a luz do projetor (CSS em `.telae-mark`; SVG em `apps/desktop/public/icon.svg`).
-- **Barra de título integrada:** o Windows mantém os controles da janela (`titleBarOverlay`) e a interface desenha o cabeçalho de 40 px. Fora da conta (tela de entrada) o cabeçalho mostra só a marca.
-- **Atmosfera:** facho de luz âmbar no canto superior, filme de grão por cima de tudo (`.telae-shell::after`, 7% de opacidade) e uma tira de fotograma na tela de entrada. No player não há decoração.
-- **Composição:** a tela inicial é um trilho de amigos à esquerda (agrupados por Ao vivo, Online e Offline) e o palco à direita. A tela de entrada divide-se em painel da marca (com uma amostra do próprio produto: lista de amigos e cartaz "no ar") e formulário, com abas Entrar e Criar conta, campos com ícone, medidor de força da senha e o código de verificação em seis casas. As configurações têm navegação lateral com um painel por seção.
+A marca combina duas molduras de tela e um ponteiro. O desenho está em `apps/desktop/public/icon.svg` e no componente `BrandMark`. Não depende de imagens remotas.
 
-## Tokens
+Na tela inicial, a lista de amigos fica à esquerda. O espaço principal mostra as prévias de quem está ao vivo e o botão para escolher uma tela. A entrada usa um painel da marca e um formulário com abas. As configurações são divididas em seções com navegação lateral.
 
-Definidos em `apps/desktop/tailwind.config.cjs`. Componentes usam apenas nomes semânticos (`bg-surface`, `text-ink-3`, `border-line`), nunca cores soltas.
+## Cores
 
-| Token | Valor | Uso |
+Os valores vêm de `apps/desktop/tailwind.config.cjs`. Os componentes usam os nomes definidos ali.
+
+| Nome | Valor | Uso |
 | --- | --- | --- |
-| `canvas` | `#0A0908` | Fundo do app e campos de entrada |
-| `surface` / `raised` | `#12100E` / `#1A1713` | Cartões e controles elevados |
-| `active` | `#26211A` | Estado ativo e hover |
-| `ink` 1–4 | `#F4EFE6` → `#867F73` | Texto primário a terciário (mínimo 4,5:1) |
-| `line` | `#26211B`, `#322C24`, `#463F35` | Divisores e bordas |
-| `signal` | `#F5B544` | Luz de projetor: ações principais e destaques |
-| `tally` | `#FF5144` | Luz de "no ar": só para quem transmite |
-| `danger` / `ok` | `#F0615D` / `#5FC98A` | Parar e erro / online |
+| `canvas` | `#070A08` | Fundo do aplicativo. |
+| `chrome` | `#090D0B` | Barra superior. |
+| `surface` / `raised` | `#0D1210` / `#131A16` | Superfícies e controles. |
+| `active` | `#1B241F` | Estado ativo. |
+| `ink` | `#EEF1EA` | Texto principal. |
+| `ink.2` / `ink.3` / `ink.4` | `#B5BEB6` / `#8E9991` / `#7A857D` | Hierarquia de textos secundários. |
+| `signal` | `#C4F04D` | Ação principal, seleção e foco. |
+| `tally` | `#FF5144` | Indicador de transmissão ao vivo. |
+| `warn` | `#F2B544` | Avisos. |
+| `ok` | `#4FD483` | Conexão disponível. |
 
-## Tipografia
+## Tipografia e controles
 
-- **Geist** para tudo: interface, títulos grandes (classe `.display`, peso 650 e espaçamento de -0,045 em) e marca.
-- **Geist Mono** para códigos, versão e números de telemetria.
+Geist é usada na interface, nos títulos e na marca. Geist Mono aparece na versão e nos números das estatísticas. As fontes são empacotadas com o app.
 
-As fontes são empacotadas com o aplicativo (`@fontsource-variable`), sem depender de rede. A fonte dos títulos é um único token (`fontFamily.display` em `tailwind.config.cjs`): trocar ali muda o app inteiro. Numerais tabulares nas estatísticas.
+Os controles base ficam em `apps/desktop/src/index.css`: botões, campos, opções de fonte, qualidade, avisos e painéis. O foco precisa ser visível, os textos secundários precisam manter contraste e a preferência de redução de movimento deve ser respeitada. Animações de hover não devem deslocar a área de clique.
 
-## Componentes base
+## Tamanhos de janela
 
-Classes em `apps/desktop/src/index.css`: `.btn` (`-primary`, `-secondary`, `-ghost`, `-danger`, `-sm`, `-lg`), `.card`, `.field`, `.avatar`, `.count`, `.badge-live`, `.notice`, `.eyebrow`, `.display` e `.tally` (a luz pulsante de "no ar"). Alvos de toque de pelo menos 34 px, foco visível em âmbar e redução de movimento respeitada.
+A janela mínima é 640 × 560. Em janelas largas, lista de amigos e conteúdo principal ficam lado a lado. Em janelas estreitas, o conteúdo vem primeiro e a lista passa para baixo. O painel ilustrado da entrada fica oculto quando não há espaço para as duas colunas.
 
-## Responsividade
+## Textos e idiomas
 
-A janela mínima é 640 × 560. A partir de 860 px a tela inicial usa trilho e palco lado a lado, cada um rolando sozinho; abaixo disso o palco vem primeiro e o trilho passa para baixo. O painel da marca da tela de entrada some em janelas estreitas.
+Escreva frases curtas em português do Brasil. Diga o que aconteceu e, quando necessário, o que a pessoa pode fazer. Evite apresentar limitações normais como falhas permanentes ou usar termos de implementação onde não ajudam a decisão.
 
-## Textos
+O texto-fonte passa por `t()` em `src/i18n`. A tradução inglesa fica em `src/i18n/en.ts`. Frases com contagem usam `{count}` e `tn()`. Os testes verificam traduções ausentes e traduções sem uso.
 
-O tom é de conversa entre amigos: frases curtas, voz ativa e nada de "Não foi possível…". Erros dizem o que aconteceu e o que fazer (por exemplo, "Esse @ já tem dono. Tenta outro."). O texto-fonte é pt-BR e passou por revisão com o humanizador (sem vocabulário de modelo, sem ritmo de lista de três, sem travessão). O inglês segue o mesmo tom, com contrações.
-
-## Idiomas
-
-O texto-fonte do código é pt-BR e é traduzido em tempo de execução por `t()` (`src/i18n`); o inglês vive em `src/i18n/en.ts`. Frases com número usam `{count}` e `tn()`. O teste `i18n.test.ts` falha se algum texto usado no código (ou mensagem de erro do servidor) não tiver tradução, ou se sobrar tradução sem uso. Para adicionar um idioma, inclua o catálogo e a opção em `LANGUAGES`.
+Português do Brasil é o padrão de novas instalações. Inglês e o modo automático continuam como escolhas explícitas nas configurações.

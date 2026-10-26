@@ -50,9 +50,9 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 
 ## Visão geral
 
-O Telaê faz uma coisa bem feita: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e baixa latência. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na sua lista de amigos, e você entra com um clique.
+O Telaê permite compartilhar uma tela ou janela com amigos, com áudio sincronizado. Quem transmite aparece como **Ao vivo** na lista de amigos; para assistir, basta clicar. Não há salas, chamadas ou canais.
 
-O objetivo do projeto é um produto de compartilhamento de tela realmente bom na sua única tarefa, construído de ponta a ponta: captura de áudio nativa, transporte WebRTC adaptativo, backend de contas e amigos, atualização automática e um processo de qualidade com medições.
+O aplicativo reúne captura de áudio do Windows, transporte WebRTC, contas, amigos e atualizações automáticas. Os testes e as medições de transmissão estão documentados neste repositório.
 
 ## Recursos
 
@@ -64,7 +64,7 @@ O objetivo do projeto é um produto de compartilhamento de tela realmente bom na
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
-- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de release do projeto.
+- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de assinatura do projeto.
 - **Interface em português e inglês**, com português do Brasil por padrão e outros idiomas disponíveis em Configurações.
 
 ## Capturas de tela
@@ -109,7 +109,7 @@ sequenceDiagram
 
 O servidor cuida só de contas, amizades, presença e sinalização. Depois que a conexão é negociada, vídeo e áudio não passam por ele. Quem transmite codifica a captura uma vez por espectador com a pilha WebRTC do Chromium, e um controlador de qualidade ajusta bitrate, resolução e taxa de quadros a partir das estatísticas ao vivo.
 
-O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em inglês) e os registros de decisão em [docs/adr](docs/adr).
+O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e os registros de decisão em [docs/adr](docs/adr).
 
 ## Tecnologias
 
@@ -225,7 +225,7 @@ Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
 
 ## Documentação
 
-- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md) (em inglês)
+- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
 - [Design da interface](docs/DESIGN.md) e [glossário](GLOSSARY.md)
 - [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
 - [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)

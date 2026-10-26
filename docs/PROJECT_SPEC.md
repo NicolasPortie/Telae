@@ -1,89 +1,79 @@
-# Telaê — Project Spec
+# Especificação do Telaê
 
-## Problem Statement
+## O que o aplicativo faz
 
-Watching something together through a friend's screen is useful, but general-purpose communication apps often mix screen sharing with channels, messaging, calls and communities. Telaê focuses on the single job: select a screen or window and let a friend watch it with excellent image quality, synchronized system audio, and latency low enough that interaction still feels immediate.
+O Telaê compartilha uma tela ou janela do Windows com amigos, com áudio sincronizado e baixa latência. Quem está transmitindo aparece na lista de amigos; o espectador entra com um clique.
 
-Literal zero latency is physically impossible because capture, encoding, network transit, decoding, and rendering all take time. The product goal is therefore low and stable glass-to-glass latency with graceful quality adaptation rather than buffering.
+A captura, a codificação, a rede e a reprodução introduzem atraso. A meta é manter esse atraso baixo e estável, reduzindo a qualidade quando necessário em vez de acumular um buffer longo.
 
-## Solution
+## Funcionamento
 
-Build a Windows desktop application with Electron, React, TypeScript, and Tailwind. Chromium's WebRTC stack handles capture, encoding, congestion control, encrypted media transport, and decoding. An ASP.NET Core signaling service coordinates Share Sessions and WebRTC negotiation but does not sit in the normal media path. Peers connect directly when possible and use TURN only when NAT or firewall conditions require a relay.
+O aplicativo usa Electron, React, TypeScript e Tailwind. O Chromium fornece a implementação de WebRTC. O servidor ASP.NET Core, com SignalR, cuida de contas, amigos, presença e negociação das conexões.
 
-Media is sent from the Sharer to each Viewer over its own WebRTC connection, up to 12 Viewers per Share Session. This keeps the design simple and the latency low, at the cost of upload bandwidth that grows with the Viewer count; an SFU stays a future option if one upstream is ever needed. People are identified by an account with a unique `@username`, and a Viewer joins a friend's live stream with one click instead of an invite code. See [ADR 0004](adr/0004-user-accounts.md).
+Imagem e som seguem diretamente entre os computadores quando possível. TURN retransmite a mídia criptografada quando a conexão direta não funciona. Cada transmissão aceita até 12 espectadores, com uma conexão independente para cada um. O consumo de envio cresce com esse número; o limite não garante a mesma qualidade em qualquer máquina ou rede.
 
-## User Stories
+A identidade é uma conta com e-mail, senha e `@usuário` único. As amizades são mútuas e ficam no servidor. A decisão está registrada na [ADR 0004](adr/0004-user-accounts.md).
 
-1. As a Sharer, I want to choose a screen or application window, so that I control exactly what the Viewer can see.
-2. As a Sharer, I want to include system audio, so that a Viewer can hear videos and other desktop content in sync with the picture.
-3. As a Sharer, I want only my friends to be able to watch, so that nobody can join a stream by guessing a code.
-4. As a Sharer, I want to see when a Viewer is connecting, live, reconnecting, or gone, so that I always understand who is receiving my screen.
-5. As a Sharer, I want to stop sharing instantly, so that capture ends when I expect it to.
-6. As a Sharer, I want to choose an Auto, 720p, 1080p, or high-frame-rate Quality Profile, so that I can balance image quality and bandwidth.
-7. As a Viewer, I want to see which friends are live and join with one click, so that starting a session takes only a few seconds.
-8. As a Viewer, I want the shared image to fill the available window cleanly, so that the content stays the focus.
-9. As a Viewer, I want synchronized audio and video, so that films and other media remain watchable.
-10. As a Viewer, I want the stream to adapt instead of pausing to buffer, so that poor network moments do not destroy the session.
-11. As either participant, I want reconnect attempts to happen automatically after a brief network interruption, so that a transient drop does not require a new session.
-12. As either participant, I want a clear connection-quality indicator, so that I can tell whether a problem comes from the network or the app.
-13. As a developer, I want real WebRTC statistics exposed in a diagnostics view, so that quality and latency problems can be measured rather than guessed.
-14. As a developer, I want the capture/transport behavior hidden behind a small application interface, so that a future native capture engine can replace Chromium capture without rewriting the product UI.
+## Tarefas de quem usa
 
-## Implementation Decisions
+Quem transmite precisa conseguir:
 
-- Target Windows first.
-- Use Electron for the desktop shell and Chromium WebRTC implementation.
-- Use React + TypeScript + Tailwind for the visible application.
-- Keep Electron `contextIsolation` enabled, renderer Node access disabled, and expose only narrow IPC capabilities through preload.
-- Use ASP.NET Core with SignalR for signaling and Share Session presence.
-- Keep signaling out of the media path after WebRTC negotiation.
-- Use ICE with STUN and a production TURN service for NAT/firewall fallback.
-- Use DTLS-SRTP provided by WebRTC for encrypted media transport and TLS/WSS for signaling.
-- Support up to 12 Viewers per Share Session, each with an independent peer connection. An SFU is a later option.
-- Identify people by account (email, password and a unique `@username`); friendships are mutual and stored on the server.
-- Prefer hardware-friendly H.264 for the first production codec path. AV1 can be introduced when both peers and the encoder path prove capable without increasing latency or CPU usage.
-- Use Opus for transmitted audio and avoid voice-oriented audio processing on system-audio capture where the platform allows it.
-- Treat capture, signaling, peer connection, quality control, and diagnostics as deep modules with small interfaces.
-- Source selection is explicit per Share Session. Telaê never starts sharing silently.
-- Joining a stream requires mutual friendship. Legacy invite codes remain only for clients released before accounts.
-- DRM/HDCP-protected applications may intentionally block screen capture. Telaê does not attempt to bypass those protections.
+- escolher uma tela ou janela e saber o que está sendo compartilhado;
+- enviar o áudio do sistema ou do aplicativo escolhido;
+- restringir o acesso aos amigos;
+- acompanhar quem está entrando, assistindo ou se reconectando;
+- encerrar a captura imediatamente;
+- trocar a fonte e a qualidade durante a transmissão.
 
-## Quality Targets
+Quem assiste precisa conseguir:
 
-The targets below are product acceptance goals and must be validated on real Windows hardware and real networks.
+- encontrar os amigos ao vivo e entrar sem trocar códigos;
+- usar o espaço da janela e a tela cheia sem perder os controles;
+- ajustar volume e silenciamento localmente;
+- receber imagem e som sincronizados;
+- recuperar uma queda breve sem abrir outra sessão;
+- entender o estado da conexão pelas estatísticas e pelos avisos do app.
 
-| Metric | Initial target |
+Para investigar problemas, os testes coletam dados reais do WebRTC: resolução, quadros, taxa de envio, perdas, latência de rede e rota selecionada. Esses dados não substituem a medição física do atraso entre a tela de origem e a de destino.
+
+## Decisões de implementação
+
+- Windows é a plataforma suportada nesta etapa.
+- O processo de interface não tem acesso direto ao Node. O preload expõe somente `window.telae`, com IPC restrito ao documento principal e argumentos validados.
+- Sinalização usa HTTPS/WSS. WebRTC fornece a criptografia da mídia; ICE usa STUN e TURN para estabelecer a rota.
+- O servidor de sinalização não decodifica nem grava o fluxo de áudio e vídeo. As pequenas prévias de tela passam pelo servidor e ficam apenas na memória da transmissão.
+- O app usa Opus para áudio. Processamento voltado a microfone, como cancelamento de eco, não deve alterar o áudio do sistema sem necessidade.
+- A fonte é escolhida em cada transmissão. O app não começa a compartilhar silenciosamente.
+- Amigos, presença, autorização, captura, transporte e qualidade têm responsabilidades separadas. A captura pode ser substituída por uma implementação nativa sem exigir outra interface de produto.
+- Aplicativos protegidos por DRM ou HDCP podem recusar captura. O Telaê não contorna essas proteções.
+- Português do Brasil é o idioma padrão. Inglês e a seleção pelo idioma do sistema continuam disponíveis nas configurações.
+- O instalador oficial tem servidor e chave pública de atualização definidos na compilação. Atualizações são verificadas antes da instalação; uma transmissão ativa adia o reinício.
+
+## Metas de qualidade
+
+São metas para medições em hardware e redes reais, não garantias para todas as configurações.
+
+| Medição | Meta inicial |
 | --- | --- |
-| Default visual target | 1080p60 when the sender, receiver, and network sustain it |
-| Movie-oriented mode | Prefer stable resolution and A/V sync; 1080p30 is acceptable when 60 fps is unnecessary |
-| LAN glass-to-glass latency | p95 <= 180 ms on supported hardware |
-| Typical Internet glass-to-glass latency | p95 <= 400 ms when RTT and packet loss are within supported conditions |
-| Join to first playable frame | <= 5 s p95 |
-| Recovery after a brief connection interruption | <= 5 s when ICE recovery succeeds |
-| Audio/video sync error | Keep perceptually aligned; measure drift during endurance tests |
-| Playback behavior under congestion | Reduce quality before introducing long buffering |
+| Qualidade visual | Sustentar 1080p60 quando emissor, receptor e rede permitirem. O perfil inicial selecionado na interface é 1080p30. |
+| Conteúdo de vídeo | Priorizar estabilidade e sincronização; usar 30 quadros por segundo quando 60 não trouxer benefício. |
+| Atraso entre as telas em rede local | p95 de até 180 ms em hardware suportado. |
+| Atraso entre as telas pela internet | p95 de até 400 ms nas condições de RTT e perda declaradas no teste. |
+| Entrada até a primeira imagem | p95 de até 5 s. |
+| Recuperação após uma queda breve | Até 5 s quando a recuperação ICE for bem-sucedida. |
+| Sincronização de áudio e vídeo | Manter alinhamento perceptível e medir o desvio ao longo de sessões extensas. |
+| Congestionamento | Reduzir qualidade antes de acumular atraso de reprodução. |
 
-## Testing Decisions
+O procedimento e os limites de medição estão em [BENCHMARK.md](BENCHMARK.md). Os resultados registrados ficam em [validation](validation).
 
-- Test domain behavior through the highest useful module seam rather than internal implementation details.
-- Unit-test the Share Session state machine and Quality Profile decisions.
-- Integration-test signaling with two real clients and verify offer/answer, trickle ICE, leave, and reconnect behavior.
-- End-to-end-test two Electron instances using deterministic synthetic media where practical.
-- Add a Windows media benchmark that records WebRTC `getStats()` data for bitrate, RTT, packet loss, jitter, frames encoded/decoded/dropped, candidate type, and available outgoing bitrate.
-- Validate quality on at least integrated Intel/AMD graphics and a discrete NVIDIA/AMD class GPU before calling 1080p60 production-ready.
-- Run long sessions to detect A/V drift, memory growth, encoder degradation, and reconnection failures.
+## Testes
 
-## Out of Scope
+- Testes unitários cobrem os estados de transmissão, a escolha de qualidade e as regras de segurança.
+- Testes de integração usam clientes reais de sinalização para oferta e resposta SDP, candidatos ICE, entrada, saída e reconexão.
+- Testes de ponta a ponta abrem duas instâncias do Electron. Cenários determinísticos rodam no CI; captura e áudio reais exigem Windows com monitor e dispositivo de áudio.
+- Testes físicos devem incluir gráficos integrados e GPU dedicada, conexões diretas e TURN, vários espectadores e sessões extensas.
+- Instalação inicial e atualização automática são verificadas separadamente. Arquivos adulterados, assinaturas inválidas e reinícios durante uma transmissão devem ser recusados.
 
-- Remote mouse/keyboard control.
-- Text chat, communities, channels, bots, or a Discord-style social layer.
-- Recording or cloud VOD.
-- A hosted media server (SFU) in the current release.
-- macOS, Linux, mobile, and browser-only clients for now.
-- DRM or HDCP bypass.
-- Custom video codecs or a custom congestion-control algorithm.
+## Fora do escopo atual
 
-## Further Notes
-
-The initial architecture intentionally uses Chromium's mature media stack instead of implementing capture, codecs, RTP, congestion control, and NAT traversal from scratch. If measured performance later proves insufficient, the desktop application retains the same product surface while a native media adapter can replace only the capture/encode path.
-
+Controle remoto de mouse ou teclado, mensagens, comunidades, canais, gravação, vídeo sob demanda e clientes para navegador, celular, macOS ou Linux não fazem parte desta versão. Uma SFU continua como opção futura, caso o custo de enviar uma conexão por espectador justifique a mudança.

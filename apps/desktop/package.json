@@ -2,7 +2,7 @@
   "name": "desktop",
   "private": true,
   "version": "0.3.3",
-  "description": "Telaê desktop app for low-latency screen sharing with synchronized system audio.",
+  "description": "Aplicativo do Telaê para compartilhar tela com áudio sincronizado e baixa latência.",
   "author": {
     "name": "Nicolas Portie",
     "url": "https://github.com/NicolasPortie"

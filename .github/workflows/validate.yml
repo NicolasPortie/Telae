@@ -1,4 +1,4 @@
-name: Validate changes
+name: Validar alterações
 
 on:
   pull_request:
@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   checks:
+    name: Verificações
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -22,31 +23,42 @@ jobs:
       TELAE_E2E_RELAY: '0'
       Profiles__Path: ${{ github.workspace }}/.telae-validation-profiles.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Obter o código
+        uses: actions/checkout@v4
+      - name: Preparar o Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
-      - uses: actions/setup-dotnet@v4
+      - name: Preparar o .NET
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: npm ci
+      - name: Instalar dependências
+        run: npm ci
         working-directory: apps/desktop
-      - run: npm run lint
+      - name: Verificar o padrão do código
+        run: npm run lint
         working-directory: apps/desktop
-      - run: npm run typecheck
+      - name: Verificar os tipos
+        run: npm run typecheck
         working-directory: apps/desktop
-      - run: npm test
+      - name: Executar os testes do aplicativo
+        run: npm test
         working-directory: apps/desktop
-      - run: dotnet build Telae.slnx -c Release --nologo
-      - run: dotnet test tests/server/Telae.Server.Tests.csproj -c Release --no-build --nologo
-      - run: npm run build
+      - name: Compilar a solução
+        run: dotnet build Telae.slnx -c Release --nologo
+      - name: Executar os testes do servidor
+        run: dotnet test tests/server/Telae.Server.Tests.csproj -c Release --no-build --nologo
+      - name: Compilar o aplicativo
+        run: npm run build
         working-directory: apps/desktop
-      - name: Deterministic Electron E2E
+      - name: Testes de interface no Electron
         run: npm run test:e2e
         working-directory: apps/desktop
-      - uses: actions/upload-artifact@v4
+      - name: Guardar os relatórios de teste
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: deterministic-e2e
