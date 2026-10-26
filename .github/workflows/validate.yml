@@ -1,4 +1,4 @@
-name: Validate changes
+name: Validar alterações
 
 on:
   pull_request:
@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   checks:
+    name: Verificações
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -43,7 +44,7 @@ jobs:
       - run: dotnet test tests/server/Telae.Server.Tests.csproj -c Release --no-build --nologo
       - run: npm run build
         working-directory: apps/desktop
-      - name: Deterministic Electron E2E
+      - name: Testes de interface no Electron
         run: npm run test:e2e
         working-directory: apps/desktop
       - uses: actions/upload-artifact@v4

@@ -1,4 +1,4 @@
-# Changelog
+# Histórico de alterações
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 

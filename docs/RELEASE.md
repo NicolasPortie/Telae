@@ -1,27 +1,28 @@
-# Telaê — Release Checklist
+# Publicação de uma versão
 
-## Segurança
+## Verificações do aplicativo
 
-- [ ] `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true` no `BrowserWindow` (ver `src/main/index.ts`).
-- [ ] Preload expõe só `window.telae` (superfície estreita e tipada).
-- [ ] CSP restritiva no `index.html`; `setWindowOpenHandler` nega popups.
-- [ ] Convites: 8 chars de alta entropia, TTL 10 min, uso único; esgotado não reentra (`share_not_active`).
-- [ ] Credenciais TURN efêmeras (HMAC, TTL 1h padrão) — nunca estáticas no cliente.
-- [ ] Queda curta do socket preserva a Share Session por até 20 s para reconexão; após a janela, a sessão/Viewer é removida no servidor.
+- Conferir isolamento do processo de interface, sandbox, CSP e validação de IPC.
+- Confirmar que só amigos autorizados conseguem assistir e receber prévias.
+- Verificar parada da captura, remoção de espectadores e recuperação de quedas breves.
+- Rodar os testes de desktop e servidor descritos em [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md).
 
-## Empacotamento Windows
+## Instalador para Windows
 
-1. `npm run build` verde (tsc + electron-vite).
-2. `npm run dist` gera o instalador NSIS x64 em `apps/desktop/dist/`.
-3. Release assinada: definir `CSC_LINK` + `CSC_KEY_PASSWORD` no CI antes do `dist`.
-4. Smoke test do instalador na matriz Windows suportada: inicia limpo, lista fontes, compartilha, entra via convite.
+1. Rodar `npm run build` e gerar o instalador com `npm run dist`.
+2. No canal oficial, embutir o servidor e a chave pública, assinar a atualização com `npm run sign:update` e conferir o arquivo `.exe.sig.json`.
+3. Se houver certificado Authenticode, conferir também sua assinatura e a cadeia esperada.
+4. Testar instalação limpa, escolha de fonte, transmissão e entrada de um amigo.
+5. Testar a atualização a partir de uma versão anterior, incluindo download, verificação, espera por uma transmissão ativa e reinício.
 
-## Benchmark
+O instalador público é genérico. O instalador oficial e a publicação no servidor são produzidos no repositório privado de operação. O processo completo está em [OPERATIONS.md](OPERATIONS.md).
 
-- [ ] Seguir `docs/BENCHMARK.md` em Direct e Relay.
-- [ ] Relatório arquivado com os JSONs de diagnóstico.
-- [ ] Targets atingidos ou atualizados com evidência.
+## Qualidade de transmissão
 
-## Pós-release (marcos futuros)
+As medições físicas seguem [BENCHMARK.md](BENCHMARK.md), em conexão direta e por TURN. Guarde as amostras e o relatório com as condições do teste. Um teste de interface aprovado não comprova, por si só, atraso entre telas, som audível ou sincronização ao longo de uma sessão extensa.
 
-Multi-viewer só via SFU como novo adapter de PeerTransport (nunca mesh). Captura nativa só se o benchmark provar que o Chromium limita.
+## Tags e notas
+
+A versão do `package.json`, a tag `vX.Y.Z` e as notas em `docs/releases/RELEASE_X.Y.Z.md` precisam corresponder. As notas devem explicar a mudança para quem usa ou hospeda o aplicativo, com limitações relevantes e validação realizada.
+
+Tags e instaladores já publicados não devem ser substituídos por outra compilação da mesma versão. Correções do aplicativo recebem uma versão nova.
