@@ -1,4 +1,4 @@
-name: Release
+name: Publicar versão
 
 # Ao enviar uma tag v*, valida, gera o instalador GENÉRICO do Windows (sem servidor embutido) e cria a Release pública.
 # Roda só em runners da GitHub. O instalador oficial, com o servidor do mantenedor, a validação física de mídia e a
@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   validate:
+    name: Servidor
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -27,6 +28,7 @@ jobs:
       - run: test -f "$RUNNER_TEMP/telae-server/Telae.Server.dll"
 
   desktop:
+    name: Instalador para Windows
     needs: validate
     runs-on: windows-latest
     timeout-minutes: 30
@@ -45,11 +47,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Install dependencies
+      - name: Instalar dependências
         working-directory: apps/desktop
         run: npm ci
 
-      - name: Verify tag matches desktop version
+      - name: Conferir a versão da tag
         shell: pwsh
         run: |
           $version = (Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json).version
@@ -57,21 +59,21 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME não corresponde ao desktop v$version"
           }
 
-      - name: Lint, typecheck and unit tests
+      - name: Verificar código, tipos e testes
         working-directory: apps/desktop
         run: |
           npm run lint
           npm run typecheck
           npm test
 
-      - name: Build Windows installer and update manifest
+      - name: Gerar instalador e manifesto de atualização
         working-directory: apps/desktop
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run dist
 
-      - name: Deterministic Electron E2E
+      - name: Testar a interface no Electron
         working-directory: apps/desktop
         env:
           TELAE_E2E_MEDIA: "0"
@@ -79,7 +81,7 @@ jobs:
           Profiles__Path: ${{ runner.temp }}/telae-e2e-profiles.json
         run: npm run test:e2e
 
-      - name: Publish GitHub release
+      - name: Publicar a versão no GitHub
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,6 +96,11 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release upload $env:GITHUB_REF_NAME @files --clobber
           } else {
-            gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "Telaê v$version" --generate-notes --notes "Instalador genérico: não vem com servidor. Defina o seu em Servidor > Alterar na tela de entrada (veja o README)."
+            $notesFile = "docs/releases/RELEASE_$version.md"
+            if (-not (Test-Path -LiteralPath $notesFile)) {
+              $notesFile = Join-Path $env:RUNNER_TEMP 'notas-da-versao.md'
+              'Instalador genérico para Windows, sem servidor predefinido. Informe o endereço em Servidor > Alterar na tela de entrada. Consulte o README para hospedar o próprio servidor.' | Set-Content -LiteralPath $notesFile -Encoding utf8
+            }
+            gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "Telaê v$version" --notes-file $notesFile
           }
           if ($LASTEXITCODE -ne 0) { throw 'Falha ao publicar o GitHub Release.' }

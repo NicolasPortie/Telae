@@ -7,6 +7,7 @@ declare global {
   /** Servidor padrão embutido na compilação (string vazia no código aberto). */
   const __TELAE_DEFAULT_SERVER_URL__: string
   const __TELAE_PREVIOUS_SERVER_URL__: string
+  const __TELAE_UPDATE_PUBLIC_KEY__: string
 }
 
 export {}

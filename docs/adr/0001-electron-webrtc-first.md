@@ -2,7 +2,8 @@
 status: accepted
 ---
 
-# Use Chromium WebRTC before building a native media engine
+# ADR 0001: usar o WebRTC do Chromium antes de criar um motor nativo
 
-Telaê will initially use Electron/Chromium for screen capture, WebRTC media transport, congestion control, codec negotiation, encryption, and decoding. A small CaptureAdapter seam keeps open the option of a future Windows-native capture/encode implementation if measured latency, quality, or resource usage proves Chromium to be the limiting factor; this avoids committing the first release to a custom C#/C++/Rust media pipeline before there is evidence that the added complexity is necessary.
+O Telaê usa Electron/Chromium para captura, transporte WebRTC, controle de congestionamento, negociação de codecs, criptografia e reprodução.
 
+Uma interface de captura separada permite substituir a captura e a codificação por uma implementação nativa do Windows, se as medições mostrarem que o Chromium é o limitador. Isso evita assumir o custo de uma solução própria em C#, C++ ou Rust antes de haver evidência da necessidade.

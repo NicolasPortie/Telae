@@ -1,41 +1,19 @@
-# Telaê
+# Glossário do Telaê
 
-Telaê is a Windows desktop screen-sharing product focused on watching a friend's screen with high visual quality and very low latency.
+Os textos da interface e da documentação são escritos em português do Brasil. Nomes de classes, métodos, protocolos e bibliotecas mantêm a grafia usada no código.
 
-## Language
+| Termo | Significado | Nome encontrado no código |
+| --- | --- | --- |
+| Transmissão | Sessão em que uma pessoa compartilha uma tela ou janela com amigos. | `ShareSession` |
+| Quem transmite, ou emissor | Pessoa que escolhe a fonte e envia imagem e som. | `Sharer` |
+| Espectador | Pessoa que assiste à transmissão. | `Viewer` |
+| Fonte de captura | Tela ou janela escolhida explicitamente pelo emissor. | `CaptureSource` |
+| Perfil de qualidade | Resolução e taxa de quadros desejadas, sujeitas à adaptação da conexão. | `QualityProfile` |
+| Rota | Caminho usado pela mídia: direto entre os computadores ou retransmitido por TURN. | `TransportPath` |
+| Ao vivo | Estado em que o espectador já recebeu uma imagem reproduzível. Uma conexão aberta, sozinha, não basta. | `live` |
+| Conta | Identidade com e-mail, senha e nome de usuário único. Os amigos pertencem à conta, não ao computador. | `Account` |
+| Amigo | Conta que adicionou você de volta. Assistir exige amizade mútua. | `Friend` |
+| Presença | Informação sobre quem está conectado ou transmitindo. | `Presence` |
+| Prévia | Miniatura temporária da tela compartilhada, enviada apenas aos amigos autorizados. | `SharePreview` |
 
-**Share Session**:
-A temporary live connection in which one person shares a capture source and another person watches it.
-_Avoid_: Room, call, meeting
-
-**Sharer**:
-The person whose screen or application is being transmitted during a Share Session.
-_Avoid_: Host, streamer, broadcaster
-
-**Viewer**:
-The person watching the Sharer's transmitted content during a Share Session.
-_Avoid_: Guest, receiver, client
-
-**Capture Source**:
-A screen or application window explicitly selected by the Sharer for transmission.
-_Avoid_: Stream, feed
-
-**Quality Profile**:
-A user-facing target for transmitted resolution and frame rate, such as 1080p60, which may adapt downward when the connection cannot sustain it.
-_Avoid_: Quality level, preset
-
-**Transport Path**:
-The network route used by the encrypted media: Direct when peers can reach each other, or Relay when TURN is required.
-_Avoid_: Connection type, server mode
-
-**Live State**:
-The period in which the Viewer is actively receiving playable media from the Sharer.
-_Avoid_: Connected state, streaming state
-
-**Account**:
-A person's identity in Telaê: email, password and a unique @username. Friendships and sessions belong to the account, not to a computer.
-_Avoid_: Profile, device
-
-**Friend**:
-Another account that has added you back. Only mutual friends can watch each other's Share Sessions.
-_Avoid_: Contact, follower
+O produto não usa salas, reuniões ou chamadas como forma de organizar transmissões. Nos textos para quem usa o app, prefira “transmissão”, “amigo”, “quem transmite” e “espectador”.

@@ -1,8 +1,21 @@
-# Changelog
+# Histórico de alterações
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 
 ## [Não lançado]
+
+## [0.3.3] - 2026-10-25
+
+- Português do Brasil passa a ser o idioma padrão de novas instalações, mesmo em Windows configurado em inglês. Inglês e modo automático continuam disponíveis como escolhas explícitas.
+- README principal em português, com versão em inglês em `README.en.md`.
+- Mantido o canal oficial de atualizações automáticas com assinatura Ed25519 da 0.3.2.
+
+## [0.3.2] - 2026-10-24
+
+- Atualizações automáticas do instalador oficial com assinatura Ed25519 do projeto e chave pública fixada na compilação, sem depender de um certificado Authenticode do Windows.
+- O instalador é verificado após o download, inclusive no cache, e novamente antes da instalação silenciosa. Transmissões ativas adiam o reinício.
+- Novo link estável `/download/windows`, que sempre aponta para o instalador publicado mais recente.
+- A chave privada fica somente no ambiente de release, fora do código e do servidor de downloads. Notas em [docs/releases/RELEASE_0.3.2.md](docs/releases/RELEASE_0.3.2.md).
 
 ## [0.3.1] - 2026-10-24
 

@@ -9,6 +9,7 @@ export async function friendCodeOf(page: Page): Promise<string> {
 
 /** Digita o @ no formulário de adicionar amigo e envia. */
 export async function submitFriend(page: Page, username: string) {
+  await expect(page.getByText('Conectado', { exact: true })).toBeVisible({ timeout: 30_000 })
   await page.getByRole('button', { name: 'Adicionar', exact: true }).first().click()
   await page.getByLabel('@ do amigo').fill(username)
   await page.getByLabel('@ do amigo').locator('xpath=ancestor::form').getByRole('button', { name: 'Adicionar', exact: true }).click()

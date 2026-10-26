@@ -17,14 +17,19 @@ export class DesktopUpdates {
   private sessionActive = false
   private installing = false
   private automaticInstall = false
+  private verifiedInstaller: { version: string; filename: string } | null = null
+  private downloadAttempt = 0
+  private installAttempt = 0
   private installTimer: ReturnType<typeof setTimeout> | null = null
   private status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
   private readonly onStatus: StatusListener
   private readonly trustedServerUrl: string
+  private readonly verifyInstaller?: (version: string, filename: string) => Promise<void>
 
-  constructor(onStatus: StatusListener, trustedServerUrl: string) {
+  constructor(onStatus: StatusListener, trustedServerUrl: string, verifyInstaller?: (version: string, filename: string) => Promise<void>) {
     this.onStatus = onStatus
     this.trustedServerUrl = trustedServerUrl
+    this.verifyInstaller = verifyInstaller
   }
 
   getStatus(): UpdateStatus {
@@ -39,8 +44,9 @@ export class DesktopUpdates {
 
   setSessionActive(active: boolean): void {
     this.sessionActive = active
-    if (active && this.installTimer !== null) {
-      clearTimeout(this.installTimer)
+    if (active && (this.installTimer !== null || this.installing)) {
+      this.installAttempt++
+      if (this.installTimer !== null) clearTimeout(this.installTimer)
       this.installTimer = null
       this.installing = false
       if (this.status.phase === 'installing') this.publish({ phase: 'ready', version: this.status.version })
@@ -69,7 +75,7 @@ export class DesktopUpdates {
       if (names !== undefined && (!Array.isArray(names) || !names.length || names.some(name => typeof name !== 'string' || !name.trim()))) {
         throw new Error('invalid_update_publisher')
       }
-      this.automaticInstall = Array.isArray(names)
+      this.automaticInstall = !!this.verifyInstaller || Array.isArray(names)
       const feedUrl = new URL('updates/windows/', `${server.toString().replace(/\/+$/, '')}/`).toString()
       if (this.feedUrl !== feedUrl) this.configure(feedUrl, configPath)
       const updater = this.updater
@@ -95,7 +101,9 @@ export class DesktopUpdates {
     updater.disableWebInstaller = true
     // Unsigned builds may check metadata, but never download or execute it automatically.
     updater.autoDownload = this.automaticInstall
-    updater.autoInstallOnAppQuit = this.automaticInstall
+    // The detached-signature path must never let the library install on quit before our verification.
+    updater.autoInstallOnAppQuit = this.automaticInstall && !this.verifyInstaller
+    updater.allowDowngrade = false
     updater.on('update-available', (info) => {
       if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(info.version)) {
         this.publish({ phase: 'error', version: app.getVersion(), message: this.errorMessage(new Error('invalid_version')) })
@@ -114,14 +122,24 @@ export class DesktopUpdates {
     })
     updater.on('update-downloaded', (info) => {
       if (!this.automaticInstall) return
-      this.publish({ phase: 'ready', version: info.version })
-      if (!this.sessionActive) this.install()
+      if (this.verifyInstaller) {
+        const attempt = ++this.downloadAttempt
+        this.verifiedInstaller = null
+        void (async () => {
+          if (typeof info.downloadedFile !== 'string' || !info.downloadedFile) throw new Error('invalid_update_file')
+          await this.verifyInstaller!(info.version, info.downloadedFile)
+          if (attempt !== this.downloadAttempt) return
+          this.verifiedInstaller = { version: info.version, filename: info.downloadedFile }
+          this.publish({ phase: 'ready', version: info.version })
+          if (!this.sessionActive) this.install()
+        })().catch(error => { if (attempt === this.downloadAttempt) this.fail(error) })
+      } else {
+        this.publish({ phase: 'ready', version: info.version })
+        if (!this.sessionActive) this.install()
+      }
     })
     updater.on('error', (error) => {
-      if (this.installTimer !== null) clearTimeout(this.installTimer)
-      this.installTimer = null
-      this.installing = false
-      this.publish({ phase: 'error', version: app.getVersion(), message: this.errorMessage(error) })
+      this.fail(error)
     })
     this.updater = updater
   }
@@ -129,6 +147,7 @@ export class DesktopUpdates {
   private install(): void {
     if (!this.automaticInstall || this.installing || this.sessionActive || this.status.phase !== 'ready') return
     this.installing = true
+    const attempt = ++this.installAttempt
     this.publish({ phase: 'installing', version: this.status.version })
     // Deixa o aviso de reinício chegar à janela antes de encerrá-la.
     this.installTimer = setTimeout(() => {
@@ -138,7 +157,13 @@ export class DesktopUpdates {
         return
       }
       // Silent NSIS update; relaunch the app without opening the setup wizard.
-      this.updater?.quitAndInstall(true, true)
+      if (this.verifyInstaller) {
+        const installer = this.verifiedInstaller
+        if (!installer || installer.version !== this.status.version) { this.fail(new Error('unverified_update')); return }
+        void this.verifyInstaller(installer.version, installer.filename).then(() => {
+          if (attempt === this.installAttempt && !this.sessionActive && this.status.phase === 'installing' && this.verifiedInstaller === installer) this.updater?.quitAndInstall(true, true)
+        }).catch(error => { if (attempt === this.installAttempt) this.fail(error) })
+      } else this.updater?.quitAndInstall(true, true)
     }, 1500)
   }
 
@@ -147,8 +172,19 @@ export class DesktopUpdates {
     this.onStatus(status)
   }
 
+  private fail(error: unknown): void {
+    this.downloadAttempt++
+    this.installAttempt++
+    this.verifiedInstaller = null
+    if (this.installTimer !== null) clearTimeout(this.installTimer)
+    this.installTimer = null
+    this.installing = false
+    this.publish({ phase: 'error', version: app.getVersion(), message: this.errorMessage(error) })
+  }
+
   private errorMessage(error: unknown): string {
     const detail = error instanceof Error ? error.message : String(error)
+    if (/invalid_update_(signature|size|hash)|unverified_update/.test(detail)) return t('Essa atualização não passou na verificação de segurança. Tenta de novo mais tarde.')
     if (/404|ENOENT/i.test(detail)) return t('O servidor ainda não tem essa atualização. Tenta de novo mais tarde.')
     return t('Não deu pra baixar a atualização. Confere a conexão com o servidor.')
   }

@@ -62,6 +62,7 @@ else if (!Path.IsPathRooted(updatesPath))
 }
 
 Directory.CreateDirectory(updatesPath);
+app.MapTelaeDownloads(updatesPath);
 var updateContentTypes = new FileExtensionContentTypeProvider();
 updateContentTypes.Mappings[".yml"] = "text/yaml";
 updateContentTypes.Mappings[".blockmap"] = "application/octet-stream";
