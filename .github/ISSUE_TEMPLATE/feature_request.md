@@ -1,7 +1,7 @@
 ---
 name: Sugestão de recurso
 about: Proponha uma melhoria ou um recurso novo
-labels: enhancement
+labels: melhoria
 ---
 
 ## Problema

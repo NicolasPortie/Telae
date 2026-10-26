@@ -1,5 +1,6 @@
 /** Tradução para inglês: chave = texto-fonte em pt-BR usado em `t()` (e mensagens de domínio do servidor). */
 export const en: Record<string, string> = {
+  "Essa atualização não passou na verificação de segurança. Tenta de novo mais tarde.": "This update failed its security check. Try again later.",
   "A versão {version} está disponível.": "Version {version} is available.",
   "Baixar atualização": "Download update",
   "O servidor está cheio. Tenta de novo mais tarde.": "The server is full. Try again later.",

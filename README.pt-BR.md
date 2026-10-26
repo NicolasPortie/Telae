@@ -1,6 +1,6 @@
 <div align="center">
 
-[English](README.md) · **Português**
+**Português** · [English](README.en.md)
 
 <img src="apps/desktop/public/icon.svg" alt="Telaê" width="88" height="88" />
 
@@ -50,9 +50,9 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 
 ## Visão geral
 
-O Telaê faz uma coisa bem feita: escolher uma tela ou janela e deixar um amigo assistir com imagem nítida, som sincronizado e baixa latência. Não há salas, chamadas nem canais. Quem está transmitindo aparece como **Ao vivo** na sua lista de amigos, e você entra com um clique.
+O Telaê permite compartilhar uma tela ou janela com amigos, com áudio sincronizado. Quem transmite aparece como **Ao vivo** na lista de amigos; para assistir, basta clicar. Não há salas, chamadas ou canais.
 
-O objetivo do projeto é um produto de compartilhamento de tela realmente bom na sua única tarefa, construído de ponta a ponta: captura de áudio nativa, transporte WebRTC adaptativo, backend de contas e amigos, atualização automática e um processo de qualidade com medições.
+O aplicativo reúne captura de áudio do Windows, transporte WebRTC, contas, amigos e atualizações automáticas. Os testes e as medições de transmissão estão documentados neste repositório.
 
 ## Recursos
 
@@ -64,8 +64,8 @@ O objetivo do projeto é um produto de compartilhamento de tela realmente bom na
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
-- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática em segundo plano nos builds assinados.
-- **Interface em português e inglês**, seguindo o idioma do Windows ou escolhida em Configurações.
+- **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de assinatura do projeto.
+- **Interface em português e inglês**, com português do Brasil por padrão e outros idiomas disponíveis em Configurações.
 
 ## Capturas de tela
 
@@ -109,7 +109,7 @@ sequenceDiagram
 
 O servidor cuida só de contas, amizades, presença e sinalização. Depois que a conexão é negociada, vídeo e áudio não passam por ele. Quem transmite codifica a captura uma vez por espectador com a pilha WebRTC do Chromium, e um controlador de qualidade ajusta bitrate, resolução e taxa de quadros a partir das estatísticas ao vivo.
 
-O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em inglês) e os registros de decisão em [docs/adr](docs/adr).
+O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e os registros de decisão em [docs/adr](docs/adr).
 
 ## Tecnologias
 
@@ -139,7 +139,7 @@ O desenho completo está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (em ing
 
 ### Baixar
 
-Baixe o instalador do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução: escolha **Mais informações > Executar assim mesmo**. Enquanto o instalador não for assinado, novas versões são instaladas baixando o instalador de novo daqui. A atualização automática só vale para builds assinados.
+Baixe o instalador genérico do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Ele não vem com servidor nem feed oficial. O mantenedor distribui o instalador oficial por um link estável separado: ele já vem com o servidor e instala futuras atualizações automaticamente, após verificar a assinatura Ed25519 do projeto. Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na instalação inicial.
 
 Os instaladores publicados aqui são genéricos: não vêm com servidor nenhum. O Telaê é código aberto, então, para usar com os seus amigos, [hospede o seu servidor](#hospedagem-própria) e informe o endereço na tela de entrada (**Servidor > Alterar**) ou em **Configurações > Servidor de sinalização**. Para embutir um padrão no seu próprio instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
 
@@ -219,13 +219,13 @@ Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
 ## Limitações conhecidas
 
 - Só Windows por enquanto (a captura e o áudio dependem de APIs do Windows).
-- Os instaladores ainda não têm assinatura de código, então o Windows SmartScreen pode avisar na primeira execução, e a atualização é manual até lá.
+- Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na primeira execução. A atualização automática oficial usa uma chave Ed25519 própria fixada no app; builds genéricos precisam configurar o próprio feed e chave de confiança.
 - Cada espectador recebe um fluxo codificado só para ele, então upload e CPU crescem com o número de espectadores. Um SFU é uma opção futura.
 - 1440p60 depende da máquina e da rede; os documentos de validação listam o que foi e o que não foi medido.
 
 ## Documentação
 
-- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md) (em inglês)
+- [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
 - [Design da interface](docs/DESIGN.md) e [glossário](GLOSSARY.md)
 - [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
 - [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)

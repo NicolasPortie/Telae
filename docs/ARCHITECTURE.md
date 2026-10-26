@@ -1,198 +1,103 @@
-# Telaê — Architecture
+# Arquitetura do Telaê
 
-## System shape
+## Componentes
 
-```text
-┌───────────────────────── Sharer / Windows ─────────────────────────┐
-│ Electron                                                           │
-│  React UI                                                          │
-│     │                                                              │
-│  StreamController                                                  │
-│     ├─ CaptureAdapter ── Chromium screen/window + loopback audio   │
-│     ├─ PeerTransport ─── WebRTC RTCPeerConnection                  │
-│     ├─ QualityController                                           │
-│     └─ Diagnostics                                                 │
-└──────────────────────────────────┬─────────────────────────────────┘
-                                   │ encrypted media
-                                   │ direct P2P · TURN relay as fallback
-                                   ▼
-┌───────────────────────── Viewer / Windows ─────────────────────────┐
-│ Electron + React                                                   │
-│  PeerTransport ──> Playback surface ──> Diagnostics                │
-└────────────────────────────────────────────────────────────────────┘
-
-        Both apps connect to the server over SignalR / WSS:
-
-┌────────────────────────────── Server ──────────────────────────────┐
-│ ASP.NET Core · accounts · friends · Share Session signaling        │
-│ (SDP and ICE only; no media passes through here)                   │
-└────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    E[Emissor no Windows] <-->|Áudio e vídeo por WebRTC| V[Espectador no Windows]
+    E <-->|HTTPS e SignalR| S[Servidor ASP.NET Core]
+    V <-->|HTTPS e SignalR| S
+    S <--> B[(PostgreSQL)]
+    E <-.->|Quando a rota direta falha| T[TURN]
+    T <-.-> V
 ```
 
-The ASP.NET Core service coordinates accounts, friendships, presence, SDP descriptions, and ICE candidates. Media should not traverse this service after negotiation.
+O servidor coordena contas, amizades, presença e negociação de SDP e ICE. O fluxo de áudio e vídeo não passa por esse serviço. As prévias de tela são uma exceção: pequenos JPEGs passam pelo servidor e ficam apenas na memória da sessão.
 
-## Why this stack
+O Electron separa o aplicativo em três partes:
 
-Electron is useful here for more than UI. Chromium already ships a production WebRTC stack with RTP/RTCP, DTLS-SRTP, ICE, congestion control, jitter handling, codec negotiation, hardware acceleration hooks, and media statistics. Rebuilding that media plane in C# would dramatically increase scope before the product has proved it needs a custom engine.
+- **Processo principal:** janela, permissões, armazenamento local, autenticação, atualizações e ponte nativa de áudio.
+- **Preload:** expõe a API tipada `window.telae`, sem abrir o Node para a interface.
+- **Interface:** componentes React e serviços de captura, sinalização, transporte, qualidade e reprodução.
 
-C# remains a strong choice for the signaling backend because the backend does not need to process frames. ASP.NET Core + SignalR gives simple session groups, reconnect semantics, WebSocket transport, and a stack already familiar to the project's developer.
+O Chromium já fornece RTP/RTCP, DTLS-SRTP, ICE, negociação de codecs, controle de congestionamento e estatísticas. O ASP.NET Core e o SignalR cuidam da coordenação, sem precisar processar quadros de vídeo. Uma implementação própria de captura ou codificação só deve substituir essa parte quando houver medição que justifique o custo.
 
-## Deep modules
+## Captura e transporte
 
-### StreamController
+`StreamController` controla a captura da fonte escolhida e a liberação das faixas de mídia. A interface usa operações pequenas, como iniciar, parar e observar o estado; não precisa gerenciar diretamente cada faixa do `MediaStream`.
 
-Owns the complete lifecycle of sharing. Its public interface should stay close to:
+Os serviços de sessão e transporte coordenam `RTCPeerConnection`, negociação SDP, candidatos ICE, envio das faixas, encerramento e recuperação. O serviço de sinalização mantém a conexão SignalR e traduz os eventos recebidos. Ele não é responsável pelo áudio ou vídeo.
 
-- start a Share Session from a Capture Source and Quality Profile;
-- stop the Share Session;
-- observe a small state model and diagnostics snapshot.
+O controle de qualidade combina o perfil escolhido com as estatísticas do codificador e da rede. Ajusta taxa de envio, resolução e frequência de quadros sem obrigar a interface a conhecer a negociação do WebRTC. A adaptação usa `RTCRtpSender.setParameters()` quando possível, evitando recriar a conexão a cada mudança.
 
-The renderer should not coordinate raw WebRTC steps itself.
+A captura atual usa Electron/Chromium. A ponte nativa de áudio usa o loopback do Windows, inclusive por processo para janelas. Opus é usado no transporte do áudio. Processamento voltado à voz, como supressão de ruído, não deve modificar o áudio do sistema sem necessidade.
 
-### CaptureAdapter
+Quando uma captura termina ou o app encerra, as faixas e conexões locais são liberadas. Uma inicialização pendente pode ser cancelada. Mensagens da ponte de áudio e sua limpeza são vinculadas ao identificador da captura, mesmo quando duas janelas pertencem ao mesmo processo.
 
-Produces a media stream from an explicitly selected Capture Source. The first adapter uses Electron/Chromium screen capture and Windows loopback/system audio when supported.
+## Estados da transmissão
 
-This seam exists because capture and hardware encoding are the most likely parts to need a future native implementation. A later adapter may use Windows Graphics Capture/WASAPI plus a native media bridge without changing the rest of the application.
+O estado apresentado na interface vem dos eventos de captura, sinalização, conexão e reprodução. Uma conexão de rede estabelecida não significa que a imagem já está aparecendo.
 
-### PeerTransport
+O espectador só é considerado ao vivo depois de o elemento de vídeo confirmar um quadro apresentado. Uma conexão sem imagem continua sujeita ao prazo de recuperação. Quando esse prazo acaba, a sessão é encerrada com o motivo correspondente.
 
-Owns `RTCPeerConnection`, SDP negotiation, ICE candidates, track attachment, teardown, and ICE restart. The rest of the product should see connection states and media events rather than browser negotiation details.
+## Conexão e vários espectadores
 
-### SignalingClient
+ICE usa STUN para encontrar caminhos diretos. Quando isso não funciona, TURN retransmite o tráfego WebRTC já criptografado. O espectador não precisa abrir portas de entrada no roteador. Configurar credenciais TURN não comprova que o caminho de retransmissão está acessível; essa validação exige uma conexão real com a política de ICE forçada para `relay`.
 
-Owns the SignalR connection and maps transport messages to Share Session events. It does not own media state.
+Cada transmissão aceita até 12 espectadores. Cada um tem sua própria conexão WebRTC, adaptação de qualidade e recuperação: até três reinícios de ICE, com prazo de dez segundos por tentativa. A falha de um espectador não encerra as conexões saudáveis.
 
-### QualityController
+A captura é única, mas a mídia é enviada separadamente a cada espectador. O consumo de envio e de codificação cresce com a quantidade de pessoas. O limite de 12 é uma regra de entrada, não uma garantia de 1080p60 em qualquer computador. Uma SFU continua como alternativa futura.
 
-Maps a user Quality Profile plus live network/encoder statistics into sender parameters. It can adjust bitrate and, when supported by the active browser path, degradation preference without forcing the UI to understand WebRTC internals.
+O teto total de envio de vídeo é de 40 Mbps por padrão, configurável entre 2 e 200 Mbps. Cada conexão recebe uma parte desse orçamento; áudio, cabeçalhos e transições de negociação geram tráfego adicional. Conteúdo de texto prioriza resolução; conteúdo em movimento prioriza quadros por segundo e pode reduzir a resolução. Pressão de CPU também participa da adaptação.
 
-### Diagnostics
+É possível trocar a qualidade e silenciar o áudio sem recriar a sessão. Remover um espectador revoga seu acesso pelo restante daquela transmissão. Ao trocar de amigo, uma recusa do servidor preserva a sessão atual.
 
-Samples WebRTC statistics on a fixed cadence and emits a compact snapshot including bitrate, RTT, jitter, packet loss, frames, codec, selected candidate pair, and Transport Path.
+## Contas e amigos
 
-## Share Session state model
+A identidade atual é uma conta no PostgreSQL, conforme a [ADR 0004](adr/0004-user-accounts.md). O app entra por REST, em `/auth/*`. O processo principal mantém o token de renovação, protegido pelo cofre do sistema, e entrega ao processo de interface um JWT curto para autenticar a conexão SignalR.
 
-```text
-idle
-  └─> preparing
-       └─> waiting-for-peer
-            └─> negotiating
-                 └─> live
-                      ├─> reconnecting ──> live
-                      └─> ended
+`RegisterDevice` usa a identidade do token validado, não uma identidade arbitrária enviada pelo cliente. O identificador do dispositivo corresponde à conta; o identificador público dos amigos é o `@usuário`.
 
-Any pre-live state ──> ended
-reconnecting ────────> ended when recovery budget expires
-```
+Os tokens carregam o identificador da família de sessão. A autenticação REST e cada chamada ao hub verificam se ela continua ativa. Troca ou recuperação de senha e exclusão de conta revogam as famílias existentes e desconectam o dispositivo. Sair revoga somente a família daquela sessão, incluindo tokens já rotacionados.
 
-State changes should be driven by actual signaling and peer-connection events. The UI renders this model; it does not invent parallel connection state.
+Sessões locais são vinculadas à origem do servidor. Trocar a configuração não envia uma credencial de renovação para outro servidor: a nova origem exige autenticação. O administrador do servidor escolhido recebe os dados usados para entrar nele; HTTPS protege o transporte, mas não torna esse administrador confiável.
 
-## Media strategy
+As amizades ficam no banco. Cada linha de `Friendships` representa quem adicionou quem; `DismissedRequests` registra pedidos dispensados. `GetFriends` usa a conta da conexão, carrega a lista e atualiza as assinaturas de presença e a visão de amizades mútuas usada na autorização. `AddFriend` e `RemoveFriend` atualizam o banco e sincronizam essa visão. Sessões que deixam de ter amizade mútua são encerradas.
 
-### Video
+Os pedidos pendentes são calculados a partir dessas relações, por isso sobrevivem a reinícios e chegam a quem estava desconectado. Consultar um identificador público ou enviar um pedido unilateral não revela presença ou qualidade ativa e não autoriza assistir.
 
-- Default to H.264 first because Windows machines commonly have efficient hardware paths and interoperability is strong.
-- Add AV1 later behind capability and benchmark gates. Better compression is useful only if encode/decode time and CPU/GPU cost stay acceptable.
-- Use a motion-oriented capture hint for films/games and a detail-oriented hint for text-heavy sharing when supported.
-- Use `RTCRtpSender.setParameters()` for bitrate ceilings and adaptation controls rather than repeatedly rebuilding the peer connection.
-- Never use a long playback buffer to hide poor network conditions. Reduce quality first.
+O cadastro depende de `Auth__RegistrationOpen` e `Auth__AllowedEmails`. Com o cadastro fechado, somente e-mails liberados podem criar conta; os demais recebem `registration_closed` antes de criar conta ou enviar e-mail. `Auth__AllowLegacyDevices` mantém clientes sem conta desativados por padrão.
 
-Suggested starting ceilings for lab tuning, not hard guarantees:
+## Prévias e presença
 
-| Profile | Starting ceiling |
-| --- | ---: |
-| 720p60 | 4–6 Mbps |
-| 1080p30 | 5–8 Mbps |
-| 1080p60 | 8–12 Mbps |
-| 1440p60 experimental | 12–20 Mbps |
+Durante uma transmissão, o app envia um JPEG a cada oito segundos por `PublishSharePreview`. A imagem tem 640 pixels de largura e no máximo 96 KiB, incluindo a URL de dados. O servidor verifica a estrutura JPEG e os limites de dimensões: 4096 pixels por eixo e 4.194.304 pixels no total.
 
-These values must be replaced by benchmark evidence as the controller matures.
+O servidor aceita no máximo uma prévia por dispositivo a cada seis segundos, inclusive após reconexão ou reinício da transmissão. Guarda somente o quadro mais recente na memória e o envia por `SharePreview` aos amigos mútuos conectados que não foram removidos da sessão. `GetFriendPreviews` aplica a mesma autorização. Os quadros não são persistidos e desaparecem ao encerrar a transmissão.
 
-### Audio
+Mudanças de amizade, remoção de espectadores e envio de prévias são serializados para impedir que uma pessoa removida continue recebendo quadros novos. A presença também exige assinatura por `GetFriends` e amizade mútua. Uma nova solicitação substitui o conjunto anterior de assinaturas; uma lista vazia remove as assinaturas, e a reconexão precisa restaurá-las.
 
-- Capture system audio/loopback together with the selected visual source where Electron/Windows supports it.
-- Use Opus through WebRTC.
-- Disable microphone-oriented processing such as echo cancellation/noise suppression for pure system audio where constraints allow it.
-- Treat A/V drift as a release metric and test it over long sessions.
+## Diagnóstico e limites
 
-## Connectivity
+As estatísticas incluem taxa de envio, RTT, jitter, perdas, quadros, codec e par de candidatos selecionado. O diagnóstico diferencia uma faixa de áudio disponível do recebimento de pacotes; silêncio não é, sozinho, uma falha de transmissão.
 
-ICE gathering uses STUN to discover viable direct paths. If direct connectivity fails, TURN relays the already encrypted WebRTC traffic. TURN is therefore a required production dependency even though most ideal sessions should remain direct.
+O worklet de áudio por processo mantém até 120 ms de PCM em um buffer circular limitado e informa descartes e falta de amostras. Exportações de diagnóstico usam uma lista explícita de campos, sem códigos de convite, identidades ou identificadores de sessão. Mantêm até uma hora de amostras estruturadas e um histórico limitado de estados e categorias de erro.
 
-The Viewer must never need inbound port forwarding.
+RTT e `getStats()` não medem o atraso completo entre as duas telas nem o desvio perceptível entre áudio e vídeo. Essas medições dependem do [teste físico](BENCHMARK.md).
 
-## Security baseline
+O servidor limita o tamanho das entradas e separa os orçamentos de registro, comandos e sinalização ICE. O registro comporta até 10.000 perfis e até 32 convites legados pendentes por emissor. Os limites de resolução, envio, áudio e adaptação da mídia são aplicados nos computadores: o serviço de sinalização não inspeciona nem controla o fluxo criptografado entre os pares.
 
-- `contextIsolation: true`.
-- `nodeIntegration: false` in renderer windows.
-- Electron sandbox enabled where compatible with required APIs.
-- Narrow, typed preload IPC surface.
-- Strict Content Security Policy.
-- TLS for signaling and TURN credentials with short lifetimes.
-- Joining a stream requires mutual friendship; legacy invite tokens (clients before accounts) are high-entropy and expire.
-- A Viewer joining a session becomes visible to the Sharer before media is considered live.
-- Capture stops when the Share Session ends or the app exits unexpectedly.
+## Segurança do aplicativo e das atualizações
 
-## Backend responsibilities
+O processo de interface usa `contextIsolation: true`, `nodeIntegration: false`, sandbox e CSP restritiva. IPC fica limitado ao documento principal confiável e valida os argumentos. A captura depende de uma fonte escolhida explicitamente; permissões físicas de câmera e microfone são negadas.
 
-The ASP.NET Core service owns:
+O servidor HTTPS de atualizações é fixado na compilação, separado do endereço editável de sinalização. Desde a 0.3.2, o instalador oficial também contém a chave pública Ed25519 de release. A assinatura cobre versão, nome, tamanho e SHA-512 do instalador. O app verifica o arquivo após baixar, inclusive se veio do cache, e repete a verificação antes de executar.
 
-- create/join/leave Share Session commands;
-- ephemeral invite validation;
-- SignalR grouping;
-- SDP and ICE candidate forwarding;
-- presence and reconnect window;
-- TURN credential issuance if ephemeral TURN credentials are used;
-- coarse operational metrics.
+A chave privada fica fora do app e do servidor de downloads. Nesse fluxo, a instalação ao sair da biblioteca permanece desligada: somente o caminho que concluiu a verificação pode instalar. Transmissões ativas adiam o reinício. Authenticode é uma proteção adicional, não um requisito do canal Ed25519. Consulte [OPERATIONS.md](OPERATIONS.md) e [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md).
 
-It does not decode, transcode, record, or inspect normal media frames.
+## Compatibilidade com clientes antigos
 
-## Multiple viewers
+O caminho anterior às contas permanece atrás de `Auth__AllowLegacyDevices`. Ele usa uma credencial aleatória de 256 bits; o servidor guarda somente seu SHA-256 e compara em tempo constante. Identificadores de dispositivo e códigos públicos não concedem autorização.
 
-The current implementation supports up to 12 Viewers per Share Session. Each Viewer has an independent WebRTC connection, an Auto quality controller and a recovery budget of three ICE restarts, with a ten-second deadline per attempt. A failed Viewer does not end healthy Viewer connections. Diagnostics show total video upload and network quality from the worst sampled connection.
+Nesse caminho, `JoinFriendShare` exige declaração mútua por `GetFriends`; pedidos podem ser aceitos ou dispensados por `DismissFriendRequest`. Perder a amizade remove um espectador ativo e notifica os participantes. `CreateInvite` e `JoinWithInvite` existem apenas por compatibilidade; o app atual não cria nem mostra esses convites. `JoinShare` direto continua limitado a quem já estava autorizado na sessão, e sair revoga essa autorização.
 
-The Sharer captures one source but sends media separately to each Viewer. Upload and encoding cost therefore grow with the Viewer count; 12 is an admission limit, not a measured guarantee of 1080p60 on every machine. An SFU remains a future transport option if one upstream is needed.
-
-The desktop exposes a total video upload ceiling (40 Mbps by default, configurable from 2 to 200 Mbps). Each peer receives a share of that ceiling; audio, protocol overhead and brief negotiation transitions are additional traffic. Text mode prioritizes resolution; motion mode prioritizes frame rate and may downscale. Measured encoder CPU pressure also reduces quality. Quality and audio mute can be changed without recreating the session. Removing a Viewer revokes its access for the remaining lifetime of that session, including when it reuses the same invite.
-
-A Viewer is marked live only after the playback element confirms a presented frame. A connected transport without displayed video retains a bounded recovery deadline. Audio diagnostics distinguish an available track from receiving packets; silence is not itself a transmission failure. The process-audio worklet keeps at most 120 ms of PCM in a fixed ring buffer and reports discarded frames and underruns.
-
-Diagnostic exports use an explicit allowlist without invite codes, identities or session identifiers. They retain up to one hour of structured samples, bounded state/error-category history and aggregates covering all collected samples. Actual glass-to-glass latency and perceptual A/V drift still require the physical benchmark.
-
-## Accounts and friends
-
-Since the account release, identity is an account (see [ADR 0004](adr/0004-user-accounts.md)) stored in PostgreSQL. The desktop signs in over REST (`/auth/*`) and keeps the session in the main process: a rotating refresh token encrypted with the OS keystore and a short-lived JWT access token handed to the renderer only to authenticate the SignalR connection. In the hub, `RegisterDevice` trusts the validated token, never what the client sends: the device ID is the account ID and the public friend identifier is the account's `@username`.
-
-Access tokens carry a session-family identifier. REST authentication and each hub invocation check that this family is still active; password changes, password resets and account deletion revoke existing families and detach the connected device. Logout revokes only its own family, including refresh tokens already rotated within it. Refresh replay revokes all account sessions. The hub closes on access-token expiration, and normal refresh rotation keeps the same family. Deploying this model requires existing clients to sign in again.
-
-Passwords use ASP.NET Identity's versioned PBKDF2-SHA512 format with 220,000 iterations; successful login upgrades older hashes. Verification/reset codes are HMAC-hashed, expire, have bounded attempts and are consumed once with conditional database updates. Account operations share bounded locks within the server process. This service runs as one instance: its registry, locks, connections and presence are in memory. Horizontal replicas require shared coordination before deployment.
-
-The desktop binds its encrypted session to the exact canonical signaling URL. The active URL stays fixed for both REST and SignalR until the process restarts; changing the saved URL then requires a new login for the new server. Auth requests refuse redirects and remote plaintext HTTP. If the OS keystore is unavailable or uses plaintext storage, the account session stays in memory. A chosen server receives the credentials entered for that server and must be trusted; TLS does not make its administrator trustworthy.
-
-The friend list is server-side. Each row of `Friendships` is a directed edge (who added whom); `DismissedRequests` records ignored requests. `GetFriends` loads the list from the database for the connection's account (the argument is ignored), subscribes the connection to its friends' presence groups and refreshes the in-memory mutual-friendship view used to authorize watching. `AddFriend` and `RemoveFriend` change the database, then run the same synchronization, which also ends sessions that stop being mutual. Pending requests are computed from the database (edges pointing at me that I have not reciprocated or dismissed), so they survive restarts and reach people who were offline when the request was made.
-
-Access to a server is controlled by configuration, not by the code being public. Registration is closed by default (`Auth:RegistrationOpen=false`): only the emails in `Auth:AllowedEmails` can create an account, and anyone else gets `registration_closed` before any account or email is created. Clients without an account (`Auth:AllowLegacyDevices`) are refused by default, so every connection to the hub carries a validated account token. A self-hosted or public server opts in explicitly with `Auth__RegistrationOpen=true`.
-
-The legacy device-credential path described below remains for clients released before accounts, behind `Auth:AllowLegacyDevices`.
-
-## Device credentials and migration
-
-Each desktop stores a random 256-bit device credential locally. Registration requires it; the server persists only its SHA-256 hash and compares credentials in constant time. Device IDs and friend codes are public identifiers and do not authorize registration or joining.
-
-Friend joins (`JoinFriendShare`) require mutual friendship: each device must have declared the other through `GetFriends`. Declaring someone notifies them (`FriendRequestReceived`) when online; pending requests are listed via `GetFriendRequests` and can be accepted by declaring back or dismissed via `DismissFriendRequest` (a dismissal expires if the requester removes and re-adds). Declarations persist across reconnects and change only when the device sends a new list. When mutual friendship stops holding for an active viewer, the viewer is removed from that session and both participants are notified (`SessionEnded` / `ViewerLeft`). Switching to another friend is a single server operation: if the server refuses it, the current session is kept. Legacy `CreateInvite` / `JoinWithInvite` exist only for clients up to 0.1.20; the current desktop never creates or shows invites. Direct `JoinShare` is restricted to Viewers already authorized for that active session; leaving revokes that authorization. Signaling remains restricted to the Sharer/Viewer pair.
-
-While sharing, the desktop sends a small JPEG of the shared screen every 8 seconds (`PublishSharePreview`, 640 px wide, at most 96 KiB including its data URL). The server checks JPEG structure and dimensions (at most 4096 per axis and 4,194,304 pixels), and accepts at most one preview per device every six seconds, including after reconnecting or restarting a share. It keeps only the latest frame in memory on the active session and forwards it (`SharePreview`) to online mutual friends who have not been removed from that session; `GetFriendPreviews` applies the same rule. Frames are never persisted and disappear when the session ends. Friendship changes, viewer removal and preview delivery are serialized so a removed viewer cannot keep receiving new frames.
-
-Presence is delivered only to registered connections subscribed through `GetFriends` that are currently mutual friends. Looking up a public identifier or sending a one-sided friend request returns public identity, with presence and active quality hidden. Each subscription request replaces the prior set, including an empty set; reconnecting clients restore their subscriptions. Public identifiers do not grant access to media. Hub commands enforce input sizes and separate budgets for registration, commands and ICE signaling. The registry holds at most 10,000 profiles and 32 outstanding legacy invites per sharer; dismissals are accepted only for actual pending requests.
-
-The server enforces session participation, one share/watch activity per device, the 12-viewer cap, removal, mutual friendship, supported quality names, username and input limits, and preview budgets. Actual capture dimensions, bitrate, upload budget, audio selection and WebRTC adaptation execute at the endpoints: the signaling service cannot inspect or constrain encrypted peer media. These local media settings are not authorization controls.
-
-Automatic updates use a trusted HTTPS server fixed at build time, independently of the editable signaling URL. They require a publisher name in the installed update configuration and the updater's Windows signature verification, in addition to download hashes. Unsigned installations update manually. Renderer IPC is restricted to the trusted main frame with runtime argument validation; physical camera/microphone permissions are denied and display capture follows explicit source selection.
-
-TURN configuration is checked at startup. The health endpoint reports whether relay credentials are configured without returning secrets or claiming verified connectivity. Real relay validation forces the ICE relay policy and checks the selected candidate pair. See [release validation](RELEASE_VALIDATION.md).
-
-Desktop profiles without credentials migrate to a new device ID and credential, preserving the display name and saved friend codes. Legacy server profiles cannot be claimed by supplying an arbitrary new credential. Coordinate the backend and desktop update; pre-0.1.12 clients must update before registering against the secured backend.
-
-Capture and peer connections are stopped locally before remote leave/stop notification. Pending capture initialization is cancellable, and the captured video track ending also ends the session. Audio bridge messages and cleanup are scoped by capture ID, including when two windows belong to the same process. Profiles are written to a temporary file, flushed and atomically replaced on both the server and desktop.
-
+Perfis locais antigos sem credencial recebem novo identificador e credencial, preservando nome e amigos salvos. Um perfil antigo do servidor não pode ser tomado pela simples apresentação de uma credencial nova. Arquivos de perfil são gravados em um arquivo temporário, sincronizados e substituídos atomicamente no servidor e no aplicativo.

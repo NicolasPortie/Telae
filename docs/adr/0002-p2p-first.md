@@ -2,8 +2,8 @@
 status: accepted
 ---
 
-# Start with one-to-one P2P media and TURN fallback
+# ADR 0002: priorizar conexão direta, com TURN como alternativa
 
-The first Telaê release supports one Sharer and one Viewer using a direct WebRTC Transport Path whenever ICE can establish it and TURN relay when it cannot. Multi-viewer streaming is deferred to an SFU milestone because a peer mesh multiplies the Sharer's upload cost and would make the initial quality and latency targets harder to reason about.
+A primeira versão do Telaê foi planejada para um emissor e um espectador, usando WebRTC direto quando ICE encontrasse uma rota e TURN quando a retransmissão fosse necessária. Vários espectadores ficaram inicialmente para uma etapa com SFU, devido ao custo de envio de uma conexão por pessoa.
 
-Update: the desktop now supports up to 12 Viewers per Share Session, each with its own peer connection (see [Architecture](../ARCHITECTURE.md#multiple-viewers)). Direct-first with TURN fallback is unchanged, and an SFU remains a future option.
+O app passou a aceitar até 12 espectadores por transmissão, com uma conexão independente para cada um. A prioridade por conexão direta e a alternativa por TURN foram mantidas. Uma SFU continua como opção futura. Os limites do modelo atual estão em [Arquitetura](../ARCHITECTURE.md#conexão-e-vários-espectadores).
