@@ -131,6 +131,33 @@ public sealed class TelaeAuthorizationTests
     }
 
     [Fact]
+    public void Friends_can_join_and_switch_to_a_session_beyond_twelve()
+    {
+        var registry = new TelaeRegistry();
+        registry.RegisterAccountDevice("sharer", "sharer", "Sharer", "sharer-connection");
+        registry.RegisterAccountDevice("other", "other", "Other", "other-connection");
+        const int viewerCount = 20;
+        var viewerIds = Enumerable.Range(0, viewerCount).Select(index => $"viewer{index}").ToArray();
+        registry.DeclareFriends("sharer", viewerIds);
+        registry.DeclareFriends("other", [viewerIds[^1]]);
+        registry.StartShare("sharer", "auto");
+        registry.StartShare("other", "auto");
+        for (var index = 0; index < viewerCount; index++)
+        {
+            var viewerId = viewerIds[index];
+            registry.RegisterAccountDevice(viewerId, viewerId, "Viewer", $"connection-{index}");
+            registry.DeclareFriends(viewerId, ["sharer", "other"]);
+            if (index == viewerCount - 1)
+                registry.JoinFriendShare(viewerId, "other");
+            var result = registry.JoinFriendShare(viewerId, "sharer");
+            Assert.Equal(index + 1, result.Session.ViewerDeviceIds.Count);
+            if (index == viewerCount - 1)
+                Assert.NotNull(result.Detached);
+        }
+        Assert.Empty(registry.GetActiveSessionForSharer("other")!.ViewerDeviceIds);
+    }
+
+    [Fact]
     public void Persisted_credential_is_hashed_and_legacy_identity_cannot_be_claimed()
     {
         var folder = Path.Combine(Path.GetTempPath(), $"telae-auth-{Guid.NewGuid():N}");
