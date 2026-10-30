@@ -12,6 +12,7 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
     public DbSet<OneTimeCode> OneTimeCodes => Set<OneTimeCode>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
     public DbSet<DismissedRequest> DismissedRequests => Set<DismissedRequest>();
+    public DbSet<HiddenViewer> HiddenViewers => Set<HiddenViewer>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configuration)
     {
@@ -57,6 +58,14 @@ public sealed class TelaeDbContext(DbContextOptions<TelaeDbContext> options) : D
             dismissed.HasKey(d => new { d.AccountId, d.FromId });
             dismissed.HasOne(d => d.Account).WithMany().HasForeignKey(d => d.AccountId).OnDelete(DeleteBehavior.Cascade);
             dismissed.HasOne(d => d.From).WithMany().HasForeignKey(d => d.FromId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<HiddenViewer>(hidden =>
+        {
+            hidden.HasKey(h => new { h.AccountId, h.HiddenId });
+            hidden.HasIndex(h => h.HiddenId);
+            hidden.HasOne(h => h.Account).WithMany().HasForeignKey(h => h.AccountId).OnDelete(DeleteBehavior.Cascade);
+            hidden.HasOne(h => h.Hidden).WithMany().HasForeignKey(h => h.HiddenId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<FailedCodeAttempt>(attempt =>

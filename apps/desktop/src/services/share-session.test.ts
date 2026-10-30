@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     connect: vi.fn(), disconnect: vi.fn(), getActiveShare: vi.fn(), startShare: vi.fn(),
     stopShare: vi.fn(), joinFriendShare: vi.fn(), getFriends: vi.fn(async () => []), leaveShare: vi.fn(),
     getTurnCredentials: vi.fn(), sendSignal: vi.fn(), updateShareQuality: vi.fn(), removeViewer: vi.fn(),
+    updateShareAudience: vi.fn(),
   },
 }))
 
@@ -390,4 +391,24 @@ it('buffers the new friend offer that arrives before the switch is confirmed', a
   request.resolve(friendAccess)
   await switching
   expect(mocks.peers.at(-1)!.handleSignal).toHaveBeenCalledWith(offer.payload)
+})
+
+// ---- quem pode ver e pedidos para entrar ----
+
+it('starts with the chosen audience and keeps the version the server normalized', async () => {
+  const chosen = { mode: 'selected' as const, selected: ['bia', 'ex_amigo'] }
+  mocks.signaling.startShare.mockResolvedValueOnce({ ...access, audience: { ...chosen, selected: ['bia'] } })
+  await controller.startSharing('screen:1', 'auto', chosen)
+  expect(mocks.signaling.startShare).toHaveBeenCalledWith('auto', chosen)
+  expect(controller.getSnapshot().audience).toEqual({ ...chosen, selected: ['bia'] })
+})
+
+it('changes the audience during the share and reports server refusals', async () => {
+  await controller.startSharing('screen:1', 'auto')
+  const next = { mode: 'friends' as const, selected: [] }
+  mocks.signaling.updateShareAudience.mockResolvedValueOnce({ session: access.session, audience: next })
+  await controller.updateAudience(next)
+  expect(controller.getSnapshot().audience).toEqual(next)
+  mocks.signaling.updateShareAudience.mockRejectedValueOnce(new Error('HubException: Não deu pra entender quem pode ver. Escolhe de novo.'))
+  await expect(controller.updateAudience(next)).rejects.toThrow('Não deu pra entender quem pode ver')
 })

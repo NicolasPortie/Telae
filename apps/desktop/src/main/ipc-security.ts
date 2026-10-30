@@ -5,6 +5,15 @@ type Check = (value: unknown) => boolean
 const text = (max: number): Check => value => typeof value === 'string' && value.length <= max
 const captureId: Check = value => typeof value === 'string' && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(value)
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
+const usernames: Check = value => Array.isArray(value) && value.length <= 200 && value.every(name => typeof name === 'string' && name.length <= 32)
+/** Configurações aceitas pelo app, cada uma com o tipo que o processo principal sabe gravar. */
+const settingChecks: Record<string, Check> = {
+  language: value => ['auto', 'pt-BR', 'en'].includes(value as string),
+  notifyFriendLive: value => typeof value === 'boolean',
+  launchAtLogin: value => typeof value === 'boolean',
+  shareAudienceMode: value => ['friends', 'selected'].includes(value as string),
+  shareSelectedUsernames: usernames,
+}
 const schemas: Record<string, Check[]> = {
   'profile:get': [], 'profile:set-name': [text(128)],
   'capture:list-sources': [], 'capture:select-source': [text(256)], 'capture:resolve-window-audio': [text(256)],
@@ -18,8 +27,7 @@ const schemas: Record<string, Check[]> = {
   'auth:reset-password': [text(320), text(32), text(1024)], 'auth:update-display-name': [text(128)],
   'auth:change-password': [text(1024), text(1024)], 'auth:delete-account': [text(1024)], 'auth:access-token': [],
   'settings:get': [], 'settings:update': [value => object(value) && Object.keys(value).every(key =>
-    key === 'language' ? ['auto', 'pt-BR', 'en'].includes(value[key] as string)
-      : ['notifyFriendLive', 'launchAtLogin'].includes(key) && typeof value[key] === 'boolean')],
+    Object.hasOwn(settingChecks, key) && settingChecks[key](value[key]))],
   'update:status': [], 'update:check': [], 'update:session-active': [value => typeof value === 'boolean'],
 }
 

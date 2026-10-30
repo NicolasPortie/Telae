@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { ArrowLeft, Info, LogOut, Server, ShieldCheck, SlidersHorizontal, UserRound, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, EyeOff, Info, LogOut, Server, ShieldCheck, SlidersHorizontal, UserRound, type LucideIcon } from 'lucide-react'
 import { avatarInitial, avatarTone } from '../ui/avatar'
 import { LANGUAGES, resolveLocale, setLocale, t } from '../i18n'
 import type { AccountInfo, AppSettings } from '../shared/contracts'
+import type { DeviceSnapshot } from '../services/types'
 import { authErrorMessage } from './authErrors'
 import { BrandMark } from './BrandMark'
 
@@ -125,18 +126,45 @@ function AccountSecurity() {
   )
 }
 
-type Tab = 'account' | 'general' | 'security' | 'server' | 'about'
+type Tab = 'account' | 'general' | 'privacy' | 'security' | 'server' | 'about'
 
 const tabs = (): { id: Tab; label: string; Icon: LucideIcon }[] => [
   { id: 'account', label: t('Conta'), Icon: UserRound },
   { id: 'general', label: t('Geral'), Icon: SlidersHorizontal },
+  { id: 'privacy', label: t('Privacidade'), Icon: EyeOff },
   { id: 'security', label: t('Segurança'), Icon: ShieldCheck },
   { id: 'server', label: t('Servidor'), Icon: Server },
   { id: 'about', label: t('Sobre'), Icon: Info },
 ]
 
+/** Quem não vê suas transmissões. Ocultar é silencioso; daqui dá para desfazer. */
+function HiddenViewers({ people, busy, onUnhide }: { people: DeviceSnapshot[]; busy: boolean; onUnhide: (username: string) => void }) {
+  return (
+    <Section title={t('Quem não vê suas transmissões')} description={t('Essas pessoas continuam vendo você online, mas nunca ao vivo, e não recebem nenhum aviso. Pra ocultar alguém, use o ícone de olho na lista de amigos.')}>
+      {people.length === 0 ? (
+        <p className="text-[13px] text-ink-3">{t('Ninguém oculto. Todos os seus amigos podem ver você ao vivo, conforme o que você escolher ao transmitir.')}</p>
+      ) : (
+        <ul className="telae-setting-rows">
+          {people.map(person => (
+            <li key={person.deviceId} className="telae-setting-row">
+              <div className="flex min-w-0 items-center gap-3">
+                <span aria-hidden="true" className="telae-avatar !h-9 !w-9 !text-xs" style={{ background: avatarTone(person.displayName) }}>{avatarInitial(person.displayName)}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-medium">{person.displayName}</p>
+                  <p className="truncate text-[13px] text-ink-3">@{person.friendCode}</p>
+                </div>
+              </div>
+              <button type="button" disabled={busy} onClick={() => onUnhide(person.friendCode)} className="telae-press btn btn-secondary btn-sm shrink-0">{t('Mostrar de novo')}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  )
+}
+
 /** Configurações em duas colunas: seções à esquerda, painel da seção à direita. */
-export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameError, version, account, onSignOut, onBack }: {
+export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameError, version, account, onSignOut, onBack, hiddenViewers = [], privacyBusy = false, privacyError, privacyMessage, onUnhide }: {
   name: string
   onNameChange: (value: string) => void
   onSaveName: () => void
@@ -146,6 +174,11 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
   account: AccountInfo | null
   onSignOut: () => void
   onBack: () => void
+  hiddenViewers?: DeviceSnapshot[]
+  privacyBusy?: boolean
+  privacyError?: string | null
+  privacyMessage?: string | null
+  onUnhide?: (username: string) => void
 }) {
   const [tab, setTab] = useState<Tab>('account')
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -257,6 +290,14 @@ export function SettingsScreen({ name, onNameChange, onSaveName, nameBusy, nameE
               </div>
             </Section>
           )}
+
+          {tab === 'privacy' && (account && onUnhide
+            ? <>
+                <HiddenViewers people={hiddenViewers} busy={privacyBusy} onUnhide={onUnhide} />
+                {privacyError && <p role="alert" className="mt-3 text-[13px] text-danger-soft">{privacyError}</p>}
+                {privacyMessage && !privacyError && <p role="status" className="mt-3 text-[13px] text-ok">{privacyMessage}</p>}
+              </>
+            : <p className="text-sm text-ink-3">{t('Entra na sua conta pra continuar.')}</p>)}
 
           {tab === 'security' && (account ? <AccountSecurity /> : <p className="text-sm text-ink-3">{t('Entra na sua conta pra continuar.')}</p>)}
 

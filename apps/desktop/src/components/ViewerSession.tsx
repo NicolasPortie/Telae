@@ -113,17 +113,6 @@ export function ViewerSession({ snapshot, videoRef, friends, stateLabel, busy, w
               <button type="button" onClick={onLeave} className="telae-press btn btn-secondary mt-6">
                 {t('Cancelar')}
               </button>
-              <div className="mt-5 flex justify-center">
-                <LiveFriendsSwitch
-                  friends={friends}
-                  currentSharerDeviceId={snapshot.session?.sharerDeviceId ?? null}
-                  pendingDeviceId={watchingDeviceId}
-                  disabled={busy || watchingDeviceId !== null}
-                  error={watchError}
-                  label={t('Trocar para')}
-                  onWatch={onWatch}
-                />
-              </div>
             </div>
           </div>
         )}

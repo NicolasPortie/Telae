@@ -5,7 +5,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AccountInfo, AppSettings, TelaeDesktopApi } from '../shared/contracts'
 import { SettingsScreen } from './SettingsScreen'
 
-const settings: AppSettings = { language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false }
+const settings: AppSettings = {
+  language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false,
+  shareAudienceMode: 'friends', shareSelectedUsernames: [],
+}
 const account: AccountInfo = { id: 'acc-1', username: 'ana', displayName: 'Ana', email: 'ana@example.com' }
 let api: Pick<TelaeDesktopApi, 'getSettings' | 'updateSettings' | 'getEnvironment' | 'setSignalingUrl'> & {
   auth: Pick<TelaeDesktopApi['auth'], 'changePassword' | 'deleteAccount'>
@@ -53,6 +56,31 @@ it('saves a new server address only when it changed', async () => {
   await userEvent.click(save)
   expect(api.setSignalingUrl).toHaveBeenCalledWith('https://meu-servidor.dev')
   expect(await screen.findByRole('status')).toHaveTextContent('Reinicia o Telaê')
+})
+
+it('lists who does not see my streams and shows them again', async () => {
+  const onUnhide = vi.fn()
+  const hidden = [{ deviceId: 'id-bia', displayName: 'Bia', friendCode: 'bia', status: 'online' as const, isSharing: false, activeQualityProfile: null }]
+  render(<SettingsScreen name="Ana" onNameChange={vi.fn()} onSaveName={vi.fn()} nameBusy={false} nameError={null} version="1.0.0" account={account}
+    onSignOut={vi.fn()} onBack={vi.fn()} hiddenViewers={hidden} onUnhide={onUnhide} />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Privacidade' }))
+  expect(screen.getByText('@bia')).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Mostrar de novo' }))
+  expect(onUnhide).toHaveBeenCalledWith('bia')
+})
+
+it('explains the privacy tab when nobody is hidden', async () => {
+  render(<SettingsScreen name="Ana" onNameChange={vi.fn()} onSaveName={vi.fn()} nameBusy={false} nameError={null} version="1.0.0" account={account}
+    onSignOut={vi.fn()} onBack={vi.fn()} hiddenViewers={[]} onUnhide={vi.fn()} />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Privacidade' }))
+  expect(screen.getByText(/Ninguém oculto/)).toBeInTheDocument()
+})
+
+it('shows a privacy failure where the unhide action was requested', async () => {
+  render(<SettingsScreen name="Ana" onNameChange={vi.fn()} onSaveName={vi.fn()} nameBusy={false} nameError={null} version="1.0.0" account={account}
+    onSignOut={vi.fn()} onBack={vi.fn()} onUnhide={vi.fn()} privacyError="Não deu pra mudar isso agora. Tenta de novo." />)
+  await userEvent.click(screen.getByRole('tab', { name: 'Privacidade' }))
+  expect(screen.getByRole('alert')).toHaveTextContent('Não deu pra mudar isso agora')
 })
 
 it('shows who is signed in and lets the user sign out', async () => {

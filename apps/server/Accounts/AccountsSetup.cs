@@ -51,6 +51,7 @@ public static class AccountsSetup
         services.AddScoped<TokenService>();
         services.AddScoped<AccountService>();
         services.AddScoped<FriendsService>();
+        services.AddScoped<HiddenViewersService>();
         services.AddHostedService<AccountMaintenance>();
 
         var smtp = configuration.GetSection("Smtp").Get<SmtpOptions>();
@@ -115,6 +116,15 @@ public static class AccountsSetup
 
         // Banco antigo deve ser atualizado ou removido explicitamente.
         await db.Database.EnsureCreatedAsync();
+        // Tabelas novas e independentes entram sem recriar o banco de desenvolvimento.
+        await db.Database.ExecuteSqlRawAsync("""
+            CREATE TABLE IF NOT EXISTS "HiddenViewers" (
+                "AccountId" TEXT NOT NULL, "HiddenId" TEXT NOT NULL, "CreatedAt" INTEGER NOT NULL,
+                CONSTRAINT "PK_HiddenViewers" PRIMARY KEY ("AccountId", "HiddenId"),
+                CONSTRAINT "FK_HiddenViewers_Accounts_AccountId" FOREIGN KEY ("AccountId") REFERENCES "Accounts" ("Id") ON DELETE CASCADE,
+                CONSTRAINT "FK_HiddenViewers_Accounts_HiddenId" FOREIGN KEY ("HiddenId") REFERENCES "Accounts" ("Id") ON DELETE CASCADE);
+            CREATE INDEX IF NOT EXISTS "IX_HiddenViewers_HiddenId" ON "HiddenViewers" ("HiddenId");
+            """);
         try
         {
             _ = await db.Accounts.AnyAsync();
@@ -122,6 +132,7 @@ public static class AccountsSetup
             _ = await db.PasswordAttempts.AnyAsync();
             _ = await db.Friendships.AnyAsync();
             _ = await db.DismissedRequests.AnyAsync();
+            _ = await db.HiddenViewers.AnyAsync();
             _ = await db.RefreshTokens.Select(token => token.SessionId).FirstOrDefaultAsync();
         }
         catch (Exception exception) when (exception is Microsoft.Data.Sqlite.SqliteException)

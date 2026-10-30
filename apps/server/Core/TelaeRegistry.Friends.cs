@@ -26,23 +26,8 @@ public sealed partial class TelaeRegistry
                     set.Remove(deviceId);
             }
 
-            var detached = new List<ViewerDetachment>();
-            if (_sessionsBySharer.TryGetValue(deviceId, out var own))
-            {
-                foreach (var viewerId in own.ViewerDeviceIds.ToArray())
-                {
-                    if (AreMutualFriendsLocked(deviceId, viewerId)) continue;
-                    own.ViewerDeviceIds.Remove(viewerId);
-                    detached.Add(new ViewerDetachment(own.SessionId, own.SharerDeviceId, viewerId));
-                }
-            }
-
-            var watching = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(deviceId));
-            if (watching is not null && !AreMutualFriendsLocked(deviceId, watching.SharerDeviceId))
-            {
-                watching.ViewerDeviceIds.Remove(deviceId);
-                detached.Add(new ViewerDetachment(watching.SessionId, watching.SharerDeviceId, deviceId));
-            }
+            // A amizade mudou: a regra de acesso decide quem continua assistindo.
+            var access = ReevaluateSessionsInvolvingLocked(deviceId);
 
             // Amizade mútua dispensa o pedido pendente (para os dois lados).
             foreach (var code in newSet)
@@ -68,7 +53,7 @@ public sealed partial class TelaeRegistry
                     requests.Add(other.DeviceId);
                 }
             }
-            return new DeclareFriendsResult(detached, requests);
+            return new DeclareFriendsResult(access.Detached, requests);
         }
     }
 

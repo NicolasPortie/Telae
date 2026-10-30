@@ -6,6 +6,13 @@ import type { DeviceSnapshot, SharePreviewEvent } from '../services/types'
 
 const REFRESH_INTERVAL_MS = 12_000
 
+function withoutPreview(previews: Record<string, SharePreviewEvent>, deviceId: string) {
+  if (!(deviceId in previews)) return previews
+  const next = { ...previews }
+  delete next[deviceId]
+  return next
+}
+
 /** Aviso do Windows quando um amigo começa a transmitir e o app não está em foco. */
 function notifyFriendLive(friend: DeviceSnapshot) {
   if (document.hasFocus() || typeof Notification === 'undefined') return
@@ -39,6 +46,8 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [pendingRemove, setPendingRemove] = useState<string | null>(null)
+  // Quem não vê as minhas transmissões (pode incluir quem já não é amigo).
+  const [hidden, setHidden] = useState<DeviceSnapshot[]>([])
   const friendsRef = useRef(friends)
   useEffect(() => { friendsRef.current = friends }, [friends])
 
@@ -54,6 +63,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
         const list = await controller.fetchFriendPreviews()
         setPreviews(Object.fromEntries(list.map(preview => [preview.deviceId, preview])))
       } catch { /* miniaturas são enfeite: a lista funciona sem elas */ }
+      try { setHidden(await controller.fetchHiddenViewers()) } catch { /* a lista de ocultos não bloqueia a home */ }
     } catch {
       // a lista de amigos não bloqueia a home
     }
@@ -70,13 +80,16 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
     const offPresence = controller.onPresenceChanged(device => {
       if (startedSharing(friendsRef.current, device)) notifyFriendLive(device)
       setFriends(list => upsertFriend(list, device))
+      // Quem deixou de transmitir (ou deixou de poder ser visto) leva a miniatura junto.
+      if (!device.isSharing) setPreviews(current => withoutPreview(current, device.deviceId))
     })
     // Pedido novo chega na hora; a busca confirma o estado atual no servidor.
     const offRequest = controller.onFriendRequest(() => {
       void controller.fetchFriendRequests().then(setRequests).catch(() => undefined)
     })
     const offPreview = controller.onSharePreview(preview => setPreviews(current => ({ ...current, [preview.deviceId]: preview })))
-    return () => { window.clearInterval(interval); offPresence(); offRequest(); offPreview() }
+    const offPreviewRemoved = controller.onSharePreviewRemoved(deviceId => setPreviews(current => withoutPreview(current, deviceId)))
+    return () => { window.clearInterval(interval); offPresence(); offRequest(); offPreview(); offPreviewRemoved() }
   }, [controller, desktopApiAvailable, online, refresh])
 
   const copyMyHandle = useCallback(async () => {
@@ -152,6 +165,27 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
     }
   }, [controller, desktopApiAvailable])
 
+  /** Esconde (ou volta a mostrar) minhas transmissões para alguém, sem desfazer a amizade e sem avisar. */
+  const setShareHidden = useCallback(async (username: string, hide: boolean) => {
+    if (!desktopApiAvailable) return
+    setBusy(true)
+    setError(null)
+    try {
+      if (hide) await controller.hideShares(username)
+      else await controller.unhideShares(username)
+      setHidden(await controller.fetchHiddenViewers())
+      const person = friendsRef.current.find(friend => friend.friendCode === username)
+      setSuccess(hide
+        ? t('{name} não vê mais suas transmissões.', { name: person?.displayName ?? `@${username}` })
+        : t('{name} volta a ver suas transmissões.', { name: person?.displayName ?? `@${username}` }))
+      window.setTimeout(() => setSuccess(null), 3000)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t('Não deu pra mudar isso agora. Tenta de novo.'))
+    } finally {
+      setBusy(false)
+    }
+  }, [controller, desktopApiAvailable])
+
   const closeAddForm = useCallback(() => {
     setAddOpen(false)
     setUsernameInput('')
@@ -163,6 +197,7 @@ export function useFriends({ controller, desktopApiAvailable, online }: Options)
     usernameInput, setUsernameInput, addOpen, setAddOpen, closeAddForm,
     busy, error, success, pendingRemove, setPendingRemove,
     copyMyHandle, add, dismissRequest, remove,
+    hidden, setShareHidden,
   }
 }
 

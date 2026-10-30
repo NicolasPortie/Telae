@@ -95,3 +95,13 @@ public sealed class PasswordAttempt
     public bool AppliesToPair { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+/// <summary>AccountId escolheu não deixar HiddenId ver as transmissões dele. A outra pessoa não é avisada.</summary>
+public sealed class HiddenViewer
+{
+    public Guid AccountId { get; set; }
+    public Account? Account { get; set; }
+    public Guid HiddenId { get; set; }
+    public Account? Hidden { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}

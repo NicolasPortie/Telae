@@ -147,6 +147,24 @@ namespace Telae.Server.Accounts.Migrations
                     b.ToTable("Friendships");
                 });
 
+            modelBuilder.Entity("Telae.Server.Accounts.HiddenViewer", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("HiddenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AccountId", "HiddenId");
+
+                    b.HasIndex("HiddenId");
+
+                    b.ToTable("HiddenViewers");
+                });
+
             modelBuilder.Entity("Telae.Server.Accounts.OneTimeCode", b =>
                 {
                     b.Property<Guid>("Id")
@@ -300,6 +318,25 @@ namespace Telae.Server.Accounts.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("Friend");
+                });
+
+            modelBuilder.Entity("Telae.Server.Accounts.HiddenViewer", b =>
+                {
+                    b.HasOne("Telae.Server.Accounts.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Telae.Server.Accounts.Account", "Hidden")
+                        .WithMany()
+                        .HasForeignKey("HiddenId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Hidden");
                 });
 
             modelBuilder.Entity("Telae.Server.Accounts.OneTimeCode", b =>

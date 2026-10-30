@@ -35,10 +35,29 @@ describe('privileged IPC boundary', () => {
     ['audio:start', [Infinity, 'id']], ['audio:start', [1, '-'.repeat(36)]],
     ['environment:set-signaling-url', ['x'.repeat(2049)]], ['settings:update', [{ launchAtLogin: 'yes' }]],
     ['settings:update', [{ unknown: true }]], ['auth:access-token', ['unexpected']], ['unknown', []],
+    ['settings:update', [{ shareAudienceMode: 'none' }]], ['settings:update', [{ shareAudienceMode: 1 }]],
+    ['settings:update', [{ shareSelectedUsernames: 'bia' }]], ['settings:update', [{ shareSelectedUsernames: [1] }]],
+    ['settings:update', [{ shareSelectedUsernames: Array.from({ length: 201 }, () => 'bia') }]],
+    ['settings:update', [{ shareSelectedUsernames: ['x'.repeat(33)] }]],
+    ['settings:update', [{ shareRequireApproval: true }]], ['settings:update', [{ sharePreview: true }]],
+    ['settings:update', [{ constructor: true }]], ['window:request-attention', []],
   ] as Array<[string, unknown[]]>)('rejects malformed %s arguments before invoking privileged work', (channel, args) => {
     const { handler, event, listener } = harness(channel)
     expect(() => handler(event, ...args)).toThrow()
     expect(listener).not.toHaveBeenCalled()
+  })
+})
+
+describe('settings and window requests the app really sends', () => {
+  it.each([
+    [{ language: 'en' }], [{ notifyFriendLive: false }], [{ launchAtLogin: true }],
+    // O que o app envia ao lembrar quem pode ver: todas as chaves de uma vez.
+    [{ shareAudienceMode: 'selected', shareSelectedUsernames: ['bia', 'caio'] }],
+    [{ shareAudienceMode: 'friends', shareSelectedUsernames: [] }],
+  ] as Array<[Record<string, unknown>]>)('lets settings:update through with %j', patch => {
+    const { handler, event, listener } = harness('settings:update')
+    expect(handler(event, patch)).toBe('secret')
+    expect(listener).toHaveBeenCalledOnce()
   })
 })
 

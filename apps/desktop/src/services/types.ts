@@ -7,6 +7,17 @@ export type DeviceSnapshot = {
   activeQualityProfile: string | null
 }
 
+/** Quem pode ver a transmissão. O servidor aplica a regra; o app só escolhe. */
+export type AudienceMode = 'friends' | 'selected'
+
+export type ShareAudience = {
+  mode: AudienceMode
+  /** @usuários escolhidos (sem @) quando o modo é `selected`. */
+  selected: string[]
+}
+
+export const DEFAULT_AUDIENCE: ShareAudience = { mode: 'friends', selected: [] }
+
 /** Miniatura da tela de um amigo que está transmitindo (JPEG em data URL). */
 export type SharePreviewEvent = {
   deviceId: string
@@ -33,7 +44,11 @@ export type IceServerDto = {
 export type ShareAccessResult = {
   session: ShareSessionSnapshot
   iceServers: IceServerDto[]
+  /** Só para quem transmite: o público como o servidor o entendeu. */
+  audience?: ShareAudience | null
 }
+
+export type AudienceUpdateResult = { session: ShareSessionSnapshot; audience: ShareAudience }
 
 export type IceCandidatePayload = {
   candidate: string

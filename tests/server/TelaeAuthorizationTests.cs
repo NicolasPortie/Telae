@@ -103,10 +103,14 @@ public sealed class TelaeAuthorizationTests
         registry.RegisterDevice("sharer", "Sharer", "sharer-connection", Secret);
         registry.RegisterDevice("viewer", "Viewer", "viewer-connection", Secret);
         registry.StartShare("sharer", "auto");
-        var error = Assert.Throws<TelaeDomainException>(() => registry.JoinShare("viewer", "sharer"));
-        Assert.Equal("invite_required", error.Code);
+        Assert.Equal("share_not_active", Assert.Throws<TelaeDomainException>(() => registry.JoinShare("viewer", "sharer")).Code);
+
+        registry.DeclareFriends("sharer", [registry.GetDevice("viewer")!.FriendCode]);
+        registry.DeclareFriends("viewer", [registry.GetDevice("sharer")!.FriendCode]);
+        // Ser amigo não basta para a reconexão direta: é preciso ter entrado pela lista de amigos.
+        Assert.Equal("invite_required", Assert.Throws<TelaeDomainException>(() => registry.JoinShare("viewer", "sharer")).Code);
         Assert.Empty(registry.GetActiveSessionForSharer("sharer")!.ViewerDeviceIds);
-        registry.JoinWithInvite("viewer", registry.CreateInvite("sharer").Code);
+        registry.JoinFriendShare("viewer", registry.GetDevice("sharer")!.FriendCode);
         Assert.Contains("viewer", registry.JoinShare("viewer", "sharer").ViewerDeviceIds);
         registry.LeaveShare("viewer");
         Assert.Equal("invite_required", Assert.Throws<TelaeDomainException>(() => registry.JoinShare("viewer", "sharer")).Code);
@@ -115,19 +119,15 @@ public sealed class TelaeAuthorizationTests
     [Fact]
     public void Viewers_can_join_reconnect_and_rejoin_beyond_twelve()
     {
-        var registry = new TelaeRegistry();
-        registry.RegisterDevice("sharer", "Sharer", "sharer-connection", Secret);
-        registry.StartShare("sharer", "auto");
-        var invite = registry.CreateInvite("sharer");
         const int viewerCount = 20;
+        var viewers = Enumerable.Range(0, viewerCount).Select(index => $"viewer{index}").ToArray();
+        var registry = TelaeRegistryTests.Friends(["sharer", .. viewers]);
+        registry.StartShare("id-sharer", "auto");
         for (var index = 0; index < viewerCount; index++)
-        {
-            registry.RegisterDevice($"viewer-{index}", "Viewer", $"connection-{index}", Secret);
-            Assert.Equal(index + 1, registry.JoinWithInvite($"viewer-{index}", invite.Code).ViewerDeviceIds.Count);
-        }
-        Assert.Equal(viewerCount, registry.JoinShare("viewer-19", "sharer").ViewerDeviceIds.Count);
-        registry.LeaveShare("viewer-0");
-        Assert.Equal(viewerCount, registry.JoinWithInvite("viewer-0", invite.Code).ViewerDeviceIds.Count);
+            Assert.Equal(index + 1, registry.JoinFriendShare($"id-{viewers[index]}", "sharer").Session.ViewerDeviceIds.Count);
+        Assert.Equal(viewerCount, registry.JoinShare("id-viewer19", "id-sharer").ViewerDeviceIds.Count);
+        registry.LeaveShare("id-viewer0");
+        Assert.Equal(viewerCount, registry.JoinFriendShare("id-viewer0", "sharer").Session.ViewerDeviceIds.Count);
     }
 
     [Fact]
@@ -178,22 +178,6 @@ public sealed class TelaeAuthorizationTests
     }
 
     [Fact]
-    public void Outstanding_invites_are_bounded_even_when_the_sharer_restarts_the_session()
-    {
-        var registry = new TelaeRegistry();
-        registry.RegisterDevice("sharer", "Sharer", "connection", Secret);
-        for (var index = 0; index < TelaeRegistry.MaxInvitesPerDevice; index++)
-        {
-            registry.StartShare("sharer", "auto");
-            registry.CreateInvite("sharer");
-            registry.StopShare("sharer");
-        }
-        registry.StartShare("sharer", "auto");
-
-        Assert.Equal("rate_limited", Assert.Throws<TelaeDomainException>(() => registry.CreateInvite("sharer")).Code);
-    }
-
-    [Fact]
     public void Forgetting_an_account_removes_its_connections_and_session_participation()
     {
         var registry = new TelaeRegistry();
@@ -202,7 +186,7 @@ public sealed class TelaeAuthorizationTests
         registry.DeclareFriends("ana", ["bia"]);
         registry.DeclareFriends("bia", ["ana"]);
         registry.StartShare("ana", "auto");
-        var session = registry.JoinWithInvite("bia", registry.CreateInvite("ana").Code);
+        var session = registry.JoinFriendShare("bia", "ana").Session;
 
         registry.ForgetAccount("bia");
         Assert.False(registry.IsRegisteredConnection("bia-connection"));
@@ -214,21 +198,18 @@ public sealed class TelaeAuthorizationTests
     }
 
     [Fact]
-    public void Account_invites_cannot_bypass_mutual_friendship_or_restore_an_unfriended_viewer()
+    public void A_removed_or_hidden_viewer_cannot_come_back_by_any_path()
     {
-        var registry = new TelaeRegistry();
-        registry.RegisterAccountDevice("ana", "ana", "Ana", "ana-connection");
-        registry.RegisterAccountDevice("bia", "bia", "Bia", "bia-connection");
-        registry.StartShare("ana", "auto");
-        var invite = registry.CreateInvite("ana");
+        var registry = TelaeRegistryTests.Friends("ana", "bia", "caio");
+        registry.StartShare("id-ana", "auto");
+        registry.JoinFriendShare("id-bia", "ana");
+        registry.RemoveViewer("id-ana", "id-bia");
+        Assert.Equal("share_not_active", Assert.Throws<TelaeDomainException>(() => registry.JoinFriendShare("id-bia", "ana")).Code);
+        Assert.Equal("share_not_active", Assert.Throws<TelaeDomainException>(() => registry.JoinShare("id-bia", "id-ana")).Code);
 
-        Assert.Equal("not_friends", Assert.Throws<TelaeDomainException>(() => registry.JoinWithInvite("bia", invite.Code)).Code);
-        registry.DeclareFriends("ana", ["bia"]);
-        registry.DeclareFriends("bia", ["ana"]);
-        registry.JoinWithInvite("bia", invite.Code);
-        registry.DeclareFriends("ana", []);
-        Assert.Equal("not_friends", Assert.Throws<TelaeDomainException>(() => registry.JoinWithInvite("bia", invite.Code)).Code);
-        Assert.Empty(registry.GetActiveSessionForSharer("ana")!.ViewerDeviceIds);
+        registry.SetHidden("id-ana", "id-caio", hidden: true);
+        Assert.Equal("share_not_active", Assert.Throws<TelaeDomainException>(() => registry.JoinFriendShare("id-caio", "ana")).Code);
+        Assert.Empty(registry.GetActiveSessionForSharer("id-ana")!.ViewerDeviceIds);
     }
 
     [Fact]

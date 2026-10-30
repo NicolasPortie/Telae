@@ -286,6 +286,7 @@ public sealed class FriendsHubTests : IAsyncLifetime
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => events.Reader.ReadAsync(timeout.Token).AsTask());
 
         await bia.InvokeAsync<DeviceSnapshot>("AddFriend", "ana");
+        Assert.True((await events.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).IsSharing);
         Assert.True((await FriendsOf(ana)).Single().IsSharing);
         await bia.InvokeAsync<ShareSessionSnapshot>("UpdateShareQuality", "1080p30");
         Assert.True((await events.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).IsSharing);

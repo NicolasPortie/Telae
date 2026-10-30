@@ -43,6 +43,10 @@ export type AppSettings = {
   notifyFriendLive: boolean
   /** Abre o Telaê minimizado ao iniciar o Windows. */
   launchAtLogin: boolean
+  /** Última escolha de quem pode ver, usada na próxima transmissão. */
+  shareAudienceMode: 'friends' | 'selected'
+  /** @usuários escolhidos (sem @) para o modo "Amigos escolhidos". */
+  shareSelectedUsernames: string[]
 }
 
 export type DesktopEnvironment = {

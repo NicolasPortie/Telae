@@ -1,7 +1,13 @@
 namespace Telae.Server.Core;
 
 public sealed record RegisterDeviceRequest(string DeviceId, string DisplayName, string DeviceSecret, string? Username = null);
-public sealed record StartShareRequest(string DeviceId, string QualityProfile);
+public sealed record StartShareRequest(string DeviceId, string QualityProfile, ShareAudienceDto? Audience = null);
+
+/// <summary>
+/// Quem pode ver a transmissão. <c>Mode</c>: <c>friends</c> (todos os amigos) ou <c>selected</c> (só os
+/// <c>@usuários</c> em <c>Selected</c>). A miniatura da tela aparece para o mesmo público.
+/// </summary>
+public sealed record ShareAudienceDto(string Mode, IReadOnlyList<string>? Selected = null);
 
 public sealed record DeviceSnapshot(
     string DeviceId,
@@ -23,7 +29,9 @@ public sealed record ShareSessionSnapshot(
 }
 
 public sealed record IceServerDto(string[] Urls, string? Username = null, string? Credential = null);
-public sealed record ShareAccessResult(ShareSessionSnapshot Session, IReadOnlyList<IceServerDto> IceServers);
+// Audience só vai para quem transmite: a lista de escolhidos nunca chega aos espectadores.
+public sealed record ShareAccessResult(ShareSessionSnapshot Session, IReadOnlyList<IceServerDto> IceServers, ShareAudienceDto? Audience = null);
+public sealed record AudienceUpdateResult(ShareSessionSnapshot Session, ShareAudienceDto Audience);
 
 public sealed record IceCandidatePayload(
     string Candidate,
@@ -36,8 +44,15 @@ public sealed record SignalingEnvelope(string SessionId, string FromDeviceId, Si
 public sealed record ViewerJoinedEvent(string SessionId, DeviceSnapshot Viewer);
 public sealed record ViewerLeftEvent(string SessionId, string ViewerDeviceId);
 public sealed record SharePreviewEvent(string DeviceId, string Image, DateTimeOffset CapturedAt);
-public sealed record InviteSnapshot(string Code, string SessionId, DateTimeOffset ExpiresAt);
-public sealed record InviteResult(InviteSnapshot Invite, ShareSessionSnapshot Session);
+
+/// <summary>Efeito de uma mudança de acesso: quem saiu da transmissão.</summary>
+public sealed record AccessChange(IReadOnlyList<ViewerDetachment> Detached)
+{
+    public static readonly AccessChange None = new([]);
+    public AccessChange Merge(AccessChange other) => new([.. Detached, .. other.Detached]);
+}
+public sealed record AudienceChange(ShareSessionSnapshot Session, ShareAudienceDto Audience, AccessChange Access, IReadOnlyList<string> PreviewRemovalConnectionIds);
+public sealed record HideChange(AccessChange Access, IReadOnlyList<string> PreviewRemovalConnectionIds);
 public sealed record PendingDisconnect(string? DeviceId, long Generation);
 public sealed record DisconnectResult(
     DeviceSnapshot? ChangedDevice,

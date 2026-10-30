@@ -6,7 +6,7 @@ namespace Telae.Server.Core;
 // Sessões de transmissão: iniciar, entrar, sair, remover espectador e qualidade.
 public sealed partial class TelaeRegistry
 {
-    public ShareSessionSnapshot StartShare(string deviceId, string qualityProfile)
+    public ShareSessionSnapshot StartShare(string deviceId, string qualityProfile, ShareAudienceDto? audience = null)
     {
         lock (_gate)
         {
@@ -20,7 +20,11 @@ public sealed partial class TelaeRegistry
                 Guid.NewGuid().ToString("N"),
                 deviceId,
                 NormalizeQualityProfile(qualityProfile),
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow)
+            {
+                // Sem escolha (clientes antigos), vale o padrão de sempre: todos os amigos, com prévia.
+                Audience = NormalizeAudienceLocked(deviceId, audience),
+            };
 
             _sessionsBySharer.Add(deviceId, session);
             return ToSessionSnapshot(session);
@@ -37,6 +41,7 @@ public sealed partial class TelaeRegistry
         }
     }
 
+    /// <summary>Volta para uma sessão em que o espectador já estava (reconexão).</summary>
     public ShareSessionSnapshot JoinShare(string viewerDeviceId, string sharerDeviceId)
     {
         if (string.IsNullOrWhiteSpace(sharerDeviceId) || sharerDeviceId.Length > 128)
@@ -45,21 +50,20 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(viewerDeviceId);
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
-                throw new TelaeDomainException("share_not_active", "Essa pessoa não está transmitindo agora.");
-            if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
+                throw ShareUnavailable();
+            if (!CanWatchLocked(viewerDeviceId, session))
+                throw ShareUnavailable();
             if (!session.ViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("invite_required", "Usa um código de convite pra entrar nessa transmissão.");
+                throw new TelaeDomainException("invite_required", "Entra pela lista de amigos pra assistir essa transmissão.");
             return AttachViewerLocked(viewerDeviceId, session);
         }
     }
 
     /// <summary>
-    /// Entrada por amizade. Exige amizade mútua (ambos declararam o outro em GetFriends).
-    /// Se o espectador já assiste outro amigo, a troca é feita aqui, atomicamente: nenhuma
-    /// mudança acontece se qualquer validação falhar.
+    /// Entrada por amizade. Exige amizade mútua e permissão para ver a transmissão. Se o espectador já
+    /// assiste outro amigo, a troca é feita aqui, atomicamente:
+    /// nenhuma mudança acontece se qualquer validação falhar.
     /// </summary>
-
     public FriendJoinResult JoinFriendShare(string viewerDeviceId, string friendCode)
     {
         var normalized = NormalizeFriendCode(friendCode);
@@ -74,43 +78,41 @@ public sealed partial class TelaeRegistry
             if (!AreMutualFriendsLocked(viewerDeviceId, sharerDeviceId))
                 throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos pra assistir.");
             if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var target))
-                throw new TelaeDomainException("share_not_active", "Seu amigo não está transmitindo agora.");
+                throw ShareUnavailable();
+            if (!CanWatchLocked(viewerDeviceId, target))
+                throw ShareUnavailable();
             RequireOnlineDevice(sharerDeviceId);
-            if (target.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-                throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
-            if (_sessionsBySharer.ContainsKey(viewerDeviceId))
-                throw new TelaeDomainException("share_already_active", "Para de transmitir antes de assistir a uma transmissão.");
-
-            var current = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(viewerDeviceId));
-            if (ReferenceEquals(current, target))
-                throw new TelaeDomainException("already_watching", "Você já está assistindo essa transmissão.");
-
-            ViewerDetachment? detached = null;
-            if (current is not null)
-            {
-                current.ViewerDeviceIds.Remove(viewerDeviceId);
-                detached = new ViewerDetachment(current.SessionId, current.SharerDeviceId, viewerDeviceId);
-            }
-            target.ViewerDeviceIds.Add(viewerDeviceId);
-            return new FriendJoinResult(ToSessionSnapshot(target), detached);
+            return AttachWithSwitchLocked(viewerDeviceId, target);
         }
     }
 
-    /// <summary>
-    /// Registra a lista de amigos declarada pelo dispositivo. Quando a amizade mútua deixa de
-    /// valer para uma transmissão em andamento, o espectador é removido e a lista de saídas é
-    /// devolvida para o hub notificar as duas partes.
-    /// </summary>
+    /// <summary>Coloca o espectador na sessão, saindo da que ele assiste agora (se houver).</summary>
+    private FriendJoinResult AttachWithSwitchLocked(string viewerDeviceId, ShareSessionRecord target)
+    {
+        if (_sessionsBySharer.ContainsKey(viewerDeviceId))
+            throw new TelaeDomainException("share_already_active", "Para de transmitir antes de assistir a uma transmissão.");
+
+        var current = _sessionsBySharer.Values.FirstOrDefault(s => s.ViewerDeviceIds.Contains(viewerDeviceId));
+        if (ReferenceEquals(current, target))
+            throw new TelaeDomainException("already_watching", "Você já está assistindo essa transmissão.");
+
+        ViewerDetachment? detached = null;
+        if (current is not null)
+        {
+            current.ViewerDeviceIds.Remove(viewerDeviceId);
+            detached = new ViewerDetachment(current.SessionId, current.SharerDeviceId, viewerDeviceId);
+        }
+        target.ViewerDeviceIds.Add(viewerDeviceId);
+        return new FriendJoinResult(ToSessionSnapshot(target), detached);
+    }
 
     private ShareSessionSnapshot AttachViewerLocked(string viewerDeviceId, ShareSessionRecord session)
     {
-        if (session.BlockedViewerDeviceIds.Contains(viewerDeviceId))
-            throw new TelaeDomainException("viewer_removed", "Você foi removido dessa transmissão.");
         RequireOnlineDevice(session.SharerDeviceId);
         if (viewerDeviceId == session.SharerDeviceId)
             throw new TelaeDomainException("cannot_view_own_share", "Você não pode assistir à sua própria transmissão.");
-        if (_profiles[session.SharerDeviceId].DeviceSecretHash is null && !AreMutualFriendsLocked(viewerDeviceId, session.SharerDeviceId))
-            throw new TelaeDomainException("not_friends", "Vocês precisam se adicionar como amigos pra assistir.");
+        if (!CanWatchLocked(viewerDeviceId, session))
+            throw ShareUnavailable();
         if (_sessionsBySharer.ContainsKey(viewerDeviceId))
             throw new TelaeDomainException("share_already_active", "Para de transmitir antes de assistir a uma transmissão.");
         if (_sessionsBySharer.Values.Any(s => s != session && s.ViewerDeviceIds.Contains(viewerDeviceId)))
@@ -123,13 +125,18 @@ public sealed partial class TelaeRegistry
     {
         lock (_gate)
         {
-            if (!_sessionsBySharer.Remove(sharerDeviceId, out var session))
+            if (!_sessionsBySharer.TryGetValue(sharerDeviceId, out var session))
                 throw new TelaeDomainException("share_not_active", "Você não está transmitindo agora.");
-            // Os convites da sessão terminada são mantidos de propósito: entrar com
-            // eles deve responder share_not_active ("transmissão já terminou") em vez
-            // de invite_invalid. Eles saem por expiração no próximo CreateInvite.
+            EndSessionLocked(session);
             return ToSessionSnapshot(session);
         }
+    }
+
+    /// <summary>Tira a sessão do ar e apaga a última miniatura.</summary>
+    private void EndSessionLocked(ShareSessionRecord session)
+    {
+        _sessionsBySharer.Remove(session.SharerDeviceId);
+        session.Preview = null;
     }
 
     public ShareSessionSnapshot RemoveViewer(string sharerDeviceId, string viewerDeviceId)

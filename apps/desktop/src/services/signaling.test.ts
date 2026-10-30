@@ -44,3 +44,25 @@ it('adds and removes friends by username through the hub', async () => {
   await client.removeFriend('bia')
   expect(hub.invoke).toHaveBeenLastCalledWith('RemoveFriend', 'bia')
 })
+
+it('sends the audience with the share and calls the hide methods by name', async () => {
+  const client = new SignalingClient('http://localhost')
+  await client.connect('device', 'Ana')
+  const audience = { mode: 'selected' as const, selected: ['bia'] }
+  await client.startShare('1080p30', audience)
+  expect(hub.invoke).toHaveBeenLastCalledWith('StartShare', { deviceId: 'device', qualityProfile: '1080p30', audience })
+  await client.updateShareAudience(audience)
+  expect(hub.invoke).toHaveBeenLastCalledWith('UpdateShareAudience', audience)
+  await client.hideShares('bia')
+  expect(hub.invoke).toHaveBeenLastCalledWith('HideShares', 'bia')
+  await client.unhideShares('bia')
+  expect(hub.invoke).toHaveBeenLastCalledWith('UnhideShares', 'bia')
+})
+
+it('forwards the preview removal event from the hub', () => {
+  const client = new SignalingClient('http://localhost')
+  const seen: string[] = []
+  client.on('sharePreviewRemoved', deviceId => seen.push(deviceId))
+  hub.handlers.get('SharePreviewRemoved')!('ana')
+  expect(seen).toEqual(['ana'])
+})

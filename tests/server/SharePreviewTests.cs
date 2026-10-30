@@ -129,9 +129,10 @@ public sealed class SharePreviewTests
         Assert.Equal("invalid_preview", Assert.Throws<TelaeDomainException>(() => registry.SetSharePreview("id-ana", image)).Code);
     }
 
-    private sealed class PreviewClock : TimeProvider
+    internal sealed class PreviewClock : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
         public override DateTimeOffset GetUtcNow() => Now;
+        public void Advance(TimeSpan by) => Now += by;
     }
 }

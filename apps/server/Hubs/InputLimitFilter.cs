@@ -7,9 +7,11 @@ using Telae.Server.Core;
 namespace Telae.Server.Hubs;
 
 // O endereço já passou pela validação dos proxies confiáveis.
-public sealed class InputLimitFilter : IHubFilter, IDisposable
+public sealed class InputLimitFilter(IConfiguration? configuration = null) : IHubFilter, IDisposable
 {
-    private readonly PartitionedRateLimiter<string> _registration = Create(30);
+    // Padrão de 30 registros por minuto por endereço. Os testes de ponta a ponta sobem vários apps do mesmo
+    // IP e aumentam o teto (Hub__RegistrationsPerMinute); em produção ele não deve ser mexido.
+    private readonly PartitionedRateLimiter<string> _registration = Create(Math.Clamp(configuration?.GetValue<int?>("Hub:RegistrationsPerMinute") ?? 30, 1, 10_000));
     private readonly PartitionedRateLimiter<string> _commands = Create(120);
     private readonly PartitionedRateLimiter<string> _signals = Create(1200);
     // Sessões conferidas no banco há pouco: evita uma consulta por candidato ICE. A revogação não espera

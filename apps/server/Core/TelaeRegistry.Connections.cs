@@ -63,9 +63,10 @@ public sealed partial class TelaeRegistry
             ShareSessionSnapshot? ended = null;
             ShareSessionSnapshot? viewerLeft = null;
             string? viewerLeftDeviceId = null;
-            if (_sessionsBySharer.Remove(deviceId, out var sharerSession))
+            if (_sessionsBySharer.TryGetValue(deviceId, out var sharerSession))
             {
                 ended = ToSessionSnapshot(sharerSession);
+                EndSessionLocked(sharerSession);
             }
             else
             {

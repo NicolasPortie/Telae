@@ -76,14 +76,4 @@ public sealed partial class TelaeRegistry
             throw new TelaeDomainException("invalid_friend_code", "Esse @ não parece certo. Usa de 3 a 20 letras, números ou _.");
         return normalized;
     }
-
-    private static string NormalizeInviteCode(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || value.Length > 32)
-            throw new TelaeDomainException("invalid_friend_code", "Esse convite não existe. Confere o código e tenta de novo.");
-        var normalized = value.Trim().Replace("-", "").ToUpperInvariant();
-        if (normalized.Length is not (6 or 8) || !normalized.All(char.IsAsciiLetterOrDigit))
-            throw new TelaeDomainException("invalid_friend_code", "Esse convite não existe. Confere o código e tenta de novo.");
-        return normalized;
-    }
 }

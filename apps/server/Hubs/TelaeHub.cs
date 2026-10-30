@@ -25,6 +25,10 @@ public sealed class TelaeHub(
                 ? await accounts.FindActiveAsync(id, Context.ConnectionAborted)
                 : null;
             if (account is null) throw new TelaeDomainException("session_expired", "Sua sessão acabou. Entra de novo.");
+            // A lista de ocultos vem antes da presença: ninguém oculto chega a ver uma transmissão retomada.
+            if (services.GetService<HiddenViewersService>() is { } hidden)
+                registry.InitializeHiddenViewers(account.Id.ToString(),
+                    (await hidden.ListIdsAsync(account.Id, Context.ConnectionAborted)).Select(id => id.ToString()));
             return await presence.RegisterAsync(
                 new RegisterDeviceRequest(account.Id.ToString(), account.DisplayName, "", account.Username), Context.ConnectionId,
                 authenticatedAccount: true, sessionId: Context.User.FindFirstValue(TokenService.SessionIdClaim),
@@ -44,8 +48,16 @@ public sealed class TelaeHub(
     private FriendsService Friends() =>
         services.GetService<FriendsService>() ?? throw new TelaeDomainException("accounts_unavailable", "Esse servidor não oferece contas.");
 
+    private Guid RequireAccount() =>
+        AuthenticatedAccountId() ?? throw new TelaeDomainException("login_required", "Entra na sua conta pra continuar.");
+
+    private HiddenViewersService Hidden() =>
+        services.GetService<HiddenViewersService>() ?? throw new TelaeDomainException("accounts_unavailable", "Esse servidor não oferece contas.");
+
     private static TelaeDomainException FriendFailure(AccountException error) => error.Code switch
     {
+        "cannot_hide_self" => new TelaeDomainException("cannot_hide_self", "Você não pode se ocultar."),
+        "too_many_hidden" => new TelaeDomainException("too_many_hidden", "Dá pra ocultar até 200 pessoas."),
         "friend_not_found" => new TelaeDomainException("friend_not_found", "Não deu pra achar ninguém com esse @. Confere e tenta de novo."),
         "cannot_add_self" => new TelaeDomainException("cannot_add_self", "Você não pode se adicionar."),
         "already_friends" => new TelaeDomainException("already_friends", "Esse amigo já está na sua lista."),
@@ -87,21 +99,15 @@ public sealed class TelaeHub(
             throw new TelaeDomainException("invalid_friend_list", "A lista de amigos pode ter até 200 pessoas.");
         // Quem deixou de ser amigo (de qualquer um dos lados) sai da transmissão em andamento.
         var declared = await presence.DeclareFriendsAsync(Context.ConnectionId, friendCodes);
-        foreach (var detachment in declared.Detached)
-        {
-            await NotifyAsync(detachment.ViewerDeviceId, "SessionEnded", detachment.SessionId);
-            await NotifyAsync(detachment.SharerDeviceId, "ViewerLeft",
-                new ViewerLeftEvent(detachment.SessionId, detachment.ViewerDeviceId));
-        }
         // Contas só avisam o alvo quando o pedido é feito (AddFriend); reconectar não repete o aviso.
         if (account is null)
         {
             var requester = registry.GetDevice(deviceId);
             if (requester is not null)
                 foreach (var targetId in declared.NewRequestDeviceIds)
-                    await NotifyAsync(targetId, "FriendRequestReceived", registry.ForObserver(targetId, requester));
+                    await presence.NotifyAsync(targetId, "FriendRequestReceived", registry.ForObserver(targetId, requester));
         }
-        return registry.GetDevicesByFriendCodes(friendCodes).Select(friend => registry.ForObserver(deviceId, friend)).ToArray();
+        return registry.GetFriendsForObserver(deviceId, friendCodes);
     }
 
     /// <summary>Adiciona um amigo pelo @usuário (só contas) e avisa quem foi adicionado, se estiver online.</summary>
@@ -118,7 +124,7 @@ public sealed class TelaeHub(
         // Se a outra pessoa já tinha adicionado de volta, é amizade mútua e não há pedido a avisar.
         var requester = registry.GetDevice(deviceId);
         if (requester is not null && !registry.AreMutualFriends(deviceId, friend.Id.ToString()))
-            await NotifyAsync(friend.Id.ToString(), "FriendRequestReceived", registry.ForObserver(friend.Id.ToString(), requester));
+            await presence.NotifyAsync(friend.Id.ToString(), "FriendRequestReceived", registry.ForObserver(friend.Id.ToString(), requester));
         return registry.ForObserver(deviceId, snapshot);
     }
 
@@ -156,9 +162,21 @@ public sealed class TelaeHub(
     {
         if (request is null) throw new TelaeDomainException("invalid_request", "Não deu pra iniciar a transmissão. Tenta de novo.");
         EnsureCallerMatches(request.DeviceId);
-        var session = registry.StartShare(request.DeviceId, request.QualityProfile);
+        var session = registry.StartShare(request.DeviceId, request.QualityProfile, request.Audience);
         await presence.PublishAsync(registry.GetDevice(request.DeviceId)!);
-        return new ShareAccessResult(session, GetIceServers(request.DeviceId));
+        return new ShareAccessResult(session, GetIceServers(request.DeviceId), registry.GetShareAudience(request.DeviceId));
+    }
+
+    /// <summary>Muda quem pode ver a transmissão em andamento. Quem ficou de fora sai e descarta a prévia.</summary>
+    public async Task<AudienceUpdateResult> UpdateShareAudience(ShareAudienceDto audience)
+    {
+        if (audience is null) throw new TelaeDomainException("invalid_audience", "Não deu pra entender quem pode ver. Escolhe de novo.");
+        var sharerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var change = registry.UpdateShareAudience(sharerDeviceId, audience);
+        await presence.ApplyAccessChangeAsync(change.Access);
+        await presence.RemovePreviewAsync(sharerDeviceId, change.PreviewRemovalConnectionIds);
+        await presence.PublishAsync(registry.GetDevice(sharerDeviceId)!);
+        return new AudienceUpdateResult(change.Session, change.Audience);
     }
 
     /// <summary>Miniatura da tela de quem transmite, repassada aos amigos mútuos online.</summary>
@@ -200,12 +218,10 @@ public sealed class TelaeHub(
     public async Task<ShareSessionSnapshot> RemoveViewer(string viewerDeviceId)
     {
         var session = await presence.RemoveViewerAsync(Context.ConnectionId, viewerDeviceId);
-        try
-        {
-            await Clients.Client(registry.GetConnectionId(viewerDeviceId)).SendAsync("SessionEnded", session.SessionId);
-        }
-        catch (TelaeDomainException) { }
-        await Clients.Caller.SendAsync("ViewerLeft", new ViewerLeftEvent(session.SessionId, viewerDeviceId));
+        await presence.ApplyAccessChangeAsync(new AccessChange([
+            new ViewerDetachment(session.SessionId, session.SharerDeviceId, viewerDeviceId)]));
+        await presence.NotifyAsync(viewerDeviceId, "SharePreviewRemoved", session.SharerDeviceId);
+        await presence.PublishAsync(registry.GetDevice(session.SharerDeviceId)!);
         return session;
     }
 
@@ -225,20 +241,43 @@ public sealed class TelaeHub(
         return session;
     }
 
-    public Task<InviteSnapshot> CreateInvite()
+    /// <summary>Quem não vê as transmissões desta conta.</summary>
+    public async Task<IReadOnlyList<DeviceSnapshot>> GetHiddenViewers()
     {
-        var sharerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        return Task.FromResult(registry.CreateInvite(sharerDeviceId));
+        var account = RequireAccount();
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        var hidden = await Hidden().ListAsync(account, Context.ConnectionAborted);
+        return hidden.Select(person => registry.ForObserver(deviceId, ProfileOf(person))).ToArray();
     }
 
-    public async Task<ShareAccessResult> JoinWithInvite(string inviteCode)
+    /// <summary>Para de mostrar as transmissões a alguém, sem desfazer a amizade e sem avisar a pessoa.</summary>
+    public async Task<DeviceSnapshot> HideShares(string username)
     {
-        var viewerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
-        var session = registry.JoinWithInvite(viewerDeviceId, inviteCode);
-        await Clients.Client(registry.GetConnectionId(session.SharerDeviceId)).SendAsync(
-            "ViewerJoined",
-            new ViewerJoinedEvent(session.SessionId, registry.GetDevice(viewerDeviceId)!));
-        return new ShareAccessResult(session, GetIceServers(viewerDeviceId));
+        var account = RequireAccount();
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        FriendAccount person;
+        try { person = await Hidden().HideAsync(account, username, Context.ConnectionAborted,
+            person => ApplyHideAsync(deviceId, person.Id.ToString(), hidden: true)); }
+        catch (AccountException error) { throw FriendFailure(error); }
+        var snapshot = ProfileOf(person);
+        return registry.ForObserver(deviceId, snapshot);
+    }
+
+    public async Task UnhideShares(string username)
+    {
+        var account = RequireAccount();
+        var deviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
+        try { await Hidden().UnhideAsync(account, username, Context.ConnectionAborted,
+            person => ApplyHideAsync(deviceId, person.Id.ToString(), hidden: false)); }
+        catch (AccountException error) { throw FriendFailure(error); }
+    }
+
+    private async Task ApplyHideAsync(string ownerDeviceId, string viewerDeviceId, bool hidden)
+    {
+        var change = registry.SetHidden(ownerDeviceId, viewerDeviceId, hidden);
+        await presence.ApplyAccessChangeAsync(change.Access);
+        await presence.RemovePreviewAsync(ownerDeviceId, change.PreviewRemovalConnectionIds);
+        if (registry.GetDevice(ownerDeviceId) is { } owner) await presence.PublishAsync(owner);
     }
 
     public Task<IReadOnlyList<IceServerDto>> GetTurnCredentials()
@@ -261,12 +300,11 @@ public sealed class TelaeHub(
     {
         var viewerDeviceId = registry.GetDeviceIdForConnection(Context.ConnectionId);
         var result = registry.JoinFriendShare(viewerDeviceId, friendCode);
-        // A troca já foi aplicada no registro: as notificações não podem lançar exceção aqui.
         if (result.Detached is { } detached)
-            await NotifyAsync(detached.SharerDeviceId, "ViewerLeft",
+            await presence.NotifyAsync(detached.SharerDeviceId, "ViewerLeft",
                 new ViewerLeftEvent(detached.SessionId, detached.ViewerDeviceId));
-        await NotifyAsync(result.Session.SharerDeviceId, "ViewerJoined",
-            new ViewerJoinedEvent(result.Session.SessionId, registry.GetDevice(viewerDeviceId)!));
+        await presence.NotifyAsync(result.Session.SharerDeviceId, "ViewerJoined",
+            new ViewerJoinedEvent(result.Session.SessionId, registry.ForObserver(result.Session.SharerDeviceId, registry.GetDevice(viewerDeviceId)!)));
         return new ShareAccessResult(result.Session, GetIceServers(viewerDeviceId));
     }
 
@@ -315,13 +353,6 @@ public sealed class TelaeHub(
         var (username, password) = TurnCredentialIssuer.Issue(
             turn.Secret, deviceId, DateTimeOffset.UtcNow, turn.TtlSeconds);
         return [.. servers, new IceServerDto(turn.Urls, username, password)];
-    }
-
-    private async Task NotifyAsync(string deviceId, string method, object payload)
-    {
-        var connectionId = registry.FindConnectionId(deviceId);
-        if (connectionId is not null)
-            await Clients.Client(connectionId).SendAsync(method, payload);
     }
 
     private void EnsureCallerMatches(string deviceId)

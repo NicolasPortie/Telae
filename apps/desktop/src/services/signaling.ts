@@ -5,9 +5,11 @@ import {
   type HubConnection,
 } from '@microsoft/signalr'
 import type {
+  AudienceUpdateResult,
   ConnectionStatus,
   DeviceSnapshot,
   IceServerDto,
+  ShareAudience,
   QualityProfile,
   ShareAccessResult,
   SharePreviewEvent,
@@ -27,6 +29,7 @@ type Events = {
   sessionEnded: (sessionId: string) => void
   shareQualityChanged: (session: ShareSessionSnapshot) => void
   connectionChanged: (status: ConnectionStatus) => void
+  sharePreviewRemoved: (deviceId: string) => void
 }
 
 export class SignalingClient {
@@ -53,6 +56,7 @@ export class SignalingClient {
     this.connection.on('SignalReceived', (envelope: SignalingEnvelope) => this.emit('signalReceived', envelope))
     this.connection.on('ShareQualityChanged', (session: ShareSessionSnapshot) => this.emit('shareQualityChanged', session))
     this.connection.on('SessionEnded', (sessionId: string) => this.emit('sessionEnded', sessionId))
+    this.connection.on('SharePreviewRemoved', (deviceId: string) => this.emit('sharePreviewRemoved', deviceId))
 
     this.connection.onreconnecting(() => this.emit('connectionChanged', 'reconnecting'))
     this.connection.onreconnected(async () => {
@@ -127,11 +131,28 @@ export class SignalingClient {
     return this.connection.invoke<ShareAccessResult>('JoinFriendShare', friendCode)
   }
 
-  startShare(qualityProfile: QualityProfile) {
+  startShare(qualityProfile: QualityProfile, audience: ShareAudience) {
     return this.connection.invoke<ShareAccessResult>('StartShare', {
       deviceId: this.deviceId,
       qualityProfile,
+      audience,
     })
+  }
+
+  updateShareAudience(audience: ShareAudience) {
+    return this.connection.invoke<AudienceUpdateResult>('UpdateShareAudience', audience)
+  }
+
+  getHiddenViewers() {
+    return this.connection.invoke<DeviceSnapshot[]>('GetHiddenViewers')
+  }
+
+  hideShares(username: string) {
+    return this.connection.invoke<DeviceSnapshot>('HideShares', username)
+  }
+
+  unhideShares(username: string) {
+    return this.connection.invoke('UnhideShares', username)
   }
 
   updateShareQuality(qualityProfile: QualityProfile) {

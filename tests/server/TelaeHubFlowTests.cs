@@ -73,6 +73,9 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         }
     }
 
+    private readonly Dictionary<string, string> _friendCodes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, HashSet<string>> _declared = new(StringComparer.Ordinal);
+
     private async Task<HubConnection> ConnectAsync(string deviceId, string displayName)
     {
         var connection = new HubConnectionBuilder()
@@ -80,8 +83,24 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
             .Build();
         _connections.Add(connection);
         await connection.StartAsync();
-        await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest(deviceId, displayName, new string('a', 64)));
+        var device = await connection.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest(deviceId, displayName, new string('a', 64)));
+        _friendCodes[deviceId] = device.FriendCode;
         return connection;
+    }
+
+    /// <summary>Torna os dois amigos mútuos e coloca o espectador na transmissão pela lista de amigos.</summary>
+    private async Task<ShareAccessResult> JoinAsFriendAsync(HubConnection sharer, string sharerId, HubConnection viewer, string viewerId)
+    {
+        await DeclareFriendAsync(sharer, sharerId, viewerId);
+        await DeclareFriendAsync(viewer, viewerId, sharerId);
+        return await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", _friendCodes[sharerId]);
+    }
+
+    private async Task DeclareFriendAsync(HubConnection connection, string deviceId, string friendId)
+    {
+        if (!_declared.TryGetValue(deviceId, out var set)) _declared[deviceId] = set = new HashSet<string>(StringComparer.Ordinal);
+        set.Add(friendId);
+        await connection.InvokeAsync<DeviceSnapshot[]>("GetFriends", set.Select(id => _friendCodes[id]).ToArray());
     }
 
     private static Task<T> WaitForAsync<T>(TaskCompletionSource<T> source, string what, int timeoutMs = 10000)
@@ -130,6 +149,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var device = await sharer.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("sharer", "Sharer", new string('a', 64)));
         await friend.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { device.FriendCode });
         await sharer.InvokeAsync<DeviceSnapshot[]>("GetFriends", new[] { _app!.Services.GetRequiredService<TelaeRegistry>().GetDevice("friend")!.FriendCode });
+        Assert.Equal("online", (await NextPresence(subscribedEvents)).Status);
         // Lookup alone does not subscribe.
         await stranger.InvokeAsync<DeviceSnapshot>("LookupFriend", device.FriendCode);
         await sharer.InvokeAsync<DeviceSnapshot>("RegisterDevice", new RegisterDeviceRequest("sharer", "Renamed", new string('a', 64)));
@@ -187,13 +207,12 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Removal_revokes_invites_signaling_and_reconnection_until_a_new_session()
+    public async Task Removal_revokes_entry_signaling_and_reconnection_until_a_new_session()
     {
         var sharer = await ConnectAsync("sharer", "Sharer");
         var viewer = await ConnectAsync("viewer", "Viewer");
         var access = await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("sharer", "auto"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        await JoinAsFriendAsync(sharer, "sharer", viewer, "viewer");
         var ended = new TaskCompletionSource<string>();
         var left = new TaskCompletionSource<ViewerLeftEvent>();
         viewer.On<string>("SessionEnded", id => ended.TrySetResult(id));
@@ -202,22 +221,17 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         Assert.Empty(removed.ViewerDeviceIds);
         Assert.Equal(access.Session.SessionId, await WaitForAsync(ended, "removed"));
         Assert.Equal("viewer", (await WaitForAsync(left, "left")).ViewerDeviceId);
-        var newInvite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        foreach (var code in new[] { invite.Code, newInvite.Code })
-        {
-            var error = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", code));
-            Assert.Contains("removido", error.Message);
-        }
+        var error = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", _friendCodes["sharer"]));
+        Assert.Contains("não está transmitindo", error.Message);
         await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinShare", "sharer"));
         await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync("SendSignal", "sharer",
             new SignalingEnvelope(access.Session.SessionId, "viewer", new SignalingPayload("offer", "x"))));
         await viewer.StopAsync();
         viewer = await ConnectAsync("viewer", "Viewer");
-        await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code));
+        await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", _friendCodes["sharer"]));
         await sharer.InvokeAsync("StopShare");
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("sharer", "auto"));
-        var nextInvite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        Assert.Contains("viewer", (await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", nextInvite.Code)).Session.ViewerDeviceIds);
+        Assert.Contains("viewer", (await viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", _friendCodes["sharer"])).Session.ViewerDeviceIds);
     }
 
     [Fact]
@@ -227,8 +241,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var viewer = await ConnectAsync("viewer", "Viewer");
         var stranger = await ConnectAsync("stranger", "Stranger");
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("sharer", "auto"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        await JoinAsFriendAsync(sharer, "sharer", viewer, "viewer");
         foreach (var caller in new[] { viewer, stranger })
         {
             await Assert.ThrowsAsync<HubException>(() => caller.InvokeAsync<ShareSessionSnapshot>("RemoveViewer", "viewer"));
@@ -358,7 +371,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var attacker = await ConnectAsync("device-attacker", "Attacker");
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
         var joinError = await Assert.ThrowsAsync<HubException>(() => attacker.InvokeAsync<ShareAccessResult>("JoinShare", "device-sharer"));
-        Assert.Contains("convite", joinError.Message);
+        Assert.Contains("não está transmitindo", joinError.Message);
         var unregistered = new HubConnectionBuilder().WithUrl($"{_baseUrl}/hubs/telae").Build();
         _connections.Add(unregistered);
         await unregistered.StartAsync();
@@ -369,7 +382,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Two_clients_complete_invite_offer_answer_and_trickle_ice()
+    public async Task Two_clients_complete_friend_join_offer_answer_and_trickle_ice()
     {
         var sharer = await ConnectAsync("device-sharer", "Sharer");
         var viewer = await ConnectAsync("device-viewer", "Viewer");
@@ -391,10 +404,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var access = await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "1080p60"));
         Assert.NotEmpty(access.IceServers);
 
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        Assert.Equal(8, invite.Code.Length);
-
-        var join = await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        var join = await JoinAsFriendAsync(sharer, "device-sharer", viewer, "device-viewer");
         Assert.Equal(access.Session.SessionId, join.Session.SessionId);
 
         var joined = await WaitForAsync(viewerJoined, "ViewerJoined");
@@ -438,7 +448,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Viewer_leave_notifies_sharer_and_invite_remains_reusable()
+    public async Task Viewer_leave_notifies_sharer_and_others_can_still_join()
     {
         var sharer = await ConnectAsync("device-sharer", "Sharer");
         var viewer = await ConnectAsync("device-viewer", "Viewer");
@@ -448,14 +458,13 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         sharer.On<ViewerLeftEvent>("ViewerLeft", eventData => viewerLeft.TrySetResult(eventData));
 
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        var join = await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        var join = await JoinAsFriendAsync(sharer, "device-sharer", viewer, "device-viewer");
 
         await viewer.InvokeAsync("LeaveShare");
         var left = await WaitForAsync(viewerLeft, "ViewerLeft");
         Assert.Equal(join.Session.SessionId, left.SessionId);
         Assert.Equal("device-viewer", left.ViewerDeviceId);
-        var secondJoin = await intruder.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        var secondJoin = await JoinAsFriendAsync(sharer, "device-sharer", intruder, "device-intruder");
         Assert.Contains("device-intruder", secondJoin.Session.ViewerDeviceIds);
     }
 
@@ -469,8 +478,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         viewer.On<string>("SessionEnded", sessionId => sessionEnded.TrySetResult(sessionId));
 
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "720p60"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        var join = await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        var join = await JoinAsFriendAsync(sharer, "device-sharer", viewer, "device-viewer");
 
         await sharer.StopAsync();
         Assert.Equal(join.Session.SessionId, await WaitForAsync(sessionEnded, "SessionEnded"));
@@ -483,8 +491,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var viewer = await ConnectAsync("device-viewer", "Viewer");
 
         var access = await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        await JoinAsFriendAsync(sharer, "device-sharer", viewer, "device-viewer");
 
         await sharer.StopAsync();
         var reconnectedSharer = await ConnectAsync("device-sharer", "Sharer");
@@ -502,13 +509,17 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Unknown_invite_is_rejected_with_specific_message()
+    public async Task Hiding_needs_an_account()
     {
         var viewer = await ConnectAsync("device-viewer", "Viewer");
 
-        var error = await Assert.ThrowsAsync<HubException>(() =>
-            viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", "XXXXXXXX"));
-        Assert.Contains("não existe", error.Message);
+        foreach (var method in new[] { "HideShares", "UnhideShares" })
+        {
+            var error = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<object>(method, "alguem"));
+            Assert.Contains("Entra na sua conta", error.Message);
+        }
+        var list = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<DeviceSnapshot[]>("GetHiddenViewers"));
+        Assert.Contains("Entra na sua conta", list.Message);
     }
 
     [Fact]
@@ -519,8 +530,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         var stranger = await ConnectAsync("device-stranger", "Stranger");
 
         await sharer.InvokeAsync<ShareAccessResult>("StartShare", new StartShareRequest("device-sharer", "auto"));
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
-        var join = await viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code);
+        var join = await JoinAsFriendAsync(sharer, "device-sharer", viewer, "device-viewer");
 
         var error = await Assert.ThrowsAsync<HubException>(() =>
             stranger.InvokeAsync("SendSignal", "device-viewer",
@@ -584,7 +594,6 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         Assert.Contains("Não deu pra achar ninguém", notFound.Message);
 
         // Identificador fora do formato do @usuário: invalid_friend_code
-        var invite = await sharer.InvokeAsync<InviteSnapshot>("CreateInvite");
         var badFormat = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", "no"));
         Assert.Contains("não parece certo", badFormat.Message);
 
@@ -606,9 +615,7 @@ public sealed class TelaeHubFlowTests : IAsyncLifetime
         // Após remoção pelo dono, o amigo fica bloqueado nesta transmissão
         await sharer.InvokeAsync<ShareSessionSnapshot>("RemoveViewer", "viewer");
         var blocked = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinFriendShare", sharerSnapshot.FriendCode));
-        Assert.Contains("removido", blocked.Message);
-        var blockedInvite = await Assert.ThrowsAsync<HubException>(() => viewer.InvokeAsync<ShareAccessResult>("JoinWithInvite", invite.Code));
-        Assert.Contains("removido", blockedInvite.Message);
+        Assert.Contains("não está transmitindo", blocked.Message);
     }
 
     [Fact]

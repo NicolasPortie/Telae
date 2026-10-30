@@ -6,6 +6,7 @@ import { applyVideoConstraints, getVideoConstraints } from './video-scaler'
 import { SignalingClient } from './signaling'
 import { StreamController } from './stream-controller'
 import type { DeviceSnapshot } from './types'
+import { DEFAULT_AUDIENCE } from './types'
 import { WebRtcPeer } from './webrtc'
 import type {
   ConnectionStatus,
@@ -15,6 +16,7 @@ import type {
   PeerStatus,
   QualityProfile,
   ShareAccessResult,
+  ShareAudience,
   SharePreviewEvent,
   ShareSessionSnapshot,
   SignalingEnvelope,
@@ -63,6 +65,8 @@ export type SessionSnapshot = {
   signaling: ConnectionStatus
   hasLocalStream: boolean
   hasRemoteStream: boolean
+  /** Quem transmite: quem pode ver, como o servidor entendeu. */
+  audience: ShareAudience | null
 }
 
 const EMPTY_DIAGNOSTICS: DiagnosticsSnapshot = {
@@ -155,6 +159,7 @@ export class ShareSessionController {
   private sampling = false
   private readonly viewerRestartAttempts = new Map<string, number>()
   private readonly viewerReconnectTimers = new Map<string, number>()
+  private audience: ShareAudience | null = null
 
   constructor() {
     this.capture.subscribe(() => {
@@ -208,6 +213,7 @@ export class ShareSessionController {
       signaling: this.signalingStatus,
       hasLocalStream: this.localStream !== null,
       hasRemoteStream: this.remoteStream !== null,
+      audience: this.audience,
     }
   }
 
@@ -279,6 +285,41 @@ export class ShareSessionController {
     return this.signaling.on('friendRequestReceived', listener)
   }
 
+  /** Quem transmite descartou (ou deixou de mostrar) a miniatura: some do Início na hora. */
+  onSharePreviewRemoved(listener: (deviceId: string) => void): () => void {
+    if (!this.signaling) return () => undefined
+    return this.signaling.on('sharePreviewRemoved', listener)
+  }
+
+  // ---- quem pode ver ----
+
+  fetchHiddenViewers(): Promise<DeviceSnapshot[]> {
+    return this.requireSignaling().getHiddenViewers()
+  }
+
+  hideShares(username: string): Promise<DeviceSnapshot> {
+    return this.requireSignaling().hideShares(username)
+  }
+
+  unhideShares(username: string): Promise<void> {
+    return this.requireSignaling().unhideShares(username).then(() => undefined)
+  }
+
+  /** Muda quem pode ver a transmissão em andamento. Quem ficar de fora sai (o servidor decide quem). */
+  async updateAudience(audience: ShareAudience): Promise<ShareAudience> {
+    if (this.role !== 'sharer' || !this.session) throw new Error(t('Começa a transmitir antes de mudar quem pode ver.'))
+    try {
+      const result = await this.requireSignaling().updateShareAudience(audience)
+      if (this.role === 'sharer' && this.session?.sessionId === result.session.sessionId) {
+        this.audience = result.audience
+        this.emit()
+      }
+      return result.audience
+    } catch (error) {
+      throw new Error(toUserMessage(error, t('Não deu pra mudar quem pode ver. Tenta de novo.')))
+    }
+  }
+
   /** Conecta com a conta da sessão atual; o servidor confirma a identidade pelo token de acesso. */
   async connect(): Promise<DeviceSnapshot> {
     if (typeof window === 'undefined' || typeof window.telae === 'undefined') {
@@ -319,14 +360,14 @@ export class ShareSessionController {
     }
   }
 
-  async startSharing(sourceId: string, quality: QualityProfile): Promise<void> {
+  async startSharing(sourceId: string, quality: QualityProfile, audience: ShareAudience = DEFAULT_AUDIENCE): Promise<void> {
     if (this.startInFlight || this.joiningInFlight) throw new Error(t('Um segundo, ainda tem outra coisa em andamento.'))
     this.startInFlight = true
-    try { await this.startSharingInternal(sourceId, quality) }
+    try { await this.startSharingInternal(sourceId, quality, audience) }
     finally { this.startInFlight = false }
   }
 
-  private async startSharingInternal(sourceId: string, quality: QualityProfile): Promise<void> {
+  private async startSharingInternal(sourceId: string, quality: QualityProfile, audience: ShareAudience): Promise<void> {
     const signaling = this.requireSignaling()
     if (this.role === 'viewer' && !['idle', 'ended'].includes(this.state))
       throw new Error(t('Sai da transmissão atual antes de transmitir a sua.'))
@@ -351,6 +392,7 @@ export class ShareSessionController {
     this.contentMode = qualityContentMode(quality)
     this.viewerPresence = 'none'
     this.viewerName = null
+    this.audience = null
     this.setState('preparing')
 
     try {
@@ -365,11 +407,12 @@ export class ShareSessionController {
       const video = stream.getVideoTracks()[0]
       if (video) video.contentHint = this.contentMode === 'motion' ? 'motion' : 'detail'
       this.includeAudio = this.localStream.getAudioTracks().length > 0
-      const access = await signaling.startShare(quality)
+      const access = await signaling.startShare(quality, audience)
       if (generation !== this.generation) {
         void signaling.stopShare().catch(() => undefined)
         return
       }
+      this.audience = access.audience ?? audience
       this.session = access.session
       this.iceServers = access.iceServers
       this.validateRelayConfiguration()
@@ -441,6 +484,7 @@ export class ShareSessionController {
       this.teardownPeer()
       this.liveSinceMs = null
       this.role = 'viewer'
+      this.audience = null
       this.session = access.session
       this.iceServers = access.iceServers
       this.peerDeviceId = access.session.sharerDeviceId
@@ -593,6 +637,7 @@ export class ShareSessionController {
     this.teardownPeer()
     this.session = null
     this.viewerPresence = 'none'
+    this.audience = null
     this.setState('ended')
     if (role === 'sharer') void signaling?.stopShare().catch(() => undefined)
     else if (role === 'viewer') void signaling?.leaveShare().catch(() => undefined)
@@ -620,6 +665,7 @@ export class ShareSessionController {
   /** Encerra tudo ao sair da conta: transmissão, conexão e o @ em memória. */
   signOut() {
     this.dispose()
+    this.audience = null
     this.myUsername = null
     this.signalingStatus = 'offline'
     this.session = null
@@ -746,6 +792,7 @@ export class ShareSessionController {
     this.teardownLocal()
     this.teardownPeer()
     this.session = null
+    this.audience = null
     const wasViewer = this.role === 'viewer'
     this.role = null
     this.setState('ended', wasViewer ? t('A transmissão acabou, ou você foi removido dela.') : null)

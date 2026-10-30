@@ -8,15 +8,28 @@ import { AuthScreen } from './components/AuthScreen'
 import { authErrorMessage } from './components/authErrors'
 import { SettingsScreen } from './components/SettingsScreen'
 import { PickerScreen } from './components/PickerScreen'
+import { AudiencePicker } from './components/AudiencePicker'
+import { withKnownFriends } from './services/audience'
 import { SharerSession } from './components/SharerSession'
 import { ViewerSession } from './components/ViewerSession'
 import { useFriends } from './hooks/useFriends'
 import { ShareSessionController } from './services/share-session'
 import { startPreviewPublisher } from './services/share-preview'
-import type { DeviceSnapshot, QualityProfile } from './services/types'
-import type { AccountInfo, CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
+import type { DeviceSnapshot, QualityProfile, ShareAudience } from './services/types'
+import { DEFAULT_AUDIENCE } from './services/types'
+import type { AccountInfo, AppSettings, CaptureSource, LocalProfile, UpdateStatus } from './shared/contracts'
 
 type Screen = 'boot' | 'auth' | 'home' | 'picker' | 'session' | 'profile'
+
+const audienceFromSettings = (settings: AppSettings): ShareAudience => ({
+  mode: settings.shareAudienceMode,
+  selected: settings.shareSelectedUsernames,
+})
+
+const audienceToSettings = (audience: ShareAudience): Partial<AppSettings> => ({
+  shareAudienceMode: audience.mode,
+  shareSelectedUsernames: audience.selected,
+})
 
 export default function App() {
   const [controller] = useState(() => new ShareSessionController())
@@ -36,6 +49,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string>('')
   const [activeSourceId, setActiveSourceId] = useState<string>('')
   const [quality, setQuality] = useState<QualityProfile>('1080p30')
+  // Última escolha de quem pode ver; vale para a próxima transmissão e fica salva neste computador.
+  const [audience, setAudience] = useState<ShareAudience>(DEFAULT_AUDIENCE)
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [nameInput, setNameInput] = useState('')
@@ -57,6 +72,7 @@ export default function App() {
   const sourcePickerForActiveShare = screen === 'picker' && switchingSource && snapshot.role === 'sharer'
   const visibleScreen: Screen = sessionActive && screen !== 'session' && !sourcePickerForActiveShare ? 'session' : screen
   const viewerLive = visibleScreen === 'session' && snapshot.role === 'viewer' && snapshot.state === 'live'
+  const viewerScreen = visibleScreen === 'session' && snapshot.role === 'viewer'
 
   const online = snapshot.signaling === 'online'
   const friendsState = useFriends({ controller, desktopApiAvailable, online })
@@ -88,7 +104,10 @@ export default function App() {
   // Idioma salvo (ou o do Windows) antes de desenhar a primeira tela.
   useEffect(() => {
     if (!desktopApiAvailable) return
-    void window.telae.getSettings().then(settings => setLocale(resolveLocale(settings.language, navigator.language))).catch(() => undefined)
+    void window.telae.getSettings().then(settings => {
+      setLocale(resolveLocale(settings.language, navigator.language))
+      setAudience(audienceFromSettings(settings))
+    }).catch(() => undefined)
   }, [desktopApiAvailable])
 
   /** Conecta ao servidor com a conta atual (o hub valida o token de acesso). */
@@ -247,6 +266,13 @@ export default function App() {
     void loadSources()
   }, [loadSources])
 
+  const changeAudience = useCallback((next: ShareAudience) => {
+    setAudience(next)
+    if (desktopApiAvailable) void window.telae.updateSettings(audienceToSettings(next)).catch(() => undefined)
+  }, [desktopApiAvailable])
+
+  const friendsList = friendsState.friends
+
   const handleStartSharing = useCallback(async () => {
     if (!selectedId) {
       setFormError(t('Escolhe uma tela ou janela antes de começar.'))
@@ -256,7 +282,7 @@ export default function App() {
     setFormError(null)
     try {
       if (switchingSource) await controller.switchSource(selectedId)
-      else await controller.startSharing(selectedId, quality)
+      else await controller.startSharing(selectedId, quality, withKnownFriends(audience, friendsList))
       setActiveSourceId(selectedId)
       if (!switchingSource) historyRef.current.reset()
       setSwitchingSource(false)
@@ -266,7 +292,7 @@ export default function App() {
     } finally {
       setBusy(false)
     }
-  }, [controller, selectedId, quality, switchingSource])
+  }, [controller, selectedId, quality, switchingSource, audience, friendsList])
 
   const handleLeave = useCallback(async () => {
     await controller.leave()
@@ -293,8 +319,9 @@ export default function App() {
     }
   }, [controller])
 
-  // Enquanto transmite, manda miniaturas da tela para o início dos amigos.
-  const sharingStream = snapshot.role === 'sharer' && snapshot.hasLocalStream && snapshot.state !== 'preparing' ? controller.getLocalStream() : null
+  // Enquanto transmite, manda miniaturas da tela ao público autorizado.
+  const sharingStream = snapshot.role === 'sharer' && snapshot.hasLocalStream && snapshot.state !== 'preparing'
+    ? controller.getLocalStream() : null
   useEffect(() => {
     if (!sharingStream) return
     return startPreviewPublisher(sharingStream, image => controller.publishSharePreview(image))
@@ -341,6 +368,11 @@ export default function App() {
     finally { setBusy(false) }
   }, [])
 
+  const applyAudience = useCallback(async (next: ShareAudience) => {
+    const applied = await controller.updateAudience(next)
+    changeAudience(applied)
+  }, [controller, changeAudience])
+
   const stateLabel: Record<string, string> = {
     idle: t('Pronto'),
     preparing: t('Preparando captura…'),
@@ -353,7 +385,7 @@ export default function App() {
   }
 
   return (
-    <div className={`telae-shell ${viewerLive ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : visibleScreen === 'home' ? 'telae-home-layout' : 'min-h-full'} text-ink`}>
+    <div className={`telae-shell ${viewerScreen ? 'telae-viewer-layout' : visibleScreen === 'picker' ? 'telae-picker-layout' : visibleScreen === 'home' ? 'telae-home-layout' : 'min-h-full'} text-ink`}>
       <AppHeader
         version={appVersion}
         displayName={account?.displayName}
@@ -368,7 +400,7 @@ export default function App() {
         onReconnect={() => void connectToServer()}
       />
 
-      <main id="main-content" className={viewerLive ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : visibleScreen === 'home' ? 'telae-home-main' : visibleScreen === 'auth' ? 'w-full' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} mx-auto w-full px-6 pb-16 pt-10`}>
+      <main id="main-content" className={viewerScreen ? 'telae-viewer-main' : visibleScreen === 'picker' ? 'telae-picker-main mx-auto w-full max-w-[1120px] px-6' : visibleScreen === 'home' ? 'telae-home-main' : visibleScreen === 'auth' ? 'w-full' : `telae-main ${visibleScreen === 'session' ? 'telae-session-main' : 'max-w-[1120px]'} mx-auto w-full px-6 pb-16 pt-10`}>
         <div aria-live="polite" className="sr-only">
           {stateLabel[snapshot.state] ?? ''}
           {formError ?? snapshot.error ?? sourcesError ?? ''}
@@ -411,6 +443,7 @@ export default function App() {
             onBack={() => setScreen(switchingSource ? 'session' : 'home')}
             onReload={() => void loadSources()}
             onStart={() => void handleStartSharing()}
+            audience={<AudiencePicker value={audience} friends={friendsList} onChange={changeAudience} />}
           />
         )}
 
@@ -425,6 +458,11 @@ export default function App() {
             account={account}
             onSignOut={() => void signOut()}
             onBack={() => setScreen(account ? 'home' : 'auth')}
+            hiddenViewers={friendsState.hidden}
+            privacyBusy={friendsState.busy}
+            privacyError={friendsState.error}
+            privacyMessage={friendsState.success}
+            onUnhide={username => void friendsState.setShareHidden(username, false)}
           />
         )}
 
@@ -440,6 +478,8 @@ export default function App() {
             busy={busy}
             onQuality={(value, mode) => void runSessionAction(() => controller.setQuality(value, mode))}
             onRemove={(id) => void runSessionAction(() => controller.removeViewer(id))}
+            friends={friendsList}
+            onAudience={applyAudience}
           />
         )}
 

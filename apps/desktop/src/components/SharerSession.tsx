@@ -1,7 +1,9 @@
-import { ChevronRight, Lock, Monitor, Square, Users, Volume2, VolumeX, X } from 'lucide-react'
+import { ChevronRight, Monitor, Square, Users, Volume2, VolumeX, X } from 'lucide-react'
 import { t, tn } from '../i18n'
 import type { ConnectionQuality, ShareSessionController } from '../services/share-session'
-import type { ContentMode, QualityProfile } from '../services/types'
+import type { ContentMode, DeviceSnapshot, QualityProfile, ShareAudience } from '../services/types'
+import { DEFAULT_AUDIENCE } from '../services/types'
+import { AudienceEditor } from './AudienceEditor'
 import { qualityContentMode } from '../services/quality-profiles'
 import { avatarInitial, avatarTone } from '../ui/avatar'
 import { formatElapsed, qualityOptions, transportLabel } from '../ui/format'
@@ -29,9 +31,18 @@ function sessionHealth(snapshot: Snapshot): { tone: string; detail: string } {
   }
 }
 
+/** O que a lista vazia diz depende de quem pode ver. */
+function emptyAudienceText(audience: ShareAudience): string {
+  if (audience.mode === 'selected' && audience.selected.length === 0) return t('Nenhum amigo marcado ainda. Em "Alterar", escolha quem pode ver.')
+  return audience.mode === 'selected'
+    ? t('Os amigos que você escolheu veem você ao vivo no Início e entram com um clique.')
+    : t('Seus amigos veem você ao vivo no Início e entram com um clique.')
+}
+
 export function SharerSession({
   snapshot, elapsed, sourceName, videoRef,
   onStop, onChangeSource, formError, busy, onQuality, onRemove,
+  friends, onAudience,
 }: {
   snapshot: Snapshot
   elapsed: number
@@ -43,6 +54,9 @@ export function SharerSession({
   busy: boolean
   onQuality: (quality: QualityProfile, mode: ContentMode) => void
   onRemove: (deviceId: string) => void
+  /** Amigos mútuos, para escolher quem pode ver. */
+  friends: DeviceSnapshot[]
+  onAudience: (audience: ShareAudience) => Promise<void>
 }) {
   const controlsDisabled = busy || !snapshot.hasLocalStream || snapshot.state === 'ended'
   const live = snapshot.state === 'live'
@@ -142,7 +156,7 @@ export function SharerSession({
             {snapshot.viewers.length === 0 ? (
               <div className="telae-audience-empty">
                 <span aria-hidden="true" className="telae-empty-icon"><Users size={20} strokeWidth={1.5} /></span>
-                <p className="text-[13px] leading-relaxed text-ink-3">{t('Seus amigos veem sua tela no Início deles e entram com um clique.')}</p>
+                <p className="text-[13px] leading-relaxed text-ink-3">{emptyAudienceText(snapshot.audience ?? DEFAULT_AUDIENCE)}</p>
               </div>
             ) : (
               <>
@@ -173,7 +187,7 @@ export function SharerSession({
             )}
           </section>
 
-          {(live || snapshot.state === 'reconnecting') && <section aria-labelledby="connection-title" className="telae-inspector-section">
+          {(live || snapshot.state === 'reconnecting') && <section aria-labelledby="connection-title" className="telae-inspector-section telae-inspector-connection">
             <div className="telae-inspector-head">
               <h2 id="connection-title">{t('Conexão')}</h2>
               <span className={`telae-health-word ${live ? connection.tone : health.tone}`}>
@@ -193,7 +207,7 @@ export function SharerSession({
             )}
           </section>}
 
-          <p className="telae-inspector-foot"><Lock size={15} strokeWidth={1.75} aria-hidden="true" />{t('Só seus amigos podem assistir.')}</p>
+          <AudienceEditor audience={snapshot.audience ?? DEFAULT_AUDIENCE} friends={friends} watchers={snapshot.viewers} busy={busy} onApply={onAudience} />
         </aside>
       </div>
 

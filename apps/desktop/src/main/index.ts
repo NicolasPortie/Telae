@@ -92,14 +92,34 @@ function readSignalingUrl(): string {
   return DEFAULT_SIGNALING_URL
 }
 
-const DEFAULT_SETTINGS: AppSettings = { language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false }
+const DEFAULT_SETTINGS: AppSettings = {
+  language: 'pt-BR', notifyFriendLive: true, launchAtLogin: false,
+  shareAudienceMode: 'friends', shareSelectedUsernames: [],
+}
 
-type StoredSettings = Partial<AppSettings> & { signalingUrl?: string }
+const AUDIENCE_MODES: readonly AppSettings['shareAudienceMode'][] = ['friends', 'selected']
+
+/** @usuários válidos, sem repetição e com limite: o arquivo pode ter sido editado à mão. */
+function sanitizeUsernames(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const names = value.filter((name): name is string => typeof name === 'string')
+    .map(name => name.trim().replace(/^@+/, '').toLowerCase())
+    .filter(name => /^[a-z0-9_]{3,20}$/.test(name))
+  return [...new Set(names)].slice(0, 200)
+}
+
+type StoredSettings = Partial<AppSettings> & { signalingUrl?: string; sharePreview?: boolean }
 
 function readStoredSettings(): StoredSettings {
   try {
     const parsed = JSON.parse(readFileSync(settingsPath(), 'utf8')) as unknown
-    return parsed && typeof parsed === 'object' ? parsed as StoredSettings : {}
+    if (!parsed || typeof parsed !== 'object') return {}
+    const stored = parsed as StoredSettings
+    if (Object.hasOwn(stored, 'sharePreview')) {
+      delete stored.sharePreview
+      writeJsonAtomically(settingsPath(), stored)
+    }
+    return stored
   } catch {
     return {}
   }
@@ -111,6 +131,9 @@ function readSettings(): AppSettings {
     language: stored.language === 'pt-BR' || stored.language === 'en' ? stored.language : DEFAULT_SETTINGS.language,
     notifyFriendLive: typeof stored.notifyFriendLive === 'boolean' ? stored.notifyFriendLive : DEFAULT_SETTINGS.notifyFriendLive,
     launchAtLogin: typeof stored.launchAtLogin === 'boolean' ? stored.launchAtLogin : DEFAULT_SETTINGS.launchAtLogin,
+    shareAudienceMode: AUDIENCE_MODES.includes(stored.shareAudienceMode as AppSettings['shareAudienceMode'])
+      ? stored.shareAudienceMode as AppSettings['shareAudienceMode'] : DEFAULT_SETTINGS.shareAudienceMode,
+    shareSelectedUsernames: sanitizeUsernames(stored.shareSelectedUsernames) ?? DEFAULT_SETTINGS.shareSelectedUsernames,
   }
 }
 
@@ -119,6 +142,9 @@ function persistSettings(patch: Partial<AppSettings>): AppSettings {
   if (patch.language === 'auto' || patch.language === 'pt-BR' || patch.language === 'en') next.language = patch.language
   if (typeof patch.notifyFriendLive === 'boolean') next.notifyFriendLive = patch.notifyFriendLive
   if (typeof patch.launchAtLogin === 'boolean') next.launchAtLogin = patch.launchAtLogin
+  if (AUDIENCE_MODES.includes(patch.shareAudienceMode as AppSettings['shareAudienceMode'])) next.shareAudienceMode = patch.shareAudienceMode!
+  const selected = sanitizeUsernames(patch.shareSelectedUsernames)
+  if (selected) next.shareSelectedUsernames = selected
   writeJsonAtomically(settingsPath(), { ...readStoredSettings(), ...next })
   // Só instalações empacotadas registram a inicialização; o modo de desenvolvimento não deve alterar o Windows.
   setLocale(resolveLocale(next.language, app.getLocale()))

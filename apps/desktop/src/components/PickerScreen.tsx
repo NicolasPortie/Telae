@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AlertTriangle, AppWindow, ArrowLeft, Monitor } from 'lucide-react'
 import { t } from '../i18n'
 import type { CaptureSource } from '../shared/contracts'
@@ -9,7 +9,7 @@ import { SourceGroup } from './SourceGroup'
 /** Escolha da tela ou janela e da qualidade antes de começar (ou de trocar a fonte durante a transmissão). */
 export function PickerScreen({
   sources, loading, error, selectedId, onSelect, quality, onQuality,
-  switching, busy, formError, onBack, onReload, onStart,
+  switching, busy, formError, onBack, onReload, onStart, audience,
 }: {
   sources: CaptureSource[]
   loading: boolean
@@ -25,6 +25,8 @@ export function PickerScreen({
   onBack: () => void
   onReload: () => void
   onStart: () => void
+  /** Escolha de quem pode ver; não aparece na troca de fonte. */
+  audience?: ReactNode
 }) {
   const screens = sources.filter(item => item.kind === 'screen')
   const windows = sources.filter(item => item.kind === 'window')
@@ -125,6 +127,7 @@ export function PickerScreen({
             <div className="telae-picker-action-row">
               <div className="min-w-0 flex-1">
                 {!switching && <QualityPicker value={quality} onChange={onQuality} />}
+                {!switching && audience && <div className="mt-4">{audience}</div>}
               </div>
               {formError && <p role="alert" className="mt-4 text-sm text-danger-soft">{formError}</p>}
               <div className="telae-picker-submit">

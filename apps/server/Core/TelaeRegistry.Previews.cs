@@ -1,13 +1,13 @@
 namespace Telae.Server.Core;
 
-// Miniaturas da tela de quem está transmitindo, vistas só por amigos mútuos no início do app.
+// Miniaturas da tela de quem está transmitindo, vistas só por quem pode assistir à transmissão.
 public sealed partial class TelaeRegistry
 {
     private const string PreviewPrefix = "data:image/jpeg;base64,";
     public const int MaxPreviewLength = 96 * 1024;
     public static readonly TimeSpan PreviewInterval = TimeSpan.FromSeconds(6);
 
-    /// <summary>Guarda a miniatura da sessão ativa e devolve as conexões dos amigos mútuos online.</summary>
+    /// <summary>Guarda a miniatura da sessão ativa e devolve as conexões de quem pode recebê-la.</summary>
     public (SharePreviewEvent Preview, IReadOnlyList<string> ConnectionIds) SetSharePreview(string sharerDeviceId, string image)
     {
         ValidatePreview(image);
@@ -23,8 +23,7 @@ public sealed partial class TelaeRegistry
             var preview = new SharePreviewEvent(sharerDeviceId, image, now);
             session.Preview = preview;
             var connections = _connectionByDevice
-                .Where(pair => pair.Key != sharerDeviceId && AreMutualFriendsLocked(sharerDeviceId, pair.Key)
-                    && !session.BlockedViewerDeviceIds.Contains(pair.Key))
+                .Where(pair => pair.Key != sharerDeviceId && CanWatchLocked(pair.Key, session))
                 .Select(pair => pair.Value)
                 .ToArray();
             return (preview, connections);
@@ -38,9 +37,9 @@ public sealed partial class TelaeRegistry
         {
             RequireOnlineDevice(deviceId);
             return _sessionsBySharer.Values
-                .Where(session => session.Preview is not null && _connectionByDevice.ContainsKey(session.SharerDeviceId)
-                    && AreMutualFriendsLocked(deviceId, session.SharerDeviceId)
-                    && !session.BlockedViewerDeviceIds.Contains(deviceId))
+                .Where(session => session.Preview is not null
+                    && _connectionByDevice.ContainsKey(session.SharerDeviceId)
+                    && CanWatchLocked(deviceId, session))
                 .Select(session => session.Preview!)
                 .ToArray();
         }

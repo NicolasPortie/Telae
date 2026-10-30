@@ -25,6 +25,7 @@ function stateWith(overrides: Partial<FriendsState> = {}): FriendsState {
     addOpen: false, setAddOpen: vi.fn(), closeAddForm: vi.fn(),
     busy: false, error: null, success: null, pendingRemove: null, setPendingRemove: vi.fn(),
     copyMyHandle: vi.fn(), add: vi.fn(), dismissRequest: vi.fn(), remove: vi.fn(),
+    hidden: [], setShareHidden: vi.fn(),
     ...overrides,
   }
 }
@@ -72,18 +73,32 @@ describe('FriendsRail', () => {
     expect(screen.queryByText('Sua lista está vazia.')).not.toBeInTheDocument()
   })
 
-  it('leaves live friends to the home stage and groups the rest into online and offline', () => {
-    const live = person({ deviceId: 'live', displayName: 'Bia', friendCode: 'bia', status: 'transmitting', isSharing: true })
+  it('keeps live friends in the list, on top, so the count always matches the rows', async () => {
+    const live = person({ deviceId: 'live', displayName: 'Bia', friendCode: 'bia', status: 'transmitting', isSharing: true, activeQualityProfile: '1080p30' })
     const idle = person({ deviceId: 'idle', displayName: 'Caio', friendCode: 'caio' })
     const away = person({ deviceId: 'away', displayName: 'Dani', friendCode: 'dani', status: 'offline' })
-    render(<FriendsRail state={stateWith({ friends: [idle, live, away] })} {...baseProps} />)
+    const onWatch = vi.fn()
+    render(<FriendsRail state={stateWith({ friends: [idle, live, away] })} {...baseProps} canWatch onWatch={onWatch} />)
 
-    expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['Online1', 'Offline1'])
-    expect(screen.queryByText('Bia')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent)).toEqual(['Ao vivo1', 'Online1', 'Offline1'])
     const rows = screen.getAllByRole('listitem')
-    expect(within(rows[0]).getByText('@caio')).toBeInTheDocument()
-    expect(within(rows[1]).getByText('@dani')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Assistir' })).not.toBeInTheDocument()
+    expect(rows).toHaveLength(3)
+    expect(screen.getByText('Amigos').nextElementSibling).toHaveTextContent('3')
+    expect(within(rows[0]).getByText('Bia')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(/Ao vivo/)).toHaveTextContent('1080p')
+    expect(within(rows[1]).getByText('@caio')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('@dani')).toBeInTheDocument()
+
+    // Só o amigo ao vivo tem "Assistir"; um clique entra na transmissão.
+    expect(screen.getAllByRole('button', { name: /^Assistir/ })).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Assistir Bia' }))
+    expect(onWatch).toHaveBeenCalledWith(live)
+  })
+
+  it('does not let you watch while something else is going on', () => {
+    const live = person({ deviceId: 'live', displayName: 'Bia', friendCode: 'bia', status: 'transmitting', isSharing: true })
+    render(<FriendsRail state={stateWith({ friends: [live] })} {...baseProps} canWatch={false} />)
+    expect(screen.getByRole('button', { name: 'Assistir Bia' })).toBeDisabled()
   })
 
   it('asks for confirmation before removing a friend', async () => {
@@ -94,15 +109,55 @@ describe('FriendsRail', () => {
     expect(state.remove).toHaveBeenCalledWith('ana')
   })
 
-  it('lets the user accept or dismiss a friend request', async () => {
+  it('lets the user accept (add back) or ignore a friend request', async () => {
     const request = person({ deviceId: 'r', displayName: 'Dani', friendCode: 'dani' })
     const state = stateWith({ requests: [request] })
     render(<FriendsRail state={state} {...baseProps} />)
+    expect(screen.getByRole('heading', { name: /Pedidos de amizade/ })).toHaveTextContent('1')
     expect(screen.getByText('@dani')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Adicionar de volta' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Aceitar' }))
     expect(state.add).toHaveBeenCalledWith('dani')
-    await userEvent.click(screen.getByRole('button', { name: 'Ignorar' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Ignorar Dani' }))
     expect(state.dismissRequest).toHaveBeenCalledWith('dani')
+  })
+
+  it('hides and shows my streams for a friend without removing them', async () => {
+    const bia = person({ deviceId: 'id-bia', displayName: 'Bia', friendCode: 'bia' })
+    const caio = person({ deviceId: 'id-caio', displayName: 'Caio', friendCode: 'caio' })
+    const state = stateWith({ friends: [bia, caio], hidden: [caio] })
+    render(<FriendsRail state={state} {...baseProps} />)
+
+    const [biaRow, caioRow] = screen.getAllByRole('listitem')
+    expect(within(biaRow).queryByText('oculto')).not.toBeInTheDocument()
+    expect(within(caioRow).getByText('oculto')).toBeInTheDocument()
+    await userEvent.click(within(biaRow).getByRole('button', { name: 'Ocultar minhas transmissões de Bia' }))
+    expect(state.setShareHidden).toHaveBeenLastCalledWith('bia', true)
+    await userEvent.click(within(caioRow).getByRole('button', { name: 'Mostrar minhas transmissões pra Caio' }))
+    expect(state.setShareHidden).toHaveBeenLastCalledWith('caio', false)
+    expect(state.remove).not.toHaveBeenCalled()
+  })
+
+  it('keeps accepting disabled while offline', () => {
+    const request = person({ deviceId: 'r', displayName: 'Dani', friendCode: 'dani' })
+    render(<FriendsRail state={stateWith({ requests: [request] })} {...baseProps} online={false} />)
+    expect(screen.getByRole('button', { name: 'Aceitar' })).toBeDisabled()
+  })
+
+  it('adds a friend from one field: Enter sends, Esc closes, and shows a short friend request hint', async () => {
+    const state = stateWith({ addOpen: true, usernameInput: 'bia' })
+    render(<FriendsRail state={state} {...baseProps} />)
+    const form = screen.getByRole('form', { name: 'Adicionar amigo' })
+    expect(within(form).getByText(/Envie um pedido de amizade para assistir com um amigo./)).toBeInTheDocument()
+    await userEvent.type(within(form).getByLabelText('@ do amigo'), '{Enter}')
+    expect(state.add).toHaveBeenCalledOnce()
+    await userEvent.keyboard('{Escape}')
+    expect(state.closeAddForm).toHaveBeenCalledOnce()
+  })
+
+  it('shows the add result in place of the help text', () => {
+    render(<FriendsRail state={stateWith({ addOpen: true, error: 'Esse @ não parece certo.' })} {...baseProps} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Esse @ não parece certo.')
+    expect(screen.queryByText(/Envie um pedido de amizade para assistir com um amigo./)).not.toBeInTheDocument()
   })
 
   it('checks for updates from the rail footer', async () => {

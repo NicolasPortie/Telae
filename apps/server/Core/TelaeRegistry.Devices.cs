@@ -58,15 +58,16 @@ public sealed partial class TelaeRegistry
             if (_connectionByDevice.Remove(accountId, out var connectionId))
                 _deviceByConnection.Remove(connectionId);
             _disconnectGenerationByDevice.Remove(accountId);
-            _sessionsBySharer.Remove(accountId);
+            if (_sessionsBySharer.TryGetValue(accountId, out var own)) EndSessionLocked(own);
             foreach (var session in _sessionsBySharer.Values)
             {
                 session.ViewerDeviceIds.Remove(accountId);
                 session.BlockedViewerDeviceIds.Remove(accountId);
             }
             foreach (var dismissed in _dismissedRequests.Values) dismissed.Remove(accountId);
-            foreach (var code in _invitesByCode.Values.Where(invite => invite.SharerDeviceId == accountId).Select(invite => invite.Code).ToArray())
-                _invitesByCode.Remove(code);
+            _hiddenByOwner.Remove(accountId);
+            _initializedHiddenOwners.Remove(accountId);
+            foreach (var hidden in _hiddenByOwner.Values) hidden.Remove(accountId);
             PersistProfiles();
         }
     }
@@ -173,14 +174,40 @@ public sealed partial class TelaeRegistry
         }
     }
 
+    /// <summary>
+    /// O snapshot como <paramref name="observerDeviceId"/> pode vê-lo. Quem não é amigo mútuo vê "offline";
+    /// quem não pode assistir à transmissão vê só "online".
+    /// </summary>
     public DeviceSnapshot ForObserver(string observerDeviceId, DeviceSnapshot device)
     {
+        lock (_gate) return ForObserverLocked(observerDeviceId, device);
+    }
+
+    /// <summary>A lista de amigos como o observador pode vê-la, com quem está ao vivo (para ele) primeiro.</summary>
+    public IReadOnlyList<DeviceSnapshot> GetFriendsForObserver(string observerDeviceId, IEnumerable<string> friendCodes)
+    {
+        var codes = friendCodes.Select(NormalizeFriendCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
         lock (_gate)
         {
-            return observerDeviceId == device.DeviceId || AreMutualFriendsLocked(observerDeviceId, device.DeviceId)
-                ? device
-                : device with { Status = "offline", IsSharing = false, ActiveQualityProfile = null };
+            return _profiles.Values
+                .Where(profile => codes.Contains(profile.FriendCode))
+                .Select(profile => ForObserverLocked(observerDeviceId, ToDeviceSnapshot(profile)))
+                .OrderByDescending(device => device.Status == "transmitting")
+                .ThenByDescending(device => device.Status == "online")
+                .ThenBy(device => device.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
         }
+    }
+
+    private DeviceSnapshot ForObserverLocked(string observerDeviceId, DeviceSnapshot device)
+    {
+        if (observerDeviceId == device.DeviceId) return device;
+        if (!AreMutualFriendsLocked(observerDeviceId, device.DeviceId))
+            return device with { Status = "offline", IsSharing = false, ActiveQualityProfile = null };
+        if (!device.IsSharing || !_sessionsBySharer.TryGetValue(device.DeviceId, out var session)) return device;
+        return CanWatchLocked(observerDeviceId, session)
+            ? device
+            : device with { Status = "online", IsSharing = false, ActiveQualityProfile = null };
     }
 
     // O teto vale só para aparelhos legados, que qualquer um cria sem conta. Perfis de conta já são

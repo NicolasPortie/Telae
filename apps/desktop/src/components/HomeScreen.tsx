@@ -82,6 +82,9 @@ export function HomeScreen({ displayName, friendsState, online, canWatch, watchi
         updateStatus={updateStatus}
         canCheckUpdate={canCheckUpdate}
         onCheckUpdate={onCheckUpdate}
+        canWatch={canWatch}
+        watchingDeviceId={watchingDeviceId}
+        onWatch={onWatch}
       />
 
       <div className="telae-stage">
@@ -122,7 +125,7 @@ export function HomeScreen({ displayName, friendsState, online, canWatch, watchi
             <aside aria-labelledby="share-title" className="telae-share-card">
               <BrandMark size={40} className="telae-share-mark" />
               <h2 id="share-title" className="telae-share-title">{t('Sua vez')}</h2>
-              <p className="telae-share-text">{t('Escolha uma tela ou janela. Seus amigos recebem o aviso na hora.')}</p>
+              <p className="telae-share-text">{t('Escolha uma tela ou janela e quem pode ver. Quem você escolher recebe o aviso na hora.')}</p>
               <button type="button" onClick={onChooseScreen} disabled={!online} className="telae-press telae-primary-action btn btn-primary btn-lg">
                 {t('Escolher tela')} <ArrowRight size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>

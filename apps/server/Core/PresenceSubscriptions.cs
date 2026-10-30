@@ -57,16 +57,40 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
 
     public async Task<DeclareFriendsResult> DeclareFriendsAsync(string connectionId, string[] friendCodes)
     {
+        DeclareFriendsResult declared;
+        string deviceId;
+        var changes = new List<(string FriendId, DeviceSnapshot BeforeSelf, DeviceSnapshot BeforeFriend, DeviceSnapshot AfterSelf)>();
         await _gate.WaitAsync();
         try
         {
-            var deviceId = registry.GetDeviceIdForConnection(connectionId);
-            var declared = registry.DeclareFriends(deviceId, friendCodes);
-            _subscriptions[connectionId] = registry.GetDevicesByFriendCodes(friendCodes)
+            deviceId = registry.GetDeviceIdForConnection(connectionId);
+            var friends = registry.GetDevicesByFriendCodes(friendCodes);
+            var previous = _subscriptions.GetValueOrDefault(connectionId) ?? [];
+            var me = registry.GetDevice(deviceId)!;
+            var before = previous.Union(friends.Select(friend => friend.DeviceId))
+                .Select(registry.GetDevice).OfType<DeviceSnapshot>()
+                .Select(friend => (Friend: friend, Mutual: registry.AreMutualFriends(deviceId, friend.DeviceId),
+                    Self: registry.ForObserver(friend.DeviceId, me), Other: registry.ForObserver(deviceId, friend)))
+                .ToArray();
+            declared = registry.DeclareFriends(deviceId, friendCodes);
+            _subscriptions[connectionId] = friends
                 .Select(friend => friend.DeviceId).ToHashSet(StringComparer.Ordinal);
-            return declared;
+            foreach (var item in before)
+                if (item.Mutual != registry.AreMutualFriends(deviceId, item.Friend.DeviceId))
+                    changes.Add((item.Friend.DeviceId, item.Self, item.Other, registry.ForObserver(item.Friend.DeviceId, me)));
         }
         finally { _gate.Release(); }
+        await ApplyAccessChangeAsync(new AccessChange(declared.Detached));
+        await Task.WhenAll(changes.Select(async change =>
+        {
+            // Quem perdeu reciprocidade recebe a invalidação mesmo sem continuar assinando a presença.
+            if (change.BeforeSelf.IsSharing && !change.AfterSelf.IsSharing)
+                await NotifyAsync(change.FriendId, "SharePreviewRemoved", deviceId);
+            if (change.BeforeFriend.IsSharing && !registry.AreMutualFriends(deviceId, change.FriendId))
+                await NotifyAsync(deviceId, "SharePreviewRemoved", change.FriendId);
+            await NotifyAsync(change.FriendId, "PresenceChanged", change.AfterSelf);
+        }));
+        return declared;
     }
 
     public async Task RemoveAsync(string connectionId)
@@ -103,6 +127,28 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
         await _gate.WaitAsync();
         try { return registry.StopShare(registry.GetDeviceIdForConnection(connectionId)); }
         finally { _gate.Release(); }
+    }
+
+    /// <summary>Quem perdeu o acesso sai da transmissão e as duas pontas são avisadas.</summary>
+    public async Task ApplyAccessChangeAsync(AccessChange change)
+    {
+        foreach (var detachment in change.Detached)
+        {
+            await NotifyAsync(detachment.ViewerDeviceId, "SessionEnded", detachment.SessionId);
+            await NotifyAsync(detachment.SharerDeviceId, "ViewerLeft", new ViewerLeftEvent(detachment.SessionId, detachment.ViewerDeviceId));
+        }
+    }
+
+    /// <summary>Pede às conexões que descartem a miniatura de quem transmite.</summary>
+    public async Task RemovePreviewAsync(string sharerDeviceId, IReadOnlyList<string> connectionIds)
+    {
+        if (connectionIds.Count > 0) await SendBoundedAsync(hub.Clients.Clients(connectionIds), "SharePreviewRemoved", sharerDeviceId);
+    }
+
+    public async Task NotifyAsync(string deviceId, string method, object payload)
+    {
+        if (registry.FindConnectionId(deviceId) is { } connectionId)
+            await SendBoundedAsync(hub.Clients.Client(connectionId), method, payload);
     }
 
     // Sinais (SDP/ICE) não passam pela fila global: o registro já tem a própria trava e uma conexão
@@ -161,15 +207,9 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
             if (connections.Length > 0) notifications.Add(SendBoundedAsync(hub.Clients.Clients(connections), "SessionEnded", ended.SessionId));
         }
         if (result.ViewerLeftSession is { } watching)
-            notifications.Add(NotifyLockedAsync(watching.SharerDeviceId, "ViewerLeft", new ViewerLeftEvent(watching.SessionId, accountId)));
+            notifications.Add(NotifyAsync(watching.SharerDeviceId, "ViewerLeft", new ViewerLeftEvent(watching.SessionId, accountId)));
         if (result.ChangedDevice is not null) notifications.Add(PublishLockedAsync(result.ChangedDevice));
         return Task.WhenAll(notifications);
-    }
-
-    private async Task NotifyLockedAsync(string deviceId, string method, object payload)
-    {
-        if (registry.FindConnectionId(deviceId) is { } connectionId)
-            await SendBoundedAsync(hub.Clients.Client(connectionId), method, payload);
     }
 
     public async Task PublishAsync(DeviceSnapshot device)
@@ -189,10 +229,13 @@ public sealed class PresenceSubscriptions(TelaeRegistry registry, IHubContext<Te
         device = registry.GetDevice(device.DeviceId) ?? device;
         foreach (var connection in _subscriptions.Keys.Where(id => !registry.IsRegisteredConnection(id)).ToArray())
             _subscriptions.Remove(connection);
-        var connections = _subscriptions.Where(pair => pair.Value.Contains(device.DeviceId)
-                && registry.AreMutualFriends(registry.GetDeviceIdForConnection(pair.Key), device.DeviceId))
-            .Select(pair => pair.Key).ToArray();
-        if (connections.Length > 0) await SendBoundedAsync(hub.Clients.Clients(connections), "PresenceChanged", device);
+        // Cada amigo recebe a presença como pode vê-la: quem não pode ver a transmissão recebe só "online".
+        var groups = _subscriptions.Where(pair => pair.Value.Contains(device.DeviceId))
+            .Select(pair => (Connection: pair.Key, Observer: registry.GetDeviceIdForConnection(pair.Key)))
+            .Where(item => registry.AreMutualFriends(item.Observer, device.DeviceId))
+            .GroupBy(item => registry.ForObserver(item.Observer, device), item => item.Connection)
+            .ToArray();
+        await Task.WhenAll(groups.Select(group => SendBoundedAsync(hub.Clients.Clients(group.ToArray()), "PresenceChanged", group.Key)));
     }
 
     private static async Task<bool> SendBoundedAsync(IClientProxy client, string method, object payload)
