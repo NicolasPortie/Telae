@@ -35,6 +35,14 @@ async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> 
       ? { ...env, TELAE_SIGNALING_URL: signalingUrl }
       : env,
   })
+  if (!WITH_MEDIA) {
+    await app.evaluate(({ ipcMain }) => {
+      for (const channel of ['audio:start', 'audio:start-screen']) {
+        ipcMain.removeHandler(channel)
+        ipcMain.handle(channel, () => { throw new Error('Captura física de áudio desativada neste teste.') })
+      }
+    })
+  }
   app.on('window', (page) => {
     page.on('pageerror', (error) => {
       throw new Error(`Renderer pageerror: ${error.message}`)
@@ -46,6 +54,31 @@ async function launchApp(muteAudioOutput = false): Promise<ElectronApplication> 
 async function firstWindow(app: ElectronApplication): Promise<Page> {
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
+  if (!WITH_MEDIA) {
+    // Os fluxos de contas e privacidade usam frames locais, sem depender do monitor do runner.
+    await page.evaluate(() => {
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 320
+        canvas.height = 180
+        const context = canvas.getContext('2d')!
+        let frame = 0
+        const draw = () => {
+          context.fillStyle = '#18251b'
+          context.fillRect(0, 0, canvas.width, canvas.height)
+          context.fillStyle = '#8cc63f'
+          context.fillRect(frame++ % canvas.width, 60, 24, 24)
+        }
+        draw()
+        const stream = canvas.captureStream(15)
+        const timer = window.setInterval(() => {
+          if (stream.getVideoTracks()[0].readyState === 'ended') window.clearInterval(timer)
+          else draw()
+        }, 1000 / 15)
+        return stream
+      }
+    })
+  }
   return page
 }
 
@@ -189,16 +222,255 @@ test.describe('duas instâncias Telae', () => {
       // Só Ana adicionou: Bia vê o pedido sem ter feito nada; Ana não vê pedido nenhum.
       await addFriend(ana, await friendCodeOf(bia), 'BiaE2E')
       await expect(bia.getByRole('heading', { name: 'Pedidos de amizade' })).toBeVisible({ timeout: 30_000 })
-      await expect(bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Adicionar de volta' })).toBeVisible()
+      await expect(bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Aceitar' })).toBeVisible()
       await expect(ana.getByRole('heading', { name: 'Pedidos de amizade' })).toHaveCount(0)
 
       // Bia aceita: o pedido some e Ana entra na lista dela.
-      await bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Adicionar de volta' }).click()
+      await bia.getByRole('listitem').filter({ hasText: 'AnaE2E' }).getByRole('button', { name: 'Aceitar' }).click()
       await expect(bia.getByRole('heading', { name: 'Pedidos de amizade' })).toHaveCount(0, { timeout: 30_000 })
       await expect(bia.getByRole('listitem').filter({ hasText: 'AnaE2E' })).toBeVisible({ timeout: 30_000 })
     } finally {
       await anaApp.close()
       await biaApp.close()
+    }
+  })
+
+  test('amigos escolhidos: só o escolhido vê; marcar outro amigo no meio da transmissão libera a ele', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    const caioApp = await launchApp(true)
+    try {
+      const [ana, bia, caio] = [await firstWindow(anaApp), await firstWindow(biaApp), await firstWindow(caioApp)]
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+      await enterWithName(caio, 'CaioE2E')
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: bia, name: 'BiaE2E' })
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: caio, name: 'CaioE2E' })
+
+      // Ana escolhe a tela e, antes de começar, só a Bia.
+      await ana.getByRole('button', { name: /Escolher tela/ }).click()
+      await ana.getByRole('radio').first().click()
+      await ana.getByRole('button', { name: /Quem pode ver/ }).click()
+      await ana.getByRole('radio', { name: /Amigos escolhidos/ }).click()
+      await ana.getByRole('checkbox', { name: /BiaE2E/ }).click()
+      await expect(ana.getByRole('button', { name: /Quem pode ver/ })).toContainText('1 amigo escolhido')
+      // Não existe "pedir pra entrar" nem um controle separado de prévia.
+      await expect(ana.getByText(/pedir pra entrar|aprovar/i)).toHaveCount(0)
+      await expect(ana.getByRole('switch', { name: /Prévia no Início/ })).toHaveCount(0)
+      // A escolha é gravada no computador (o processo principal recusava essas chaves antes).
+      await expect.poll(() => ana.evaluate(() => (window as unknown as { telae: { getSettings(): Promise<unknown> } }).telae.getSettings()))
+        .toMatchObject({ shareAudienceMode: 'selected', shareSelectedUsernames: [expect.any(String)] })
+      await ana.getByRole('button', { name: /Começar a transmitir/ }).click()
+      await expect(ana.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible({ timeout: 60_000 })
+
+      // Bia vê o cartão com "Assistir"; Caio, amigo fora da lista, não vê nada.
+      await expect(liveCard(bia, 'AnaE2E').getByRole('button', { name: 'Assistir AnaE2E', exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(liveCard(caio, 'AnaE2E')).toHaveCount(0)
+      await expect(caio.getByRole('heading', { name: 'Ninguém transmitindo agora' })).toBeVisible()
+
+      // No meio da transmissão, Ana marca o Caio: ele passa a ver, mas ninguém é colocado lá dentro sozinho.
+      const panel = ana.getByRole('complementary', { name: 'Quem está assistindo' })
+      await panel.getByRole('button', { name: 'Alterar' }).click()
+      await panel.getByRole('radio', { name: /Amigos escolhidos/ }).click()
+      await panel.getByRole('checkbox', { name: /CaioE2E/ }).click()
+      await expect(panel.getByText(/saem? da transmissão ao aplicar/)).toHaveCount(0)
+      await panel.getByRole('button', { name: 'Aplicar' }).click()
+      await expect(panel.getByText(/2 amigos escolhidos/)).toBeVisible({ timeout: 30_000 })
+
+      await expect(liveCard(caio, 'AnaE2E')).toBeVisible({ timeout: 30_000 })
+      await expect(panel.getByText('CaioE2E')).toHaveCount(0)
+      await watchFriend(caio, 'AnaE2E')
+      await expect(caio.getByLabel('Transmissão do seu amigo')).toBeVisible({ timeout: 60_000 })
+      await expect(panel.getByText('CaioE2E')).toBeVisible({ timeout: 30_000 })
+    } finally {
+      await anaApp.close(); await biaApp.close(); await caioApp.close()
+    }
+  })
+
+  /** Começa a transmitir a primeira fonte; `configure` mexe nas opções de quem pode ver antes de começar. */
+  async function startSharing(page: Page, configure?: () => Promise<void>) {
+    await page.getByRole('button', { name: /Escolher tela/ }).click()
+    await page.getByRole('radio').first().click()
+    if (configure) {
+      await page.getByRole('button', { name: /Quem pode ver/ }).click()
+      await configure()
+    }
+    await page.getByRole('button', { name: /Começar a transmitir/ }).click()
+    await expect(page.getByRole('heading', { name: /Você está transmitindo/ })).toBeVisible({ timeout: 60_000 })
+  }
+
+  const liveCard = (page: Page, name: string) => page.getByRole('article', { name: `${name} está ao vivo` })
+
+  test('todos os amigos: todos veem e entram com um clique, com prévia no Início', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    const caioApp = await launchApp(true)
+    try {
+      const [ana, bia, caio] = [await firstWindow(anaApp), await firstWindow(biaApp), await firstWindow(caioApp)]
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+      await enterWithName(caio, 'CaioE2E')
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: bia, name: 'BiaE2E' })
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: caio, name: 'CaioE2E' })
+
+      await startSharing(ana)
+
+      for (const friend of [bia, caio]) {
+        await expect(liveCard(friend, 'AnaE2E')).toBeVisible({ timeout: 30_000 })
+        // O botão é "Assistir": um clique entra (o cartão do palco e a linha da lista têm o mesmo botão).
+        await expect(liveCard(friend, 'AnaE2E').getByRole('button', { name: 'Assistir AnaE2E', exact: true })).toBeVisible()
+        await expect(friend.getByRole('button', { name: /Pedir pra entrar/ })).toHaveCount(0)
+        // A prévia ligada chega ao Início de quem pode ver.
+        await expect(liveCard(friend, 'AnaE2E').locator('img')).toBeVisible({ timeout: 30_000 })
+      }
+
+      await watchFriend(bia, 'AnaE2E')
+      await expect(bia.getByLabel('Transmissão do seu amigo')).toBeVisible({ timeout: 60_000 })
+      await expect(ana.getByRole('complementary', { name: 'Quem está assistindo' }).getByText('BiaE2E')).toBeVisible({ timeout: 30_000 })
+    } finally {
+      await anaApp.close(); await biaApp.close(); await caioApp.close()
+    }
+  })
+
+  test('ocultar: o amigo oculto nunca vê a transmissão e volta a ver depois de mostrar de novo', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    const caioApp = await launchApp(true)
+    try {
+      const [ana, bia, caio] = [await firstWindow(anaApp), await firstWindow(biaApp), await firstWindow(caioApp)]
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+      await enterWithName(caio, 'CaioE2E')
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: bia, name: 'BiaE2E' })
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: caio, name: 'CaioE2E' })
+
+      // O ícone de olho aparece ao passar o mouse na linha do amigo.
+      const caioRow = ana.getByRole('listitem').filter({ hasText: 'CaioE2E' })
+      await caioRow.hover()
+      await caioRow.getByRole('button', { name: 'Ocultar minhas transmissões de CaioE2E' }).click()
+      await expect(ana.getByRole('status').filter({ hasText: 'CaioE2E não vê mais suas transmissões.' })).toBeVisible({ timeout: 30_000 })
+      await expect(caioRow.getByText('oculto')).toBeVisible()
+
+      await startSharing(ana)
+      await expect(liveCard(bia, 'AnaE2E')).toBeVisible({ timeout: 30_000 })
+      // Caio continua vendo Ana online (sem pista de que foi ocultado), mas nunca ao vivo.
+      await expect(caio.getByRole('listitem').filter({ hasText: 'AnaE2E' })).toBeVisible({ timeout: 30_000 })
+      await caio.waitForTimeout(3000)
+      await expect(liveCard(caio, 'AnaE2E')).toHaveCount(0)
+      await expect(caio.getByRole('button', { name: /Assistir AnaE2E|Pedir pra entrar/ })).toHaveCount(0)
+      // Parar, mostrar de novo em Configurações > Privacidade e transmitir outra vez.
+      await ana.getByRole('button', { name: 'Parar transmissão' }).click()
+      await expect(ana.getByTestId('home-screen')).toBeVisible({ timeout: 30_000 })
+      await ana.getByRole('button', { name: 'Abrir configurações' }).click()
+      await ana.getByRole('tab', { name: 'Privacidade' }).click()
+      await expect(ana.getByText('@', { exact: false }).filter({ hasText: /^@/ }).first()).toBeVisible()
+      await ana.screenshot({ path: test.info().outputPath('privacy-tab.png') })
+      await ana.getByRole('button', { name: 'Mostrar de novo' }).click()
+      await expect(ana.getByText(/Ninguém oculto/)).toBeVisible({ timeout: 30_000 })
+      await ana.getByRole('button', { name: 'Voltar' }).click()
+      await expect(ana.getByTestId('home-screen')).toBeVisible()
+
+      await startSharing(ana)
+      await expect(liveCard(caio, 'AnaE2E')).toBeVisible({ timeout: 30_000 })
+    } finally {
+      await anaApp.close(); await biaApp.close(); await caioApp.close()
+    }
+  })
+
+  test('mudar para escolhidos no meio da transmissão: quem assiste vem marcado e o app diz quem sai', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    const caioApp = await launchApp(true)
+    try {
+      const [ana, bia, caio] = [await firstWindow(anaApp), await firstWindow(biaApp), await firstWindow(caioApp)]
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+      await enterWithName(caio, 'CaioE2E')
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: bia, name: 'BiaE2E' })
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: caio, name: 'CaioE2E' })
+
+      await startSharing(ana)
+      await watchFriend(bia, 'AnaE2E')
+      await watchFriend(caio, 'AnaE2E')
+      await expect(bia.getByLabel('Transmissão do seu amigo')).toBeVisible({ timeout: 60_000 })
+      await expect(caio.getByLabel('Transmissão do seu amigo')).toBeVisible({ timeout: 60_000 })
+      const panel = ana.getByRole('complementary', { name: 'Quem está assistindo' })
+      await expect(panel.getByText('BiaE2E')).toBeVisible({ timeout: 30_000 })
+      await expect(panel.getByText('CaioE2E')).toBeVisible({ timeout: 30_000 })
+
+      // Passar para "escolhidos" parte de quem já assiste: os dois vêm marcados, com a etiqueta, e ninguém sai ainda.
+      await panel.getByRole('button', { name: 'Alterar' }).click()
+      await panel.getByRole('radio', { name: /Amigos escolhidos/ }).click()
+      for (const name of [/BiaE2E/, /CaioE2E/]) {
+        await expect(panel.getByRole('checkbox', { name })).toHaveAttribute('aria-checked', 'true')
+        await expect(panel.getByRole('checkbox', { name }).getByText('Assistindo')).toBeVisible()
+      }
+      await expect(panel.getByText(/saem? da transmissão ao aplicar/)).toHaveCount(0)
+      await ana.screenshot({ path: test.info().outputPath('audience-editor-marcados.png') })
+
+      // Desmarcar o Caio: o aviso diz o nome dele, e ele só sai depois de Aplicar.
+      await panel.getByRole('checkbox', { name: /CaioE2E/ }).click()
+      await expect(panel.getByText('CaioE2E sai da transmissão ao aplicar.')).toBeVisible()
+      await ana.screenshot({ path: test.info().outputPath('audience-editor-saindo.png') })
+      await expect(caio.getByLabel('Transmissão do seu amigo')).toBeVisible()
+      await panel.getByRole('button', { name: 'Aplicar' }).click()
+
+      await expect(caio.locator('p', { hasText: 'A transmissão acabou, ou você foi removido dela.' })).toBeVisible({ timeout: 30_000 })
+      await expect(bia.getByLabel('Transmissão do seu amigo')).toBeVisible()
+      await expect(panel.getByText('CaioE2E')).toHaveCount(0, { timeout: 30_000 })
+      await expect(panel.getByText('BiaE2E')).toBeVisible()
+      await expect(panel.getByText(/1 amigo escolhido/)).toBeVisible()
+
+      // Caio volta ao Início e já não vê a transmissão.
+      await caio.getByRole('button', { name: 'Voltar ao início' }).click()
+      await expect(liveCard(caio, 'AnaE2E')).toHaveCount(0, { timeout: 30_000 })
+
+      // Ana marca o Caio de novo: ele volta a ver o cartão (sem ser recolocado sozinho).
+      await panel.getByRole('button', { name: 'Alterar' }).click()
+      await panel.getByRole('checkbox', { name: /CaioE2E/ }).click()
+      await panel.getByRole('button', { name: 'Aplicar' }).click()
+      await expect(liveCard(caio, 'AnaE2E')).toBeVisible({ timeout: 30_000 })
+      await expect(panel.getByText('CaioE2E')).toHaveCount(0)
+
+    } finally {
+      await anaApp.close(); await biaApp.close(); await caioApp.close()
+    }
+  })
+
+  test('amigo ao vivo continua na lista de amigos, no alto, e dá pra assistir por ali', async () => {
+    const anaApp = await launchApp()
+    const biaApp = await launchApp(true)
+    try {
+      const [ana, bia] = [await firstWindow(anaApp), await firstWindow(biaApp)]
+      await enterWithName(ana, 'AnaE2E')
+      await enterWithName(bia, 'BiaE2E')
+      await befriend({ page: ana, name: 'AnaE2E' }, { page: bia, name: 'BiaE2E' })
+
+      await startSharing(ana)
+      const rail = bia.getByRole('complementary', { name: 'Amigos' })
+      await expect(rail.getByRole('heading', { name: /^Ao vivo/ })).toBeVisible({ timeout: 30_000 })
+      // O contador do alto bate com as linhas: a Ana está ao vivo e continua listada.
+      await expect(rail.locator('#friends-title + span')).toHaveText('1')
+      await expect(rail.getByRole('listitem')).toHaveCount(1)
+      await expect(rail.getByRole('listitem').first()).toContainText('AnaE2E')
+      await expect(rail.getByRole('listitem').first()).toContainText('Ao vivo')
+
+      const liveRow = rail.getByRole('listitem').first()
+      await liveRow.hover()
+      const hide = liveRow.getByRole('button', { name: 'Ocultar minhas transmissões de AnaE2E' })
+      await expect(hide).toBeVisible()
+      const hideBounds = await hide.boundingBox()
+      const watchBounds = await liveRow.getByRole('button', { name: 'Assistir AnaE2E' }).boundingBox()
+      expect(hideBounds!.x + hideBounds!.width).toBeLessThanOrEqual(watchBounds!.x)
+      await hide.click()
+      await liveRow.getByRole('button', { name: 'Mostrar minhas transmissões pra AnaE2E' }).click()
+      await expect(liveRow.getByRole('button', { name: 'Remover AnaE2E', exact: true })).toBeVisible()
+      await bia.screenshot({ path: test.info().outputPath('lista-ao-vivo.png') })
+
+      await rail.getByRole('button', { name: 'Assistir AnaE2E' }).click()
+      await expect(bia.getByLabel('Transmissão do seu amigo')).toBeVisible({ timeout: 60_000 })
+    } finally {
+      await anaApp.close(); await biaApp.close()
     }
   })
 

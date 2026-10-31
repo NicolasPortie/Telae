@@ -13,7 +13,7 @@ if (process.env.TELAE_E2E_RELAY === '1' && process.env.TELAE_E2E_MEDIA !== '1') 
 /**
  * E2E de duas instâncias (ver docs/PROJECT_SPEC.md, seção de testes).
  * Requer: Windows com display, `npm run build` já executado.
- * - `npm run test:e2e` — fluxos determinísticos sem mídia (nomes, picker, convite inválido).
+ * - `npm run test:e2e` — fluxos determinísticos sem mídia (contas, amigos, público e privacidade).
  * - `TELAE_E2E_MEDIA=1 npm run test:e2e` — fluxo completo com captura real (headed).
  */
 export default defineConfig({
@@ -34,7 +34,7 @@ export default defineConfig({
         url: 'http://localhost:5015/health',
         reuseExistingServer: !process.env.CI,
         // Banco SQLite local e cadastro sem código por e-mail: só para testes automatizados.
-        env: { ASPNETCORE_ENVIRONMENT: 'Development', Accounts__DevelopmentDatabase: path.join(os.tmpdir(), `telae-e2e-${Date.now()}.db`), Auth__RequireEmailVerification: 'false', Auth__StrictRequestsPerMinute: '1000', Auth__RequestsPerMinute: '1000' },
+        env: { ASPNETCORE_ENVIRONMENT: 'Development', Accounts__DevelopmentDatabase: path.join(os.tmpdir(), `telae-e2e-${Date.now()}.db`), Auth__RequireEmailVerification: 'false', Auth__StrictRequestsPerMinute: '1000', Auth__RequestsPerMinute: '1000', Hub__RegistrationsPerMinute: '1000' },
         timeout: 120_000,
       },
 })

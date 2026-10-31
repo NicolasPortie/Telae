@@ -29,7 +29,7 @@ export async function befriend(first: { page: Page; name: string }, second: { pa
   await addFriend(second.page, firstHandle, first.name)
 }
 
-/** Assiste a um amigo que está ao vivo pelo cartão dele no palco da Home. */
+/** Assiste a um amigo que está ao vivo pelo cartão dele no palco da Home (a lista de amigos tem o mesmo botão). */
 export async function watchFriend(page: Page, friendName: string) {
-  await page.getByRole('button', { name: `Assistir ${friendName}`, exact: true }).click()
+  await page.getByRole('article', { name: `${friendName} está ao vivo` }).getByRole('button', { name: `Assistir ${friendName}`, exact: true }).click()
 }
