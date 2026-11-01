@@ -68,7 +68,7 @@ $env:TELAE_E2E_MEDIA = '0'
 $env:TELAE_E2E_RELAY = '0'
 ```
 
-Sem `TELAE_E2E_VIEWERS`, esse teste é omitido. Aceita qualquer quantidade inteira positiva de espectadores e inteiro de teste de longa duração >=60 segundos. O timeout cresce com duração e quantidade de espectadores. Evidências ficam em `test-results/load-N-media` ou `load-N-relay`: JSON incremental (inclusive em falha), captura de tela completa do emissor com controles e convite mascarado e captura de tela do receptor, anexados ao relatório Playwright. Tracing está desligado só para carga, para evitar snapshots pesados em uma hora.
+Sem `TELAE_E2E_VIEWERS`, esse teste é omitido. Aceita qualquer quantidade inteira positiva de espectadores e inteiro de teste de longa duração >=60 segundos. O timeout cresce com duração e quantidade de espectadores. Evidências ficam em `test-results/load-N-media` ou `load-N-relay`: JSON incremental (inclusive em falha), captura de tela completa do emissor com controles e captura de tela do receptor, anexados ao relatório Playwright. Tracing está desligado só para carga, para evitar snapshots pesados em uma hora.
 
 O JSON registra entradas sequenciais desde o clique até `requestVideoFrameCallback`, contadores `totalVideoFrames`/drops e FPS de reprodução a cada ~5 segundos, diagnóstico público inicial/final com `framesDecoded`, `framesPerSecond` e amostras WebRTC, mais `app.getAppMetrics()` no início/fim do teste de longa duração para emissor e cada receptor (memória em KiB; PIDs não são estáveis). `start` indica que todos os espectadores já se conectaram; `end` é registrado antes de parar. Dumps permitem investigar memória por processo e caminho ICE. O p95 das entradas coletadas é descritivo da execução e não atende a amostragem de release.
 

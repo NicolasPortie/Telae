@@ -12,7 +12,7 @@ O aplicativo usa Electron, React, TypeScript e Tailwind. O Chromium fornece a im
 
 Imagem e som seguem diretamente entre os computadores quando possível. TURN retransmite a mídia criptografada quando a conexão direta não funciona. Cada espectador recebe uma conexão independente na transmissão. O consumo de envio cresce com esse número, e a qualidade depende da capacidade das máquinas e da rede.
 
-A identidade é uma conta com e-mail, senha e `@usuário` único. As amizades são mútuas e ficam no servidor. A decisão está registrada na [ADR 0004](adr/0004-user-accounts.md).
+A identidade é uma conta com e-mail, senha e `@usuário` único. As amizades são mútuas e ficam no servidor. A decisão está registrada na [ADR 0004](adr/0004-user-accounts.md). Quem transmite decide quem, entre os amigos, pode ver; a regra está na [ADR 0005](adr/0005-share-audience.md).
 
 ## Tarefas de quem usa
 
@@ -20,14 +20,15 @@ Quem transmite precisa conseguir:
 
 - escolher uma tela ou janela e saber o que está sendo compartilhado;
 - enviar o áudio do sistema ou do aplicativo escolhido;
-- restringir o acesso aos amigos;
+- escolher quem pode ver: todos os amigos ou só alguns, e mudar isso durante a transmissão;
+- ocultar as próprias transmissões de alguém sem desfazer a amizade;
 - acompanhar quem está entrando, assistindo ou se reconectando;
 - encerrar a captura imediatamente;
 - trocar a fonte e a qualidade durante a transmissão.
 
 Quem assiste precisa conseguir:
 
-- encontrar os amigos ao vivo e entrar sem trocar códigos;
+- encontrar os amigos ao vivo, na lista de amigos ou no Início, e entrar com um clique, sem trocar códigos;
 - usar o espaço da janela e a tela cheia sem perder os controles;
 - ajustar volume e silenciamento localmente;
 - receber imagem e som sincronizados;

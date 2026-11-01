@@ -14,7 +14,9 @@ Use um Windows x64 com monitor ativo, dispositivo de áudio e sessão de usuári
 
 O job físico compila o bridge e executa Electron headed com `TELAE_E2E_MEDIA=1`. Verifica frames decodificados, faixa de áudio, troca de fonte, espectadores, remoção e controles durante a transmissão. Com TURN configurado, executa também `TELAE_E2E_RELAY=1` e exige relay no par ICE selecionado. Sem TURN o teste relay é explicitamente omitido; isso não comprova aptidão para redes restritivas. Os artefatos HTML/trace registram falhas, mas não substituem o benchmark de hardware/rede.
 
-A carga/endurance é opt-in: `TELAE_E2E_VIEWERS=N` (inteiro positivo) com `TELAE_E2E_MEDIA=1` e `TELAE_E2E_SOAK_SECONDS>=60` (padrão 60; 3600 para uma hora). Nenhum workflow habilita carga automaticamente. Consulte comandos e limites de medição em [BENCHMARK.md](BENCHMARK.md). O teste determinístico de convite inválido não chama o bridge de áudio sem a flag de mídia.
+A carga/endurance é opt-in: `TELAE_E2E_VIEWERS=N` (inteiro positivo) com `TELAE_E2E_MEDIA=1` e `TELAE_E2E_SOAK_SECONDS>=60` (padrão 60; 3600 para uma hora). Nenhum workflow habilita carga automaticamente. Consulte comandos e limites de medição em [BENCHMARK.md](BENCHMARK.md). Os testes determinísticos de contas, amigos e privacidade não chamam o bridge de áudio sem a flag de mídia.
+
+Nos cenários de transmissão do CI, o teste fornece frames de um canvas local ao aplicativo e recusa o início da captura nativa de áudio, mesmo quando a ponte está disponível após o empacotamento. Isso exercita a interface, a sinalização, a prévia e o transporte WebRTC sem capturar imagem ou som do runner. A enumeração de fontes continua nativa e exige uma sessão gráfica com uma fonte disponível. A captura física de tela e áudio continua exclusiva dos cenários com `TELAE_E2E_MEDIA=1`.
 
 ## Contrato dos E2E com o aplicativo
 
@@ -29,10 +31,10 @@ ClientAddress__HeaderName=CF-Connecting-IP
 
 Acrescente `ClientAddress__KnownProxies__1=::1` somente se o túnel usa também IPv6 loopback. O backend ignora headers encaminhados por endereços não configurados e aceita somente um salto. Não use curingas nem exponha acesso direto ao origin que permita contornar o proxy confiável. Encaminhamento está desativado por padrão. Os testes verificam isolamento de limites entre clientes, spoofing e fallback para headers ausentes ou inválidos.
 
-Os comandos novos `UpdateShareQuality` e `RemoveViewer` exigem implantar este backend antes de distribuir este desktop. Clientes anteriores ainda negociam mídia, mas não conhecem esses controles.
+Implante este backend antes de distribuir o desktop com `UpdateShareAudience`, `GetHiddenViewers`, `HideShares`, `UnhideShares` e `SharePreviewRemoved`. Clientes anteriores com contas mantêm o público padrão de todos os amigos, com prévia. Convites legados por código foram removidos.
 
 - `getEnvironment()` expõe `forceRelay: true` quando `!app.isPackaged && TELAE_E2E_RELAY === '1'` no processo principal. O renderer passa `iceTransportPolicy: 'relay'` a todos os peers e valida presença de credenciais TURN. Não altere a política com monkey patch no teste.
-- Select `Qualidade da transmissão`, valores `720p60`, `1080p30`, `1080p60`, `1440p30`, `1440p60`. É o único ajuste de transmissão na interface.
+- Select `Qualidade da transmissão`, valores `720p60`, `1080p30`, `1080p60`, `1440p30`, `1440p60`. O controle `Quem pode ver` permite escolher amigos antes e durante a transmissão; a prévia segue essa escolha automaticamente.
 - Botões `Parar transmissão`, `Trocar fonte`, `Remover ${displayName}`. O receptor mantém volume e silenciamento local.
 - Vídeo `Transmissão do seu amigo`; `Assistindo` somente após confirmação de primeiro frame.
 - O helper E2E `diagnosticSnapshot` coleta telemetria interna para confirmar o caminho ICE real (`relay`) do par selecionado; o teste também exige frames decodificados no receptor. Diagnósticos não aparecem na interface.

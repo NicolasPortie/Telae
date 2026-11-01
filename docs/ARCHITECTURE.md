@@ -68,11 +68,46 @@ Os pedidos pendentes são calculados a partir dessas relações, por isso sobrev
 
 O cadastro depende de `Auth__RegistrationOpen` e `Auth__AllowedEmails`. Com o cadastro fechado, somente e-mails liberados podem criar conta; os demais recebem `registration_closed` antes de criar conta ou enviar e-mail. `Auth__AllowLegacyDevices` mantém clientes sem conta desativados por padrão.
 
+## Quem pode ver
+
+Toda decisão de acesso a uma transmissão passa por `CanWatchLocked` ([TelaeRegistry.Access.cs](../apps/server/Core/TelaeRegistry.Access.cs)). Para cada par (pessoa, transmissão), a primeira regra que não se cumpre nega o acesso:
+
+1. quem transmite não assiste a si mesmo;
+2. quem está oculto por quem transmite não vê nada;
+3. quem foi removido da sessão não vê nada;
+4. quem não é amigo mútuo não vê nada;
+5. no modo `selected`, quem não está na lista escolhida não vê nada.
+
+Quem passa por todas vê a transmissão. Entrada, reconexão, prévia e presença usam essa função; nenhum outro ponto consulta amizade para decidir acesso. Quem não pode ver recebe a mesma mensagem de "não está transmitindo", então ninguém descobre que foi ocultado ou deixado de fora.
+
+A escolha tem dois modos: `friends` (todos os amigos) e `selected` (só os `@usuários` marcados). Ela chega em `StartShare` e muda a qualquer momento com `UpdateShareAudience`. A prévia e a presença ao vivo acompanham essa mesma escolha. Sem esses campos (clientes antigos), vale o padrão: todos os amigos. A lista de escolhidos só aceita amigos mútuos e nunca chega aos espectadores.
+
+### Mudar a escolha durante a transmissão
+
+`UpdateShareAudience` reaplica a regra a quem assiste (`ReevaluateLocked`):
+
+- quem continua com acesso segue assistindo, sem reconectar;
+- quem ficou de fora sai: recebe `SessionEnded` e quem transmite recebe `ViewerLeft`;
+- quem passa a ter acesso vê o cartão ao vivo e pode entrar, mas o servidor não coloca ninguém na transmissão sozinho;
+- voltar para `friends` não tira ninguém.
+
+O servidor é estrito: quem não está na lista sai. Quem torna isso gentil é o app. Ao passar de "todos" para "escolhidos", ele já marca quem está assistindo, mostra a etiqueta "Assistindo" na lista e, antes de aplicar, diz pelo nome quem sairia. Quem foi removido pelo botão X de uma transmissão (`RemoveViewer`) continua barrado nela mesmo que a lista o inclua.
+
+A mesma reavaliação roda quando a amizade muda e quando alguém é ocultado.
+
+Uma entrada recusada pela regra de acesso retorna o mesmo código e texto de uma transmissão inexistente, inclusive para quem foi removido. A validação de amizade em `JoinFriendShare` acontece antes da consulta à sessão, sem revelar se ela existe.
+
+### Ocultar
+
+A lista de ocultos fica no banco (`HiddenViewers`), é carregada no primeiro registro da conta no processo do servidor e vale para todos os aparelhos. Mudanças posteriores atualizam esse estado em memória; uma leitura antiga durante a reconexão não pode desfazê-las. As gravações são serializadas por conta para preservar o limite de 200 pessoas. Ocultar quem está assistindo remove a pessoa na hora e apaga a miniatura que ela tinha.
+
 ## Prévias e presença
 
 Durante uma transmissão, o app envia um JPEG a cada oito segundos por `PublishSharePreview`. A imagem tem 640 pixels de largura e no máximo 96 KiB, incluindo a URL de dados. O servidor verifica a estrutura JPEG e os limites de dimensões: 4096 pixels por eixo e 4.194.304 pixels no total.
 
-O servidor aceita no máximo uma prévia por dispositivo a cada seis segundos, inclusive após reconexão ou reinício da transmissão. Guarda somente o quadro mais recente na memória e o envia por `SharePreview` aos amigos mútuos conectados que não foram removidos da sessão. `GetFriendPreviews` aplica a mesma autorização. Os quadros não são persistidos e desaparecem ao encerrar a transmissão.
+O servidor aceita no máximo uma prévia por dispositivo a cada seis segundos, inclusive após reconexão ou reinício da transmissão. Guarda somente o quadro mais recente na memória e o envia por `SharePreview` apenas ao público permitido pela transmissão. `GetFriendPreviews` aplica a mesma regra. Ao restringir o público, o servidor apaga o quadro guardado e envia `SharePreviewRemoved` apenas a quem perdeu o acesso. Ocultar alguém, removê-lo ou perder uma amizade também invalida a prévia dessa pessoa imediatamente. Os quadros não são persistidos e desaparecem ao encerrar a transmissão.
+
+A presença é calculada para cada observador. Quem não pode ver a transmissão recebe o amigo como `online`, sem qualidade ativa, e a ordem da lista também não revela a transmissão. Por isso `PresenceChanged` agrupa as conexões pelo snapshot que cada uma pode ver e envia um snapshot por grupo.
 
 Mudanças de amizade, remoção de espectadores e envio de prévias são serializados para impedir que uma pessoa removida continue recebendo quadros novos. A presença também exige assinatura por `GetFriends` e amizade mútua. Uma nova solicitação substitui o conjunto anterior de assinaturas; uma lista vazia remove as assinaturas, e a reconexão precisa restaurá-las.
 
@@ -84,7 +119,7 @@ O worklet de áudio por processo mantém até 120 ms de PCM em um buffer circula
 
 RTT e `getStats()` não medem o atraso completo entre as duas telas nem o desvio perceptível entre áudio e vídeo. Essas medições dependem do [teste físico](BENCHMARK.md).
 
-O servidor limita o tamanho das entradas e separa os orçamentos de registro, comandos e sinalização ICE. O registro comporta até 10.000 perfis e até 32 convites legados pendentes por emissor. Os limites de resolução, envio, áudio e adaptação da mídia são aplicados nos computadores: o serviço de sinalização não inspeciona nem controla o fluxo criptografado entre os pares.
+O servidor limita o tamanho das entradas e separa os orçamentos de registro, comandos e sinalização ICE. O registro comporta até 10.000 perfis legados. Os limites de resolução, envio, áudio e adaptação da mídia são aplicados nos computadores: o serviço de sinalização não inspeciona nem controla o fluxo criptografado entre os pares.
 
 ## Segurança do aplicativo e das atualizações
 
@@ -98,6 +133,6 @@ A chave privada fica fora do app e do servidor de downloads. Nesse fluxo, a inst
 
 O caminho anterior às contas permanece atrás de `Auth__AllowLegacyDevices`. Ele usa uma credencial aleatória de 256 bits; o servidor guarda somente seu SHA-256 e compara em tempo constante. Identificadores de dispositivo e códigos públicos não concedem autorização.
 
-Nesse caminho, `JoinFriendShare` exige declaração mútua por `GetFriends`; pedidos podem ser aceitos ou dispensados por `DismissFriendRequest`. Perder a amizade remove um espectador ativo e notifica os participantes. `CreateInvite` e `JoinWithInvite` existem apenas por compatibilidade; o app atual não cria nem mostra esses convites. `JoinShare` direto continua limitado a quem já estava autorizado na sessão, e sair revoga essa autorização.
+Nesse caminho, `JoinFriendShare` exige declaração mútua por `GetFriends`; pedidos podem ser aceitos ou dispensados por `DismissFriendRequest`. Perder a amizade remove um espectador ativo e notifica os participantes. Os convites por código desses clientes foram removidos: entrar exige amizade mútua. `JoinShare` direto continua limitado a quem já estava na sessão e ainda tem acesso, e sair revoga essa autorização.
 
 Perfis locais antigos sem credencial recebem novo identificador e credencial, preservando nome e amigos salvos. Um perfil antigo do servidor não pode ser tomado pela simples apresentação de uma credencial nova. Arquivos de perfil são gravados em um arquivo temporário, sincronizados e substituídos atomicamente no servidor e no aplicativo.
