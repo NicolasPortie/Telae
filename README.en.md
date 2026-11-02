@@ -20,17 +20,17 @@ A Windows desktop app with video up to 1440p60, system or per-application audio 
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-P2P-8CC63F)
 
-[Demo](#demo) · [Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Self-hosting](#self-hosting) · [Documentation](#documentation)
+[In use](#in-use) · [Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Self-hosting](#self-hosting) · [Documentation](#documentation)
 
 </div>
 
-## Demo
+## In use
 
 <p align="center">
-  <img src="docs/media/demo.gif" alt="Telaê demo: Ana picks a window and goes live while friends join; on Pedro's PC her screen shows up live on the home screen and he watches in one click with the statistics open" width="720" />
+  <img src="docs/media/demo.gif" alt="A Casa Nativa shop page is shared and watched in Telaê" width="720" />
 </p>
 
-<p align="center"><sub>Ana picks a window and goes live while friends join. On Pedro's PC her screen is already playing on the home screen; he watches in one click and opens the statistics. Interface walkthrough with sample content.</sub></p>
+<p align="center"><sub>The Casa Nativa shop page appears on the Home screen of allowed friends and opens in the player when they join.</sub></p>
 
 ## Table of contents
 
@@ -42,7 +42,6 @@ A Windows desktop app with video up to 1440p60, system or per-application audio 
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
 - [Self-hosting](#self-hosting)
-- [Tests and quality](#tests-and-quality)
 - [Security](#security)
 - [Known limitations](#known-limitations)
 - [Documentation](#documentation)
@@ -50,41 +49,50 @@ A Windows desktop app with video up to 1440p60, system or per-application audio 
 
 ## Overview
 
-Telaê does one thing well: pick a screen or window and let a friend watch it with a sharp picture, synced sound and low latency. There are no rooms, calls or channels. Whoever is streaming shows up as **Live** in your friends list, and you join with one click.
+Telaê lets you share a screen or window with friends, with synced audio. Whoever is streaming shows up as **Live** in your friends list; click to watch. There are no rooms, calls or channels.
 
-The goal of the project is a screen-sharing product that is genuinely good at its single job, built end to end: a native capture pipeline for audio, adaptive WebRTC transport, an account and friends backend, auto-updates and a measured quality process.
+The app combines Windows audio capture, WebRTC transport, accounts, friends and automatic updates. Picture travels directly between computers; the server keeps accounts, friend lists and connections in sync.
 
 ## Features
 
 - **Up to 1440p60** with explicit profiles (720p60, 1080p30, 1080p60, 1440p30, 1440p60) and automatic adaptation under CPU or network pressure.
 - **Synced audio** from the whole system or only the chosen application, captured by a native bridge using Windows process loopback. Discord's audio is excluded automatically when sharing a full screen.
 - **Friends and presence**: add people by their @username, mutual friendship, friend requests and quick switching between live streams. The friend list lives on the server, so it follows your account to any computer.
-- **Live previews**: while a friend streams, a small preview of their screen refreshes on your home screen every few seconds. Only mutual friends receive it, and it is never stored.
+- **Live previews**: a stream thumbnail refreshes on the Home screen of friends allowed to watch. Choose all friends or selected friends; people left out see neither the live card nor its preview. The image stays in memory during the stream.
+- **Who can watch**: when you stream, choose all friends or only some (and change it mid-stream), and hide your streams from anyone without unfriending them. People left out only see you as online.
 - **Multiple viewers** per stream, each with an independent connection, quality and recovery.
 - **Real-time statistics** in the player and on the sharer screen: resolution, FPS, bitrate, estimated latency, jitter, packet loss, freezes and route (direct or relayed).
 - **Peer-to-peer first**: media flows directly between peers and uses TURN only when the network requires it.
 - **Accounts**: email and password with 6-digit email verification, password recovery, rotating sessions and account deletion ([ADR 0004](docs/adr/0004-user-accounts.md)). Tokens are kept in the OS keystore.
 - **Windows notifications** when a friend goes live, optional launch at startup and automatic updates in official builds, verified with the project's release key.
-- **English and Portuguese** interface, with Brazilian Portuguese as the default and other languages available in Settings.
+- **English and Portuguese** interface, with Brazilian Portuguese as the default and language selection in Settings.
 
 ## Screenshots
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/home.png" alt="Home screen with live previews of friends who are streaming and the friends list" /></td>
-    <td width="50%"><img src="docs/screenshots/viewer.png" alt="Viewer player with controls and the statistics panel" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/home.png" alt="Home screen with a live friend and the shared Casa Nativa shop page" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/viewer.png" alt="Full-window player showing the Casa Nativa shop page" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Home: friends who are live show their screen right there</sub></td>
-    <td align="center"><sub>Viewer: player with controls and statistics (key <code>I</code>)</sub></td>
+    <td align="center"><sub>Home: open a friend's live stream from the card</sub></td>
+    <td align="center"><sub>Player: the shared page fills the app window</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/sharer.png" alt="Sharer screen with preview, who is watching and connection" /></td>
-    <td width="50%"><img src="docs/screenshots/create-account.png" alt="Create account screen with email, username and password" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Sharing screen with the Casa Nativa page selected" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/create-account.png" alt="Telaê account creation screen" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Sharer: preview, who is watching and connection health</sub></td>
-    <td align="center"><sub>Create account: your @username is how friends find you</sub></td>
+    <td align="center"><sub>The selected window appears in the sharing preview</sub></td>
+    <td align="center"><sub>Set up an account so friends can add you</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pt-BR/audience-choice.png" alt="Window picker with the Who can see panel open, Selected friends mode" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/audience-live.png" alt="Live stream with the Who can see editor open, changing the audience mid-stream" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Who can see: all friends, or only the ones you pick</sub></td>
+    <td align="center"><sub>Change the audience while the stream is already live</sub></td>
   </tr>
 </table>
 
@@ -107,7 +115,7 @@ sequenceDiagram
     S-->>V: Encrypted media (DTLS-SRTP), direct or through TURN
 ```
 
-The server only handles accounts, friendships, presence and signaling. Once the connection is negotiated, video and audio never pass through it. The sharer encodes the capture once per viewer with Chromium's WebRTC stack, and a quality controller adjusts bitrate, resolution and frame rate from live statistics.
+The server handles accounts, friendships, presence, signaling and authorized thumbnails. Stream video and audio travel over WebRTC, directly between computers or through a TURN relay. The sharer encodes the capture once per viewer, and a quality controller adjusts bitrate, resolution and frame rate from live statistics.
 
 The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decision records in [docs/adr](docs/adr).
 
@@ -121,7 +129,6 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 | Native audio | .NET 10 and NAudio, Windows process loopback capture |
 | Backend | ASP.NET Core 10, SignalR, Entity Framework Core, JWT |
 | Data | PostgreSQL in production, SQLite in development |
-| Tests | Vitest and Testing Library, xUnit, Playwright (two Electron instances) |
 | Delivery | GitHub Actions, Docker Compose, tag-based releases and auto-update feed |
 
 ## Repository layout
@@ -131,9 +138,8 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 | [`apps/desktop`](apps/desktop) | Electron app: capture, WebRTC, adaptive quality and UI. |
 | [`apps/server`](apps/server) | Signaling service: accounts, friends, sessions and ephemeral TURN credentials. |
 | [`apps/audio-bridge`](apps/audio-bridge) | Native audio bridge for per-application capture on Windows. |
-| [`tests`](tests) | Server tests and a real-audio regression test. |
 | [`ops`](ops) | Scripts and units to deploy the Linux server and publish updates. |
-| [`docs`](docs) | Architecture, decision records (ADR), quality validations and release notes (mostly in Portuguese). |
+| [`docs`](docs) | Architecture, stream privacy, decision records (ADR) and release notes. |
 
 ## Getting started
 
@@ -141,13 +147,22 @@ The full design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the decis
 
 Grab the generic Windows installer (`Telae-Setup-<version>.exe`) from the [latest release](https://github.com/NicolasPortie/Telae/releases/latest). It has no default server or official update feed. The maintainer distributes the official installer through a separate stable download link: it includes the official server and automatically installs future updates after verifying the project's Ed25519 signature. The installers do not have Windows Authenticode certificates yet, so SmartScreen may warn on the initial installation.
 
-The installers published here are generic: they do not come with any server. Telaê is open source, so to use it with your friends [run your own server](#self-hosting) and set its address on the sign-in screen (**Server > Change**) or in **Settings > Signaling server**. To bake a default into your own installer, set `TELAE_DEFAULT_SERVER_URL` when running `npm run dist`.
+To use the generic installer, [run your own server](#self-hosting) and set its address on the sign-in screen (**Server > Change**) or in Settings. To include a default address in your installer, set `TELAE_DEFAULT_SERVER_URL` when running `npm run dist`.
+
+### Use with friends
+
+1. Connect both apps to the same server and create your accounts.
+2. Send a request using your friend's @username and wait for them to accept.
+3. Click **Choose screen**, select a screen or window and choose who can watch.
+4. Start streaming. Your friend can click **Watch** on Home or in the friends list.
+
+During the stream, use **Who can watch > Change** to edit the audience. The preview updates to match your selection. Use the eye icon in the friends list to hide your streams from someone; undo it in **Privacy**.
 
 ### Build from source
 
 **Requirements:** Windows 10/11 x64, Node.js 22+ and the .NET 10 SDK. Per-application audio filtering needs Windows build 20348 or later.
 
-Signaling server (uses a local SQLite file and prints verification codes to the log, so no database or mail server is needed):
+Signaling server (in development, uses local SQLite and saves verification emails in `apps/server/data/dev-mail`, so no external database or SMTP server is needed):
 
 ```bash
 dotnet run --project apps/server/Telae.Server.csproj
@@ -178,11 +193,13 @@ docker compose up -d
 
 In the app, open **Settings > Signaling server** and enter its address (for example `http://localhost:5015`). The server keeps profiles in a volume and exposes `GET /health`.
 
+Compose binds the port to the local computer only (`127.0.0.1:5015`). For friends on other computers, expose the service through an HTTPS proxy and use the same address in both apps. Set `TELAE_ALLOWED_EMAILS` to the participants' emails or open registration with `TELAE_REGISTRATION_OPEN=true`.
+
 | Variable | Purpose |
 | --- | --- |
 | `POSTGRES_PASSWORD` | Password of the PostgreSQL database. |
 | `TELAE_JWT_KEY` | Signing key for access tokens (32+ characters). |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Transactional email. Without `SMTP_HOST`, codes are only written to the log. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Transactional email. Configure SMTP in production for verification and account recovery. Without it, email delivery is unavailable; in development, emails are saved in `data/dev-mail`. |
 | `TELAE_ALLOWED_EMAILS` | Comma-separated emails that may create an account. Registration is **closed by default**: anyone else is refused. |
 | `TELAE_REGISTRATION_OPEN` | Set to `true` to let anyone create an account (public servers). |
 | `Auth__AllowLegacyDevices` | Accepts clients released before accounts (no sign-in). Off by default. |
@@ -191,27 +208,11 @@ In the app, open **Settings > Signaling server** and enter its address (for exam
 
 For restrictive networks, configure a TURN server (see [`ops/turnserver.conf.example`](ops/turnserver.conf.example) and the comments in [`docker-compose.yml`](docker-compose.yml)). Release, deploy and update operations are described in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-## Tests and quality
-
-```bash
-cd apps/desktop
-npm run lint        # oxlint
-npm run typecheck   # tsc
-npm test            # 207 unit and component tests (vitest)
-npm run test:e2e    # two Electron instances + local server (Playwright)
-```
-
-```bash
-dotnet test tests/server/Telae.Server.Tests.csproj   # 127 server tests
-```
-
-The end-to-end suite with real screen and audio capture is opt-in (`TELAE_E2E_MEDIA=1`). Measured results, methodology and raw evidence live in [docs/validation](docs/validation), [docs/BENCHMARK.md](docs/BENCHMARK.md) and [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md). Continuous integration runs lint, type checks, unit tests, the server tests and the deterministic E2E suite on every push.
-
 ## Security
 
 - The renderer is isolated (`contextIsolation`, no Node integration, sandbox, strict CSP) and talks to the main process through a narrow, typed preload API.
 - Passwords are hashed with the ASP.NET Core password hasher. Sessions use short-lived JWT access tokens and rotating refresh tokens with reuse detection, stored encrypted with the OS keystore.
-- Joining a stream requires mutual friendship, and the server enforces input limits and per-IP and per-connection rate limits.
+- Joining a stream requires mutual friendship and goes through a single access rule on the server (chosen audience, hidden and removed people). The server also enforces input limits and per-IP and per-connection rate limits.
 - Media is encrypted end to end between peers (DTLS-SRTP); TURN credentials are ephemeral.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
@@ -221,19 +222,19 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 - Windows only for now (the capture and audio pipeline depends on Windows APIs).
 - The installers do not have Windows Authenticode certificates yet, so SmartScreen may warn on first run. Official automatic updates use a separate pinned Ed25519 release key; generic builds need their own trusted feed and release key.
 - Each viewer receives its own encoded stream, so upload bandwidth and CPU grow with the number of viewers. An SFU is a future option.
-- 1440p60 depends on the machine and the network; the validation docs list what was and was not measured.
+- 1440p60 depends on the machine and the network.
 
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md) and [project spec](docs/PROJECT_SPEC.md)
+- [Stream privacy](docs/adr/0005-share-audience.md)
 - [UI design](docs/DESIGN.md) and [glossary](GLOSSARY.md)
 - [Operations: release, deploy and updates](docs/OPERATIONS.md)
-- [Streaming quality](docs/validation/STREAMING_QUALITY_2026-10-12.md) and [benchmark](docs/BENCHMARK.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contributing
 
-Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+To report a problem, open an issue. Read [CONTRIBUTING.md](CONTRIBUTING.md) before contributing and follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

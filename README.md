@@ -20,17 +20,17 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
 ![WebRTC](https://img.shields.io/badge/WebRTC-P2P-8CC63F)
 
-[Demonstração](#demonstração) · [Recursos](#recursos) · [Como funciona](#como-funciona) · [Primeiros passos](#primeiros-passos) · [Hospedagem própria](#hospedagem-própria) · [Documentação](#documentação)
+[Em uso](#em-uso) · [Recursos](#recursos) · [Como funciona](#como-funciona) · [Primeiros passos](#primeiros-passos) · [Hospedagem própria](#hospedagem-própria) · [Documentação](#documentação)
 
 </div>
 
-## Demonstração
+## Em uso
 
 <p align="center">
-  <img src="docs/media/demo.pt-BR.gif" alt="Demonstração do Telaê: a Ana escolhe uma janela e entra ao vivo enquanto os amigos chegam; no PC do Pedro, a tela dela já aparece ao vivo no Início e ele assiste com um clique, com as estatísticas abertas" width="720" />
+  <img src="docs/media/demo.pt-BR.gif" alt="A página da Casa Nativa é compartilhada e assistida pelo Telaê" width="720" />
 </p>
 
-<p align="center"><sub>A Ana escolhe uma janela e entra ao vivo enquanto os amigos chegam. No PC do Pedro, a tela dela já está passando no Início; ele assiste com um clique e abre as estatísticas. Demonstração da interface com conteúdo de exemplo.</sub></p>
+<p align="center"><sub>A loja Casa Nativa aparece no Início dos amigos autorizados e abre no player ao entrar na transmissão.</sub></p>
 
 ## Sumário
 
@@ -42,7 +42,6 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Primeiros passos](#primeiros-passos)
 - [Hospedagem própria](#hospedagem-própria)
-- [Testes e qualidade](#testes-e-qualidade)
 - [Segurança](#segurança)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Documentação](#documentação)
@@ -52,20 +51,21 @@ Aplicativo de desktop para Windows com vídeo de até 1440p60, áudio do sistema
 
 O Telaê permite compartilhar uma tela ou janela com amigos, com áudio sincronizado. Quem transmite aparece como **Ao vivo** na lista de amigos; para assistir, basta clicar. Não há salas, chamadas ou canais.
 
-O aplicativo reúne captura de áudio do Windows, transporte WebRTC, contas, amigos e atualizações automáticas. Os testes e as medições de transmissão estão documentados neste repositório.
+O aplicativo reúne captura de áudio do Windows, transporte WebRTC, contas, amigos e atualizações automáticas. A imagem passa diretamente entre os computadores; o servidor mantém as contas, a lista de amigos e a conexão entre eles.
 
 ## Recursos
 
 - **Até 1440p60**, com perfis explícitos (720p60, 1080p30, 1080p60, 1440p30, 1440p60) e adaptação automática sob pressão de CPU ou de rede.
 - **Áudio sincronizado** do sistema inteiro ou só do aplicativo escolhido, capturado por uma ponte nativa com process loopback do Windows. O áudio do Discord é excluído automaticamente ao compartilhar a tela inteira.
 - **Amigos e presença**: adicione pessoas pelo @usuário, amizade mútua, pedidos de amizade e troca rápida entre transmissões ao vivo. A lista fica no servidor e acompanha sua conta em qualquer computador.
-- **Prévia ao vivo**: enquanto um amigo transmite, uma miniatura da tela dele se atualiza no seu Início a cada poucos segundos. Só amigos mútuos recebem, e nada é guardado.
+- **Prévia ao vivo**: uma miniatura da transmissão se atualiza no Início dos amigos que podem assistir. Quem transmite pode escolher todos os amigos ou só algumas pessoas; quem ficou de fora não vê o cartão ao vivo nem a prévia. A imagem fica apenas em memória durante a transmissão.
+- **Quem pode ver**: ao transmitir, escolha entre todos os amigos ou só alguns (e mude isso no meio da transmissão) e oculte suas transmissões de quem quiser, sem desfazer a amizade. A transmissão aparece somente para o público escolhido.
 - **Vários espectadores** por transmissão, cada um com conexão, qualidade e recuperação independentes.
 - **Estatísticas em tempo real** no player e na tela de quem transmite: resolução, FPS, bitrate, latência estimada, jitter, perda de pacotes, travamentos e rota (direta ou via relay).
 - **Ponto a ponto primeiro**: a mídia vai direto entre os pares e só usa TURN quando a rede exige.
 - **Contas**: e-mail e senha com verificação por código de 6 dígitos, recuperação de senha, sessões com rotação e exclusão de conta ([ADR 0004](docs/adr/0004-user-accounts.md)). Os tokens ficam no cofre do sistema.
 - **Avisos do Windows** quando um amigo entra ao vivo, início opcional com o Windows e atualização automática no instalador oficial, verificada pela chave de assinatura do projeto.
-- **Interface em português e inglês**, com português do Brasil por padrão e outros idiomas disponíveis em Configurações.
+- **Interface em português e inglês**, com português do Brasil por padrão e seleção de idioma em Configurações.
 
 ## Capturas de tela
 
@@ -79,12 +79,20 @@ O aplicativo reúne captura de áudio do Windows, transporte WebRTC, contas, ami
     <td align="center"><sub>Espectador: player com controles e estatísticas (tecla <code>I</code>)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de quem transmite, com prévia, quem está assistindo e conexão" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/sharer.png" alt="Tela de transmissão com a página da Casa Nativa selecionada" /></td>
     <td width="50%"><img src="docs/screenshots/pt-BR/create-account.png" alt="Tela de criar conta com e-mail, nome de usuário e senha" /></td>
   </tr>
   <tr>
-    <td align="center"><sub>Transmissão: prévia, quem está assistindo e saúde da conexão</sub></td>
+    <td align="center"><sub>Transmissão: a janela escolhida aparece na prévia</sub></td>
     <td align="center"><sub>Criar conta: o @usuário é como os amigos te encontram</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/pt-BR/audience-choice.png" alt="Tela de escolher janela com o painel Quem pode ver aberto, no modo Amigos escolhidos" /></td>
+    <td width="50%"><img src="docs/screenshots/pt-BR/audience-live.png" alt="Transmissão ao vivo com o editor Quem pode ver aberto, trocando o público em tempo real" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Quem pode ver: todos os amigos ou só quem você marcar</sub></td>
+    <td align="center"><sub>Dá para mudar o público com a transmissão já no ar</sub></td>
   </tr>
 </table>
 
@@ -107,7 +115,7 @@ sequenceDiagram
     S-->>V: Mídia criptografada (DTLS-SRTP), direta ou via TURN
 ```
 
-O servidor cuida só de contas, amizades, presença e sinalização. Depois que a conexão é negociada, vídeo e áudio não passam por ele. Quem transmite codifica a captura uma vez por espectador com a pilha WebRTC do Chromium, e um controlador de qualidade ajusta bitrate, resolução e taxa de quadros a partir das estatísticas ao vivo.
+O servidor cuida de contas, amizades, presença, sinalização e distribuição das miniaturas autorizadas. O vídeo e o áudio da transmissão seguem por WebRTC, diretamente entre os computadores ou por um relay TURN. Quem transmite codifica a captura uma vez por espectador, e um controlador de qualidade ajusta bitrate, resolução e taxa de quadros a partir das estatísticas ao vivo.
 
 O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) e os registros de decisão em [docs/adr](docs/adr).
 
@@ -121,7 +129,6 @@ O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | Áudio nativo | .NET 10 e NAudio, captura por process loopback do Windows |
 | Backend | ASP.NET Core 10, SignalR, Entity Framework Core, JWT |
 | Dados | PostgreSQL em produção, SQLite em desenvolvimento |
-| Testes | Vitest e Testing Library, xUnit, Playwright (duas instâncias do Electron) |
 | Entrega | GitHub Actions, Docker Compose, releases por tag e canal de atualização automática |
 
 ## Estrutura do repositório
@@ -131,9 +138,8 @@ O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 | [`apps/desktop`](apps/desktop) | App Electron: captura, WebRTC, qualidade adaptativa e interface. |
 | [`apps/server`](apps/server) | Serviço de sinalização: contas, amigos, sessões e credenciais TURN efêmeras. |
 | [`apps/audio-bridge`](apps/audio-bridge) | Ponte de áudio nativa para captura por aplicativo no Windows. |
-| [`tests`](tests) | Testes do servidor e um teste de regressão com áudio real. |
 | [`ops`](ops) | Scripts e units para publicar o servidor Linux e as atualizações. |
-| [`docs`](docs) | Arquitetura, registros de decisão (ADR), validações de qualidade e notas de versão (em geral em português). |
+| [`docs`](docs) | Arquitetura, privacidade das transmissões, registros de decisão (ADR) e notas de versão. |
 
 ## Primeiros passos
 
@@ -141,13 +147,22 @@ O funcionamento dos componentes está em [docs/ARCHITECTURE.md](docs/ARCHITECTUR
 
 Baixe o instalador genérico do Windows (`Telae-Setup-<versão>.exe`) na [última release](https://github.com/NicolasPortie/Telae/releases/latest). Ele não vem com servidor nem feed oficial. O mantenedor distribui o instalador oficial por um link estável separado: ele já vem com o servidor e instala futuras atualizações automaticamente, após verificar a assinatura Ed25519 do projeto. Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na instalação inicial.
 
-Os instaladores publicados aqui são genéricos: não vêm com servidor nenhum. O Telaê é código aberto, então, para usar com os seus amigos, [hospede o seu servidor](#hospedagem-própria) e informe o endereço na tela de entrada (**Servidor > Alterar**) ou em **Configurações > Servidor de sinalização**. Para embutir um padrão no seu próprio instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
+Para usar o instalador genérico, [hospede o servidor](#hospedagem-própria) e informe o endereço na tela de entrada (**Servidor > Alterar**) ou nas Configurações. Para embutir um endereço no seu instalador, defina `TELAE_DEFAULT_SERVER_URL` ao rodar `npm run dist`.
+
+### Usar com amigos
+
+1. Conectem os aplicativos ao mesmo servidor e criem suas contas.
+2. Envie um pedido pelo @usuário do amigo e aguarde ele aceitar.
+3. Clique em **Escolher tela**, selecione uma tela ou janela e escolha quem pode ver.
+4. Comece a transmitir. Seu amigo pode entrar pelo botão **Assistir** no Início ou na lista de amigos.
+
+Durante a transmissão, use **Quem pode ver > Alterar** para mudar o público. A miniatura acompanha automaticamente a seleção. Para ocultar suas transmissões de alguém, use o ícone de olho na lista de amigos; a aba **Privacidade** permite desfazer.
 
 ### Compilar a partir do código
 
 **Requisitos:** Windows 10/11 x64, Node.js 22+ e .NET 10 SDK. O filtro de áudio por aplicativo exige o Windows build 20348 ou superior.
 
-Servidor de sinalização (usa um arquivo SQLite local e escreve os códigos de verificação no log, então não precisa de banco nem de servidor de e-mail):
+Servidor de sinalização (em desenvolvimento, usa SQLite local e salva os e-mails de verificação em `apps/server/data/dev-mail`, sem precisar de banco externo nem de SMTP):
 
 ```bash
 dotnet run --project apps/server/Telae.Server.csproj
@@ -178,11 +193,13 @@ docker compose up -d
 
 No app, abra **Configurações > Servidor de sinalização** e informe o endereço (por exemplo `http://localhost:5015`). O servidor guarda os perfis em um volume e expõe `GET /health`.
 
+O Compose publica a porta apenas no próprio computador (`127.0.0.1:5015`). Para amigos acessarem de outros computadores, exponha o serviço por um proxy com HTTPS e use o mesmo endereço nos aplicativos. Configure `TELAE_ALLOWED_EMAILS` com os e-mails dos participantes ou abra o cadastro com `TELAE_REGISTRATION_OPEN=true`.
+
 | Variável | Para que serve |
 | --- | --- |
 | `POSTGRES_PASSWORD` | Senha do banco PostgreSQL. |
 | `TELAE_JWT_KEY` | Chave de assinatura dos tokens de acesso (32+ caracteres). |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | E-mail transacional. Sem `SMTP_HOST`, os códigos vão só para o log. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | E-mail transacional. Configure SMTP em produção para verificação e recuperação de conta. Sem ele, o envio fica indisponível; em desenvolvimento, os e-mails são salvos em `data/dev-mail`. |
 | `TELAE_ALLOWED_EMAILS` | E-mails (separados por vírgula) que podem criar conta. O cadastro vem **fechado por padrão**: qualquer outra pessoa é recusada. |
 | `TELAE_REGISTRATION_OPEN` | Use `true` para deixar qualquer pessoa criar conta (servidores públicos). |
 | `Auth__AllowLegacyDevices` | Aceita clientes lançados antes das contas (sem login). Desligado por padrão. |
@@ -191,27 +208,11 @@ No app, abra **Configurações > Servidor de sinalização** e informe o endere�
 
 Para redes restritivas, configure um servidor TURN (veja [`ops/turnserver.conf.example`](ops/turnserver.conf.example) e os comentários do [`docker-compose.yml`](docker-compose.yml)). Release, deploy e atualizações estão descritos em [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-## Testes e qualidade
-
-```bash
-cd apps/desktop
-npm run lint        # oxlint
-npm run typecheck   # tsc
-npm test            # 207 testes unitários e de componentes (vitest)
-npm run test:e2e    # duas instâncias do Electron + servidor local (Playwright)
-```
-
-```bash
-dotnet test tests/server/Telae.Server.Tests.csproj   # 127 testes do servidor
-```
-
-O E2E com captura real de tela e áudio é opcional (`TELAE_E2E_MEDIA=1`). Resultados medidos, metodologia e evidências brutas estão em [docs/validation](docs/validation), [docs/BENCHMARK.md](docs/BENCHMARK.md) e [docs/RELEASE_VALIDATION.md](docs/RELEASE_VALIDATION.md). A integração contínua roda lint, tipos, testes unitários, testes do servidor e o E2E determinístico a cada push.
-
 ## Segurança
 
 - O renderer é isolado (`contextIsolation`, sem Node, sandbox, CSP restrita) e conversa com o processo principal por uma API de preload estreita e tipada.
 - As senhas usam o hasher de senhas do ASP.NET Core. As sessões usam tokens de acesso JWT de vida curta e tokens de renovação com rotação e detecção de reutilização, guardados cifrados no cofre do sistema.
-- Entrar em uma transmissão exige amizade mútua, e o servidor impõe limites de entrada e de taxa por IP e por conexão.
+- Entrar em uma transmissão exige amizade mútua e passa por uma única regra de acesso no servidor (público escolhido, ocultos e removidos). O servidor também impõe limites de entrada e de taxa por IP e por conexão.
 - A mídia é criptografada entre os pares (DTLS-SRTP); as credenciais TURN são efêmeras.
 
 Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
@@ -221,19 +222,19 @@ Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
 - Só Windows por enquanto (a captura e o áudio dependem de APIs do Windows).
 - Os instaladores ainda não têm certificado Authenticode do Windows, então o SmartScreen pode avisar na primeira execução. A atualização automática oficial usa uma chave Ed25519 própria fixada no app; builds genéricos precisam configurar o próprio feed e chave de confiança.
 - Cada espectador recebe um fluxo codificado só para ele, então upload e CPU crescem com o número de espectadores. Um SFU é uma opção futura.
-- 1440p60 depende da máquina e da rede; os documentos de validação listam o que foi e o que não foi medido.
+- 1440p60 depende da máquina e da rede.
 
 ## Documentação
 
 - [Arquitetura](docs/ARCHITECTURE.md) e [especificação do projeto](docs/PROJECT_SPEC.md)
+- [Privacidade das transmissões](docs/adr/0005-share-audience.md)
 - [Design da interface](docs/DESIGN.md) e [glossário](GLOSSARY.md)
 - [Operação: release, deploy e atualizações](docs/OPERATIONS.md)
-- [Qualidade de transmissão](docs/validation/STREAMING_QUALITY_2026-10-12.md) e [benchmark](docs/BENCHMARK.md)
 - [Changelog](CHANGELOG.md)
 
 ## Contribuindo
 
-Issues e pull requests são bem-vindos. Leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes e siga o [Código de Conduta](CODE_OF_CONDUCT.md).
+Para relatar um problema, abra uma issue. Leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes de contribuir e siga o [Código de Conduta](CODE_OF_CONDUCT.md).
 
 ## Licença
 
