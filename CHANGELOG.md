@@ -2,7 +2,15 @@
 
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). As notas detalhadas de cada versão publicada ficam em `docs/releases/`.
 
-## [Não lançado]
+## [0.4.0] - 2026-11-04
+
+- Quem transmite escolhe entre todos os amigos ou amigos específicos, antes e durante a transmissão. A prévia aparece automaticamente para esse público.
+- Lista de pessoas que não veem suas transmissões, salva na conta e disponível na aba Privacidade, sem desfazer amizades.
+- Amigos ao vivo continuam na lista com a ação Assistir; formulários de adicionar amigo e pedidos de amizade revisados.
+- Convites legados por código removidos: entrada exige amizade mútua e permissão para ver a transmissão.
+- Perda de acesso limpa presença e prévia imediatamente; atualizações concorrentes de privacidade preservam ocultações e o limite por conta.
+- Respostas a entradas recusadas não revelam se a transmissão continua ativa para quem perdeu o acesso.
+- Corrigida a seleção de quem já assiste ao alternar os modos e impedidos envios duplicados no editor.
 
 ## [0.3.3] - 2026-10-25
 
