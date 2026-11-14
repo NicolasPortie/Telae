@@ -22,6 +22,7 @@ directories:
 files:
   - out/**/*
   - package.json
+  - public/icon.png
 
 extraResources:
   - from: build/audio-bridge
